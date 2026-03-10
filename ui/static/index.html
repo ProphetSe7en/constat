@@ -2974,9 +2974,17 @@ function app() {
           if (this.totalCpu > this.totalCpuPeak) this.totalCpuPeak = this.totalCpu;
           if (this.totalMemory > this.totalMemPeak) this.totalMemPeak = this.totalMemory;
           // Compute total network from per-container rates
+          // Skip containers using container:X network mode (traffic already counted under parent)
           if (batch.containers) {
+            const sharedNet = new Set();
+            for (const c of this.containers) {
+              if (c.networks && c.networks.some(n => n.startsWith('→ '))) {
+                sharedNet.add(c.name);
+              }
+            }
             let txSum = 0, rxSum = 0;
             for (const id in batch.containers) {
+              if (sharedNet.has(id)) continue;
               txSum += batch.containers[id].netTxRate || 0;
               rxSum += batch.containers[id].netRxRate || 0;
             }
