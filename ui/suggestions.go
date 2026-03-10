@@ -10,7 +10,9 @@ type Suggestion struct {
 	Note       string `json:"note,omitempty"`
 }
 
-// healthcheckSuggestions maps image patterns to suggested healthcheck commands
+// healthcheckSuggestions maps image patterns to suggested healthcheck commands.
+// Patterns with "/" match owner/name (e.g. "hotio/radarr" matches "ghcr.io/hotio/radarr:latest").
+// Patterns without "/" match the image name exactly (e.g. "postgres" matches "postgres:16").
 var healthcheckSuggestions = map[string]struct {
 	cmd  string
 	note string
@@ -31,6 +33,9 @@ var healthcheckSuggestions = map[string]struct {
 		cmd: `--health-cmd='curl --connect-timeout 15 --silent --show-error --fail http://localhost:32400/identity || exit 1' --health-interval=60s --health-retries=3 --health-timeout=30s --health-start-period=120s`,
 	},
 	"plexinc/pms-docker": {
+		cmd: `--health-cmd='curl --connect-timeout 15 --silent --show-error --fail http://localhost:32400/identity || exit 1' --health-interval=60s --health-retries=3 --health-timeout=30s --health-start-period=120s`,
+	},
+	"linuxserver/plex": {
 		cmd: `--health-cmd='curl --connect-timeout 15 --silent --show-error --fail http://localhost:32400/identity || exit 1' --health-interval=60s --health-retries=3 --health-timeout=30s --health-start-period=120s`,
 	},
 	// Arr apps
@@ -55,8 +60,14 @@ var healthcheckSuggestions = map[string]struct {
 	"linuxserver/bazarr": {
 		cmd: `--health-cmd='curl -fSs http://localhost:6767/ping || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
 	},
-	// Web apps
-	"seerr": {
+	"hotio/bazarr": {
+		cmd: `--health-cmd='curl -fSs http://localhost:6767/ping || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
+	},
+	// Web apps — seerr variants (same API, different images)
+	"overseerr": {
+		cmd: `--health-cmd='curl -fSs -o /dev/null http://localhost:5055/api/v1/status || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
+	},
+	"jellyseerr": {
 		cmd: `--health-cmd='curl -fSs -o /dev/null http://localhost:5055/api/v1/status || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
 	},
 	"tautulli": {
@@ -83,7 +94,7 @@ var healthcheckSuggestions = map[string]struct {
 		cmd:  `--health-cmd='wget -q --spider http://127.0.0.1:3000/ || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
 		note: "Uses 127.0.0.1 (not localhost) and wget (no curl available)",
 	},
-	"vaultwarden": {
+	"vaultwarden/server": {
 		cmd: `--health-cmd='curl -fSs http://localhost:80/alive || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=30s`,
 	},
 	// Torrent clients
@@ -92,11 +103,6 @@ var healthcheckSuggestions = map[string]struct {
 	},
 	"linuxserver/qbittorrent": {
 		cmd: `--health-cmd='curl -fSs http://localhost:8080/api/v2/app/version || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
-	},
-	// VPN
-	"hotio/base": {
-		cmd:  `--health-cmd='wg show wg0 | grep -q "latest handshake" || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=30s`,
-		note: "For VPN gateway containers using WireGuard",
 	},
 	// Schedulers
 	"cronicle": {
@@ -110,11 +116,43 @@ var healthcheckSuggestions = map[string]struct {
 		cmd:  `--health-cmd='pgrep -f seasonpackarr' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=30s`,
 		note: "No HTTP health endpoint — uses process check",
 	},
-	// Cloudflare DDNS
-	"cloudflare": {
+	// Cloudflare DDNS (hotio — no curl/wget available)
+	"cloudflareddns": {
 		cmd:  `--health-cmd='pgrep -f cloudflare || exit 1' --health-interval=300s --health-retries=3 --health-timeout=10s --health-start-period=30s`,
 		note: "No curl/wget available in hotio images — uses process check",
 	},
+}
+
+// matchImage checks if a container image matches a suggestion pattern.
+// Patterns with "/" match against the last two path segments (owner/name).
+// Patterns without "/" match the image name (last segment) exactly.
+// Tags and digests are stripped before matching.
+func matchImage(image, pattern string) bool {
+	image = strings.ToLower(image)
+	pattern = strings.ToLower(pattern)
+
+	// Strip tag
+	if idx := strings.LastIndex(image, ":"); idx != -1 {
+		image = image[:idx]
+	}
+	// Strip digest
+	if idx := strings.Index(image, "@"); idx != -1 {
+		image = image[:idx]
+	}
+
+	parts := strings.Split(image, "/")
+	name := parts[len(parts)-1]
+
+	if strings.Contains(pattern, "/") {
+		// Pattern has owner — match owner/name
+		if len(parts) >= 2 {
+			return parts[len(parts)-2]+"/"+name == pattern
+		}
+		return false
+	}
+
+	// Pattern is just a name — exact match
+	return name == pattern
 }
 
 // GetSuggestions returns healthcheck suggestions for containers without healthchecks
@@ -127,10 +165,8 @@ func GetSuggestions(containers []Container) []Suggestion {
 			continue
 		}
 
-		image := strings.ToLower(c.Image)
-
 		for pattern, suggestion := range healthcheckSuggestions {
-			if strings.Contains(image, strings.ToLower(pattern)) {
+			if matchImage(c.Image, pattern) {
 				suggestions = append(suggestions, Suggestion{
 					Container:  c.Name,
 					Image:      c.Image,
