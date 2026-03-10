@@ -146,6 +146,7 @@
   .config-tag.port { background: #0d1f3c; color: #58a6ff; border-color: rgba(88,166,255,0.2); }
   .config-tag.volume { background: #1c1c1c; color: #d2a8ff; border-color: rgba(210,168,255,0.2); }
   .config-tag.network { background: #0d2818; color: #3fb950; border-color: rgba(63,185,80,0.2); }
+  .net-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-family: 'SFMono-Regular', Consolas, monospace; background: #0d2818; color: #3fb950; border: 1px solid rgba(63,185,80,0.2); margin: 1px 2px; }
   .config-env-grid { display: grid; grid-template-columns: auto 1fr; gap: 1px 12px; font-size: 11px; max-height: 200px; overflow-y: auto; }
   .config-env-grid::-webkit-scrollbar { width: 6px; }
   .config-env-grid::-webkit-scrollbar-track { background: transparent; }
@@ -703,7 +704,8 @@
             <th class="sortable" @click="toggleSort('restart')">Restart <span class="sort-arrow" x-show="sortColumn === 'restart'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
             <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('cpu')">CPU <span class="sort-arrow" x-show="sortColumn === 'cpu'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
             <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('ram')">RAM <span class="sort-arrow" x-show="sortColumn === 'ram'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
-            <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('net')">Network <span class="sort-arrow" x-show="sortColumn === 'net'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
+            <th class="sortable" @click="toggleSort('network')">Net <span class="sort-arrow" x-show="sortColumn === 'network'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
+            <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('net')">Network I/O <span class="sort-arrow" x-show="sortColumn === 'net'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
             <th class="sortable" @click="toggleSort('uptime')">Uptime <span class="sort-arrow" x-show="sortColumn === 'uptime'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
           </tr>
         </thead>
@@ -760,6 +762,14 @@
                     <div class="metric" style="color:#484f58">&mdash;</div>
                   </template>
                 </td></template>
+                <td>
+                  <div style="white-space:nowrap;font-size:11px">
+                    <template x-for="n in (c.networks || [])" :key="n">
+                      <span class="net-badge" x-text="n"></span>
+                    </template>
+                    <span x-show="!c.networks || c.networks.length === 0" style="color:#484f58">&mdash;</span>
+                  </div>
+                </td>
                 <template x-if="config && config.showStats === 'true'"><td>
                   <template x-if="c.state === 'running'">
                     <div style="white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums">
@@ -779,7 +789,7 @@
 
               <!-- Expanded detail panel -->
               <tr x-show="expandedId === c.id" x-transition>
-                <td :colspan="config && config.showStats === 'true' ? 7 : 4" style="padding: 0; border: none;">
+                <td :colspan="config && config.showStats === 'true' ? 8 : 5" style="padding: 0; border: none;">
                   <div class="detail-panel">
                     <!-- Container info (compact pills, always full width) -->
                     <div class="compact-info">
@@ -2061,6 +2071,10 @@ function app() {
             break;
           case 'ram':
             cmp = (a.memory || 0) - (b.memory || 0);
+            break;
+          case 'network':
+            cmp = ((a.networks || [])[0] || '').localeCompare((b.networks || [])[0] || '');
+            if (cmp === 0) cmp = a.name.localeCompare(b.name);
             break;
           case 'net':
             cmp = ((a.netRxRate || 0) + (a.netTxRate || 0)) - ((b.netRxRate || 0) + (b.netTxRate || 0));
