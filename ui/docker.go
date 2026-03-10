@@ -28,6 +28,7 @@ type Container struct {
 	AvgMemory       uint64      `json:"avgMemory"`
 	NetRxRate       float64     `json:"netRxRate"`
 	NetTxRate       float64     `json:"netTxRate"`
+	Networks        []string    `json:"networks"`
 	RecentStats     []StatPoint `json:"recentStats,omitempty"`
 	Created         string      `json:"created,omitempty"`
 	RestartPolicy   string      `json:"restartPolicy"`
@@ -86,6 +87,13 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 			healthcheckCmd = strings.Join(inspect.Config.Healthcheck.Test[1:], " ")
 		}
 
+		var networks []string
+		if inspect.NetworkSettings != nil {
+			for netName := range inspect.NetworkSettings.Networks {
+				networks = append(networks, netName)
+			}
+		}
+
 		containers[i] = Container{
 			ID:              c.ID[:12],
 			Name:            name,
@@ -99,6 +107,7 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 			Created:         inspect.Created,
 			RestartPolicy:   restartPolicy,
 			HealthcheckCmd:  healthcheckCmd,
+			Networks:        networks,
 		}
 
 		// Read live stats from StatsCollector (no Docker API calls, keyed by name)
