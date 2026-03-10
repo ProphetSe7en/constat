@@ -21,7 +21,7 @@ RUN apk add --no-cache \
 ENV TZ=Europe/Oslo
 
 COPY constat.sh /constat.sh
-COPY constat.conf /constat.conf.sample
+COPY constat.conf.sample /constat.conf.sample
 COPY entrypoint.sh /entrypoint.sh
 COPY --from=builder /build/constat-ui /constat-ui
 
