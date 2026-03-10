@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>constat</Name>
-  <Repository>constat</Repository>
+  <Repository>ghcr.io/prophetse7en/constat:latest</Repository>
   <Registry/>
   <Network>bridge</Network>
   <MyIP/>

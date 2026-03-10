@@ -39,7 +39,7 @@ docker run -d \
   -v /var/run/docker.sock:/var/run/docker.sock:rw \
   -v /path/to/config:/config \
   -e TZ=America/New_York \
-  constat:latest
+  ghcr.io/prophetse7en/constat:latest
 ```
 
 On first start, a default `constat.conf` is created in the config directory. Open the Web UI at `http://your-host:7890`.
@@ -221,7 +221,7 @@ Note: you'll need read/write access for container restart and start/stop functio
 ```yaml
 services:
   constat:
-    image: constat:latest
+    image: ghcr.io/prophetse7en/constat:latest
     container_name: constat
     restart: unless-stopped
     ports:
