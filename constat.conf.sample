@@ -1,0 +1,106 @@
+#!/bin/bash
+# constat.conf — Constat Configuration
+# Edit this file to configure Constat. All settings are here.
+# Restart the container after changes: docker restart constat
+
+#=== DISCORD WEBHOOKS ========================================================#
+# Create webhooks in Discord: Channel Settings → Integrations → Webhooks
+# Each webhook goes to a different Discord channel for organized notifications.
+# Leave empty to disable that notification type.
+
+ENABLE_DISCORD="true"
+
+# State changes (start, stop, restart, die)
+DISCORD_WEBHOOK_STATE=""
+
+# Health issues (unhealthy, recovered)
+DISCORD_WEBHOOK_HEALTH=""
+
+#=== IDENTITY ================================================================#
+# How Constat identifies itself in Discord messages
+
+BOT_NAME="Constat"
+SERVER_LABEL="Unraid"
+
+#=== BEHAVIOR ================================================================#
+
+# Seconds to batch events before sending to Discord (groups rapid events)
+BATCH_WINDOW="5"
+
+# Containers to ignore (comma-separated, case-insensitive)
+EXCLUDE_CONTAINERS="constat"
+
+# Seconds between periodic summary logs (21600 = 6 hours)
+SUMMARY_INTERVAL="21600"
+
+#=== AUTO-RESTART ============================================================#
+# Only containers with the Docker label constat.restart=true are restarted.
+# Add the label via Unraid Extra Parameters: --label=constat.restart=true
+# Containers without the label are still monitored — health events are reported
+# to Discord, but no restart is attempted.
+
+# Docker label that enables auto-restart
+RESTART_LABEL="constat.restart"
+
+# Minimum seconds between restarts for the same container
+RESTART_COOLDOWN="300"
+
+# Maximum restart attempts within the cooldown period
+MAX_RESTARTS="3"
+
+#=== MEMORY MONITORING =======================================================#
+# Monitor container memory usage and take action when thresholds are exceeded.
+# No Docker labels or --memory flags needed — all config lives here.
+
+# Pause all memory rules (rules still visible but won't trigger actions)
+MEMORY_PAUSED="false"
+
+# Seconds between memory polls (docker stats call)
+MEMORY_POLL_INTERVAL="30"
+
+# Seconds memory must stay above threshold before action (default: 5 min)
+MEMORY_DEFAULT_DURATION="300"
+
+# Per-container watch list: "name:limit:action[:duration]"
+#   name     — container name (must match docker ps)
+#   limit    — threshold (512m, 1g, 2g, 4g, 1500m)
+#   action   — "notify" (alert only) or "restart" (graceful restart + alert)
+#   duration — optional per-container override of MEMORY_DEFAULT_DURATION
+#
+# Examples:
+#   MEMORY_WATCH=(
+#       "plex:4g:restart"
+#       "radarr:2g:notify"
+#       "qBit-movies:3g:restart:600"
+#   )
+MEMORY_WATCH=()
+
+#=== DISPLAY =================================================================#
+# Timezone for timestamps in Discord notifications and web UI charts.
+# Uses TZ database names (e.g., "Europe/Oslo", "America/New_York", "UTC").
+# If empty, falls back to the TZ environment variable or container default.
+TIMEZONE=""
+
+# Time format: "24h" (14:30) or "12h" (2:30 PM)
+TIME_FORMAT="24h"
+
+# Date format: "YYYY-MM-DD" (ISO), "DD.MM.YYYY" (European), "DD/MM/YYYY" (UK), "MM/DD/YYYY" (US)
+DATE_FORMAT="YYYY-MM-DD"
+
+# Show CPU, RAM, Network columns in the container table
+SHOW_STATS="true"
+
+# Show CPU/RAM history charts in expanded container view
+SHOW_CHARTS="true"
+
+#=== COLORS ==================================================================#
+# Discord embed colors (hex without #)
+
+COLOR_STARTED="2ecc71"
+COLOR_STOPPED="95a5a6"
+COLOR_DIED="ed4245"
+COLOR_UNHEALTHY="ed4245"
+COLOR_RECOVERED="2ecc71"
+COLOR_RESTARTING="e67e22"
+COLOR_MEMORY_WARN="e67e22"
+COLOR_MEMORY_CRIT="ed4245"

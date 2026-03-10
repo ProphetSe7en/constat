@@ -1,0 +1,175 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"runtime"
+	"strings"
+	"time"
+
+	"github.com/docker/docker/api/types/container"
+)
+
+// Container represents a Docker container with its current state and stats
+type Container struct {
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	Image           string  `json:"image"`
+	State           string  `json:"state"`
+	Health          string  `json:"health"`
+	HasRestartLabel bool    `json:"hasRestartLabel"`
+	HasLabel        bool    `json:"hasLabel"`
+	Uptime          string  `json:"uptime"`
+	StartedAt       string  `json:"startedAt"`
+	CPU             float64 `json:"cpu"`
+	Memory          uint64  `json:"memory"`
+	MemoryLimit     uint64  `json:"memoryLimit"`
+	AvgCPU          float64     `json:"avgCpu"`
+	AvgMemory       uint64      `json:"avgMemory"`
+	NetRxRate       float64     `json:"netRxRate"`
+	NetTxRate       float64     `json:"netTxRate"`
+	RecentStats     []StatPoint `json:"recentStats,omitempty"`
+	Created         string      `json:"created,omitempty"`
+	RestartPolicy   string      `json:"restartPolicy"`
+	HealthcheckCmd  string      `json:"healthcheckCmd"`
+}
+
+// ListContainers returns all containers with their current state and resource usage
+func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
+	raw, err := app.docker.ContainerList(ctx, container.ListOptions{All: true})
+	if err != nil {
+		return nil, fmt.Errorf("container list: %w", err)
+	}
+
+	containers := make([]Container, len(raw))
+
+	for i, c := range raw {
+		name := ""
+		if len(c.Names) > 0 {
+			name = strings.TrimPrefix(c.Names[0], "/")
+		}
+
+		// Get detailed inspect for health, labels, restart policy
+		inspect, err := app.docker.ContainerInspect(ctx, c.ID)
+		if err != nil {
+			continue
+		}
+
+		health := "none"
+		if inspect.State.Health != nil {
+			health = string(inspect.State.Health.Status)
+		}
+
+		hasLabel := false
+		if v, ok := inspect.Config.Labels[app.restartLabel]; ok && v == "true" {
+			hasLabel = true
+		}
+		effectiveRestart := hasLabel && !app.isRestartDisabled(name)
+
+		uptime := ""
+		startedAt := ""
+		if c.State == "running" && inspect.State.StartedAt != "" {
+			t, err := time.Parse(time.RFC3339Nano, inspect.State.StartedAt)
+			if err == nil {
+				uptime = formatUptime(time.Since(t))
+				startedAt = inspect.State.StartedAt
+			}
+		}
+
+		restartPolicy := ""
+		if inspect.HostConfig != nil {
+			restartPolicy = string(inspect.HostConfig.RestartPolicy.Name)
+		}
+
+		healthcheckCmd := ""
+		if inspect.Config.Healthcheck != nil && len(inspect.Config.Healthcheck.Test) > 1 {
+			healthcheckCmd = strings.Join(inspect.Config.Healthcheck.Test[1:], " ")
+		}
+
+		containers[i] = Container{
+			ID:              c.ID[:12],
+			Name:            name,
+			Image:           c.Image,
+			State:           c.State,
+			Health:          health,
+			HasRestartLabel: effectiveRestart,
+			HasLabel:        hasLabel,
+			Uptime:          uptime,
+			StartedAt:       startedAt,
+			Created:         inspect.Created,
+			RestartPolicy:   restartPolicy,
+			HealthcheckCmd:  healthcheckCmd,
+		}
+
+		// Read live stats from StatsCollector (no Docker API calls, keyed by name)
+		if c.State == "running" && app.stats != nil {
+			if live, ok := app.stats.GetLatest(name); ok {
+				containers[i].CPU = live.CPU
+				containers[i].Memory = live.Memory
+				containers[i].MemoryLimit = live.MemoryLimit
+				containers[i].NetRxRate = live.NetRxRate
+				containers[i].NetTxRate = live.NetTxRate
+			}
+			if avgCPU, avgMem, ok := app.stats.GetAverage(name); ok {
+				containers[i].AvgCPU = avgCPU
+				containers[i].AvgMemory = avgMem
+			}
+			containers[i].RecentStats = app.stats.GetRecentStats(name, 20)
+		}
+	}
+
+	// Filter out empty entries (from failed inspects)
+	result := make([]Container, 0, len(containers))
+	for _, c := range containers {
+		if c.Name != "" {
+			result = append(result, c)
+		}
+	}
+
+	return result, nil
+}
+
+// calculateCPUPercent computes CPU usage percentage (same formula as docker stats)
+func calculateCPUPercent(stats *container.StatsResponse) float64 {
+	cpuDelta := float64(stats.CPUStats.CPUUsage.TotalUsage - stats.PreCPUStats.CPUUsage.TotalUsage)
+	systemDelta := float64(stats.CPUStats.SystemUsage - stats.PreCPUStats.SystemUsage)
+
+	if systemDelta > 0.0 && cpuDelta > 0.0 {
+		cpuCount := float64(stats.CPUStats.OnlineCPUs)
+		if cpuCount == 0 {
+			cpuCount = float64(len(stats.CPUStats.CPUUsage.PercpuUsage))
+		}
+		if cpuCount == 0 {
+			cpuCount = float64(runtime.NumCPU())
+		}
+		return (cpuDelta / systemDelta) * cpuCount * 100.0
+	}
+	return 0.0
+}
+
+// calculateMemUsage returns memory usage minus cache
+func calculateMemUsage(stats *container.StatsResponse) uint64 {
+	usage := stats.MemoryStats.Usage
+	// Subtract inactive_file cache if available
+	if cache, ok := stats.MemoryStats.Stats["inactive_file"]; ok {
+		if usage > cache {
+			usage -= cache
+		}
+	}
+	return usage
+}
+
+// formatUptime formats a duration into a human-readable string
+func formatUptime(d time.Duration) string {
+	days := int(d.Hours() / 24)
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
+}
