@@ -64,9 +64,10 @@
   table { width: 100%; border-collapse: collapse; margin-top: 12px; table-layout: fixed; }
   th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; padding: 8px 12px; border-bottom: 1px solid #21262d; }
   td { padding: 10px 12px; border-bottom: 1px solid #161b22; font-size: 13px; vertical-align: middle; }
-  col.col-cpu { width: 15%; } col.col-ram { width: 16%; } col.col-net { width: 14%; }
-  .has-stats col.col-name { width: 28%; } .has-stats col.col-health { width: 8%; } .has-stats col.col-restart { width: 7%; } .has-stats col.col-uptime { width: 12%; }
-  .no-stats col.col-name { width: 50%; } .no-stats col.col-health { width: 18%; } .no-stats col.col-restart { width: 14%; } .no-stats col.col-uptime { width: 18%; }
+  col.col-cpu { width: 13%; } col.col-ram { width: 13%; } col.col-net { width: 13%; }
+  col.col-networks { width: 10%; }
+  .has-stats col.col-name { width: 25%; } .has-stats col.col-health { width: 7%; } .has-stats col.col-restart { width: 7%; } .has-stats col.col-uptime { width: 12%; }
+  .no-stats col.col-name { width: 44%; } .no-stats col.col-health { width: 14%; } .no-stats col.col-restart { width: 12%; } .no-stats col.col-uptime { width: 14%; } .no-stats col.col-networks { width: 16%; }
   tr:hover td { background: #161b22; }
   tr.expanded td { background: #161b22; border-bottom: none; }
 
@@ -694,6 +695,7 @@
           <col class="col-name"><col class="col-health"><col class="col-restart">
           <template x-if="config && config.showStats === 'true'"><col class="col-cpu"></template>
           <template x-if="config && config.showStats === 'true'"><col class="col-ram"></template>
+          <col class="col-networks">
           <template x-if="config && config.showStats === 'true'"><col class="col-net"></template>
           <col class="col-uptime">
         </colgroup>
@@ -704,7 +706,7 @@
             <th class="sortable" @click="toggleSort('restart')">Restart <span class="sort-arrow" x-show="sortColumn === 'restart'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
             <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('cpu')">CPU <span class="sort-arrow" x-show="sortColumn === 'cpu'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
             <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('ram')">RAM <span class="sort-arrow" x-show="sortColumn === 'ram'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
-            <th class="sortable" @click="toggleSort('network')">Net <span class="sort-arrow" x-show="sortColumn === 'network'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
+            <th class="sortable" @click="toggleSort('network')">Networks <span class="sort-arrow" x-show="sortColumn === 'network'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
             <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('net')">Network I/O <span class="sort-arrow" x-show="sortColumn === 'net'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
             <th class="sortable" @click="toggleSort('uptime')">Uptime <span class="sort-arrow" x-show="sortColumn === 'uptime'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
           </tr>
@@ -763,7 +765,7 @@
                   </template>
                 </td></template>
                 <td>
-                  <div style="white-space:nowrap;font-size:11px">
+                  <div style="font-size:11px;line-height:1.6">
                     <template x-for="n in (c.networks || [])" :key="n">
                       <span class="net-badge" x-text="n"></span>
                     </template>

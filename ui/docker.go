@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -92,6 +93,7 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 			for netName := range inspect.NetworkSettings.Networks {
 				networks = append(networks, netName)
 			}
+			sort.Strings(networks)
 		}
 
 		containers[i] = Container{
