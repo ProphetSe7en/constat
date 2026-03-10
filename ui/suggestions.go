@@ -131,12 +131,12 @@ func matchImage(image, pattern string) bool {
 	image = strings.ToLower(image)
 	pattern = strings.ToLower(pattern)
 
-	// Strip tag
-	if idx := strings.LastIndex(image, ":"); idx != -1 {
+	// Strip digest first (before tag, since digest may contain ":")
+	if idx := strings.Index(image, "@"); idx != -1 {
 		image = image[:idx]
 	}
-	// Strip digest
-	if idx := strings.Index(image, "@"); idx != -1 {
+	// Strip tag
+	if idx := strings.LastIndex(image, ":"); idx != -1 {
 		image = image[:idx]
 	}
 
