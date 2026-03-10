@@ -43,6 +43,19 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 		return nil, fmt.Errorf("container list: %w", err)
 	}
 
+	// Build ID→name lookup for resolving container:ID network modes
+	idToName := make(map[string]string, len(raw))
+	for _, c := range raw {
+		if len(c.Names) > 0 {
+			n := strings.TrimPrefix(c.Names[0], "/")
+			idToName[c.ID] = n
+			// Also map short ID (12 chars)
+			if len(c.ID) > 12 {
+				idToName[c.ID[:12]] = n
+			}
+		}
+	}
+
 	containers := make([]Container, len(raw))
 
 	for i, c := range raw {
@@ -94,6 +107,19 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 				networks = append(networks, netName)
 			}
 			sort.Strings(networks)
+		}
+		// Containers using another container's network (e.g. container:vpn-gateway)
+		if len(networks) == 0 && inspect.HostConfig != nil {
+			mode := string(inspect.HostConfig.NetworkMode)
+			if strings.HasPrefix(mode, "container:") {
+				ref := strings.TrimPrefix(mode, "container:")
+				if resolved, ok := idToName[ref]; ok {
+					ref = resolved
+				}
+				networks = []string{"→ " + ref}
+			} else if mode == "host" {
+				networks = []string{"host"}
+			}
 		}
 
 		containers[i] = Container{

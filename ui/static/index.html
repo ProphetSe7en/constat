@@ -147,7 +147,16 @@
   .config-tag.port { background: #0d1f3c; color: #58a6ff; border-color: rgba(88,166,255,0.2); }
   .config-tag.volume { background: #1c1c1c; color: #d2a8ff; border-color: rgba(210,168,255,0.2); }
   .config-tag.network { background: #0d2818; color: #3fb950; border-color: rgba(63,185,80,0.2); }
-  .net-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-family: 'SFMono-Regular', Consolas, monospace; background: #0d2818; color: #3fb950; border: 1px solid rgba(63,185,80,0.2); margin: 1px 2px; }
+  .net-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-family: 'SFMono-Regular', Consolas, monospace; margin: 1px 2px; }
+  .net-bridge { background: #1c1c1c; color: #636e7b; border: 1px solid #30363d; }
+  .net-host { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
+  .net-container { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
+  .net-custom-green { background: #0d2818; color: #3fb950; border: 1px solid rgba(63,185,80,0.2); }
+  .net-custom-blue { background: #0d1f3c; color: #58a6ff; border: 1px solid rgba(88,166,255,0.2); }
+  .net-custom-purple { background: #1c1226; color: #bc8cff; border: 1px solid rgba(188,140,255,0.2); }
+  .net-custom-cyan { background: #0d2630; color: #39d2c0; border: 1px solid rgba(57,210,192,0.2); }
+  .net-custom-orange { background: #2a1a00; color: #db8b2e; border: 1px solid rgba(219,139,46,0.2); }
+  .net-custom-pink { background: #2a0d1e; color: #e87da0; border: 1px solid rgba(232,125,160,0.2); }
   .config-env-grid { display: grid; grid-template-columns: auto 1fr; gap: 1px 12px; font-size: 11px; max-height: 200px; overflow-y: auto; }
   .config-env-grid::-webkit-scrollbar { width: 6px; }
   .config-env-grid::-webkit-scrollbar-track { background: transparent; }
@@ -767,7 +776,7 @@
                 <td>
                   <div style="font-size:11px;line-height:1.6">
                     <template x-for="n in (c.networks || [])" :key="n">
-                      <span class="net-badge" x-text="n"></span>
+                      <span :class="netBadgeClass(n)" x-text="n"></span>
                     </template>
                     <span x-show="!c.networks || c.networks.length === 0" style="color:#484f58">&mdash;</span>
                   </div>
@@ -2268,6 +2277,16 @@ function app() {
       if (bps >= 1048576) return (bps / 1048576).toFixed(1) + ' MB/s';
       if (bps >= 1024) return (bps / 1024).toFixed(1) + ' KB/s';
       return Math.round(bps) + ' B/s';
+    },
+
+    netBadgeClass(name) {
+      if (name === 'bridge' || name === 'none') return 'net-badge net-bridge';
+      if (name === 'host') return 'net-badge net-host';
+      if (name.startsWith('→ ')) return 'net-badge net-container';
+      const customColors = ['net-custom-pink', 'net-custom-green', 'net-custom-purple', 'net-custom-cyan', 'net-custom-orange', 'net-custom-blue'];
+      let hash = 0;
+      for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+      return 'net-badge ' + customColors[Math.abs(hash) % customColors.length];
     },
 
     // ---- Header view helpers ----
