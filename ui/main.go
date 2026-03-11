@@ -102,6 +102,9 @@ func main() {
 	mux.HandleFunc("GET /api/containers/{id}/logs/stream", app.handleLogsSSE)
 	mux.HandleFunc("GET /api/stats/stream", app.handleStatsSSE)
 
+	// Network topology
+	mux.HandleFunc("GET /api/networks", app.handleNetworks)
+
 	// Restart override route
 	mux.HandleFunc("POST /api/restart-override/{name}", app.handleRestartOverride)
 
