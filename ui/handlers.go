@@ -13,12 +13,18 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
 )
+
+func networkListOptions() network.ListOptions {
+	return network.ListOptions{}
+}
 
 var validContainerID = regexp.MustCompile(`^[a-f0-9]{12,64}$`)
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
@@ -886,9 +892,37 @@ type ContainerConfig struct {
 }
 
 type NetworkInfo struct {
-	Name    string `json:"name"`
-	IP      string `json:"ip"`
-	Gateway string `json:"gateway"`
+	Name       string `json:"name"`
+	IP         string `json:"ip"`
+	Gateway    string `json:"gateway"`
+	MacAddress string `json:"mac,omitempty"`
+}
+
+// Network topology types
+
+type NetworkTopology struct {
+	Networks []NetworkGroup `json:"networks"`
+}
+
+type NetworkGroup struct {
+	Name       string             `json:"name"`
+	Driver     string             `json:"driver"`
+	Subnet     string             `json:"subnet"`
+	Gateway    string             `json:"gateway"`
+	Type       string             `json:"type"` // "custom", "bridge", "macvlan", "host", "shared"
+	Containers []NetworkContainer `json:"containers"`
+}
+
+type NetworkContainer struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	State      string `json:"state"`
+	Health     string `json:"health"`
+	IP         string `json:"ip"`
+	MacAddress string `json:"mac"`
+	Gateway    string `json:"gateway"`
+	Ports      string `json:"ports"`
+	SharedVia  string `json:"sharedVia,omitempty"` // parent container name for container:X mode
 }
 
 type EnvVar struct {
@@ -967,9 +1001,10 @@ func (app *App) handleContainerConfig(w http.ResponseWriter, r *http.Request) {
 	// Networks
 	for name, net := range inspect.NetworkSettings.Networks {
 		cfg.Networks = append(cfg.Networks, NetworkInfo{
-			Name:    name,
-			IP:      net.IPAddress,
-			Gateway: net.Gateway,
+			Name:       name,
+			IP:         net.IPAddress,
+			Gateway:    net.Gateway,
+			MacAddress: net.MacAddress,
 		})
 	}
 
@@ -1031,6 +1066,203 @@ func (app *App) handleContainerConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, cfg)
+}
+
+// --- Network Topology Handler ---
+
+func (app *App) handleNetworks(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	// List all containers
+	raw, err := app.docker.ContainerList(ctx, container.ListOptions{All: true})
+	if err != nil {
+		writeError(w, 500, "Failed to list containers")
+		return
+	}
+
+	// Build ID→name lookup
+	idToName := make(map[string]string, len(raw))
+	for _, c := range raw {
+		if len(c.Names) > 0 {
+			idToName[c.ID] = strings.TrimPrefix(c.Names[0], "/")
+			if len(c.ID) > 12 {
+				idToName[c.ID[:12]] = strings.TrimPrefix(c.Names[0], "/")
+			}
+		}
+	}
+
+	// Collect network→containers mapping
+	type netMeta struct {
+		driver  string
+		subnet  string
+		gateway string
+	}
+	networkMeta := make(map[string]netMeta)
+	networkContainers := make(map[string][]NetworkContainer)
+	var sharedContainers []NetworkContainer
+
+	for _, c := range raw {
+		inspect, err := app.docker.ContainerInspect(ctx, c.ID)
+		if err != nil {
+			continue
+		}
+
+		name := ""
+		if len(c.Names) > 0 {
+			name = strings.TrimPrefix(c.Names[0], "/")
+		}
+
+		health := "none"
+		if inspect.State.Health != nil {
+			health = string(inspect.State.Health.Status)
+		}
+
+		// Format ports
+		var portParts []string
+		for port, bindings := range inspect.HostConfig.PortBindings {
+			for _, b := range bindings {
+				if b.HostPort != "" {
+					portParts = append(portParts, fmt.Sprintf("%s:%s", b.HostPort, port))
+				}
+			}
+		}
+		sort.Strings(portParts)
+		ports := strings.Join(portParts, ", ")
+
+		hasNetworks := false
+		if inspect.NetworkSettings != nil {
+			for netName, net := range inspect.NetworkSettings.Networks {
+				hasNetworks = true
+				networkContainers[netName] = append(networkContainers[netName], NetworkContainer{
+					ID:         c.ID[:12],
+					Name:       name,
+					State:      c.State,
+					Health:     health,
+					IP:         net.IPAddress,
+					MacAddress: net.MacAddress,
+					Gateway:    net.Gateway,
+					Ports:      ports,
+				})
+			}
+		}
+
+		// Containers using container:X network mode
+		if !hasNetworks && inspect.HostConfig != nil {
+			mode := string(inspect.HostConfig.NetworkMode)
+			if strings.HasPrefix(mode, "container:") {
+				ref := strings.TrimPrefix(mode, "container:")
+				if resolved, ok := idToName[ref]; ok {
+					ref = resolved
+				}
+				sharedContainers = append(sharedContainers, NetworkContainer{
+					ID:        c.ID[:12],
+					Name:      name,
+					State:     c.State,
+					Health:    health,
+					Ports:     ports,
+					SharedVia: ref,
+				})
+			}
+		}
+	}
+
+	// Fetch Docker network metadata (driver, subnet)
+	dockerNetworks, err := app.docker.NetworkList(ctx, networkListOptions())
+	if err != nil {
+		log.Printf("Warning: failed to list Docker networks: %v", err)
+	} else {
+		for _, dn := range dockerNetworks {
+			meta := netMeta{driver: dn.Driver}
+			if len(dn.IPAM.Config) > 0 {
+				meta.subnet = dn.IPAM.Config[0].Subnet
+				meta.gateway = dn.IPAM.Config[0].Gateway
+			}
+			networkMeta[dn.Name] = meta
+		}
+	}
+
+	// Build result — order: custom networks first, then bridge, then macvlan
+	var groups []NetworkGroup
+	// Custom networks first (not "bridge", "host", "none")
+	for netName, containers := range networkContainers {
+		meta := networkMeta[netName]
+		if netName == "bridge" || netName == "host" || netName == "none" {
+			continue
+		}
+		netType := "custom"
+		if meta.driver == "macvlan" || meta.driver == "ipvlan" {
+			netType = "macvlan"
+		}
+		sort.Slice(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })
+		groups = append(groups, NetworkGroup{
+			Name:       netName,
+			Driver:     meta.driver,
+			Subnet:     meta.subnet,
+			Gateway:    meta.gateway,
+			Type:       netType,
+			Containers: containers,
+		})
+	}
+	sort.Slice(groups, func(i, j int) bool { return groups[i].Name < groups[j].Name })
+
+	// Shared namespace groups (group by parent)
+	parentGroups := make(map[string][]NetworkContainer)
+	for _, sc := range sharedContainers {
+		parentGroups[sc.SharedVia] = append(parentGroups[sc.SharedVia], sc)
+	}
+	for parent, containers := range parentGroups {
+		sort.Slice(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })
+		// Find the parent container and add it as first entry
+		var withParent []NetworkContainer
+		for _, netContainers := range networkContainers {
+			for _, nc := range netContainers {
+				if nc.Name == parent {
+					parentEntry := nc
+					parentEntry.SharedVia = "" // It IS the parent
+					withParent = append(withParent, parentEntry)
+					break
+				}
+			}
+			if len(withParent) > 0 {
+				break
+			}
+		}
+		withParent = append(withParent, containers...)
+		groups = append(groups, NetworkGroup{
+			Name:       "container:" + parent,
+			Driver:     "container",
+			Type:       "shared",
+			Containers: withParent,
+		})
+	}
+
+	// Host network
+	if containers, ok := networkContainers["host"]; ok {
+		sort.Slice(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })
+		groups = append(groups, NetworkGroup{
+			Name:       "host",
+			Driver:     "host",
+			Type:       "host",
+			Containers: containers,
+		})
+	}
+
+	// Default bridge last
+	if containers, ok := networkContainers["bridge"]; ok {
+		meta := networkMeta["bridge"]
+		sort.Slice(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })
+		groups = append(groups, NetworkGroup{
+			Name:       "bridge",
+			Driver:     meta.driver,
+			Subnet:     meta.subnet,
+			Gateway:    meta.gateway,
+			Type:       "bridge",
+			Containers: containers,
+		})
+	}
+
+	writeJSON(w, NetworkTopology{Networks: groups})
 }
 
 // --- Sequence Handlers ---

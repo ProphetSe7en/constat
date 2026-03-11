@@ -157,6 +157,45 @@
   .net-custom-cyan { background: #0d2630; color: #39d2c0; border: 1px solid rgba(57,210,192,0.2); }
   .net-custom-orange { background: #2a1a00; color: #db8b2e; border: 1px solid rgba(219,139,46,0.2); }
   .net-custom-pink { background: #2a0d1e; color: #e87da0; border: 1px solid rgba(232,125,160,0.2); }
+  /* Network topology tab */
+  .net-topology { }
+  .tab-desc { font-size: 13px; color: #8b949e; margin: 8px 0 12px; padding-left: 16px; }
+  .net-lane { margin-bottom: 12px; border: 1px solid #21262d; border-radius: 8px; overflow: hidden; }
+  .net-lane-header { padding: 10px 16px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; }
+  .net-lane-header .net-lane-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .net-lane-header .net-lane-count { color: #8b949e; font-weight: 400; font-size: 12px; }
+  .net-lane-header .net-lane-subnet { color: #8b949e; font-weight: 400; font-size: 11px; font-family: 'SFMono-Regular', Consolas, monospace; margin-left: auto; }
+  .net-lane-body { padding: 12px 16px; display: grid; gap: 6px 8px; background: #0d1117; }
+  .lane-custom .net-lane-header { background: #0d1f3c; }
+  .lane-custom .net-lane-dot { background: #58a6ff; }
+  .lane-bridge .net-lane-header { background: #1c1c1c; }
+  .lane-bridge .net-lane-dot { background: #636e7b; }
+  .lane-macvlan .net-lane-header { background: #1c1226; }
+  .lane-macvlan .net-lane-dot { background: #bc8cff; }
+  .lane-shared .net-lane-header { background: #2a1a00; }
+  .lane-shared .net-lane-dot { background: #d29922; }
+  .lane-host .net-lane-header { background: #3d1117; }
+  .lane-host .net-lane-dot { background: #f85149; }
+  .net-node { padding: 8px 14px; border-radius: 6px; background: #161b22; border: 1px solid #30363d; font-size: 12px; display: flex; align-items: center; gap: 7px; cursor: pointer; transition: border-color 0.15s; white-space: nowrap; }
+  .net-node:hover { border-color: #58a6ff; }
+  .net-node.expanded { border-color: #58a6ff; background: #1c2333; }
+  .net-node .node-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .net-node .node-dot.running { background: #3fb950; }
+  .net-node .node-dot.stopped { background: #f85149; }
+  .net-node .node-dot.unhealthy { background: #d29922; }
+  .net-node .node-name { font-weight: 500; }
+  .net-node .node-port { color: #8b949e; font-size: 10px; font-family: 'SFMono-Regular', Consolas, monospace; }
+  .net-node .node-shared { color: #d29922; font-size: 10px; }
+  .net-node .node-parent-tag { color: #d29922; font-size: 9px; font-weight: 600; }
+  .net-node-detail { background: #161b22; border: 1px solid #30363d; border-top: none; border-radius: 0 0 6px 6px; padding: 12px 16px; font-size: 11px; }
+  .net-detail-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; }
+  .net-detail-key { color: #8b949e; white-space: nowrap; }
+  .net-detail-val { color: #c9d1d9; font-family: 'SFMono-Regular', Consolas, monospace; word-break: break-all; }
+  .net-detail-section { margin-top: 10px; padding-top: 8px; border-top: 1px solid #21262d; }
+  .net-detail-section-title { font-size: 10px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .net-reach-list { display: flex; flex-wrap: wrap; gap: 4px; }
+  .net-reach-item { display: flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; background: #0d1117; border: 1px solid #21262d; font-size: 10px; }
+  .net-reach-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
   .config-env-grid { display: grid; grid-template-columns: auto 1fr; gap: 1px 12px; font-size: 11px; max-height: 200px; overflow-y: auto; }
   .config-env-grid::-webkit-scrollbar { width: 6px; }
   .config-env-grid::-webkit-scrollbar-track { background: transparent; }
@@ -654,8 +693,12 @@
     <div class="tab" :class="{ active: activeTab === 'logs' }" @click="switchTab('logs')">Logs</div>
     <div class="tab" :class="{ active: activeTab === 'events' }" @click="switchTab('events')">Events</div>
     <div class="tab" :class="{ active: activeTab === 'sequences' }" @click="switchTab('sequences')">Sequences</div>
+    <div class="tab" :class="{ active: activeTab === 'network' }" @click="switchTab('network')">Network</div>
     <div class="tab" :class="{ active: activeTab === 'config' }" @click="switchTab('config')">Config</div>
   </div>
+
+  <!-- Tab description — fixed position for all tabs -->
+  <div class="tab-desc" x-show="tabDesc()" x-text="tabDesc()"></div>
 
   <!-- Containers Tab -->
   <div x-show="activeTab === 'containers'">
@@ -1306,7 +1349,6 @@
 
       <template x-if="config && !configLoading">
         <div>
-          <div class="config-note">Changes take effect after container restart: <code>docker restart constat</code></div>
 
           <!-- Discord -->
           <div class="config-section">
@@ -1717,7 +1759,6 @@
               <span class="seq-count" x-text="sequences.length + ' sequence' + (sequences.length !== 1 ? 's' : '')"></span>
             </div>
           </div>
-          <div style="font-size:12px;color:#484f58;margin-bottom:12px">Start and stop containers in order with dependency chains. Required steps must be healthy before the next step runs.</div>
 
           <template x-if="sequences.length === 0">
             <div class="seq-empty">
@@ -1792,6 +1833,77 @@
           <button class="btn-confirm" @click="seqDeleteSequence(seqConfirmDeleteId).then(ok => { if (ok) seqConfirmDeleteId = null })">Delete</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Network Tab -->
+  <div x-show="activeTab === 'network'" x-cloak>
+    <div class="net-topology">
+
+      <div class="loading" x-show="netLoading">Loading network topology...</div>
+
+      <template x-if="netData && !netLoading">
+        <div>
+          <template x-for="net in netData.networks" :key="net.name">
+            <div class="net-lane" :class="'lane-' + net.type">
+              <div class="net-lane-header">
+                <span class="net-lane-dot"></span>
+                <span x-text="net.name"></span>
+                <span class="net-lane-count" x-text="net.containers.length + ' container' + (net.containers.length !== 1 ? 's' : '')"></span>
+                <span class="net-lane-subnet">
+                  <span x-show="net.subnet" x-text="net.subnet"></span>
+                  <span x-show="net.driver && net.driver !== 'bridge'" x-text="'(' + net.driver + ')'"></span>
+                  <span x-show="net.type === 'shared'" x-text="'shared namespace'"></span>
+                </span>
+              </div>
+              <div class="net-lane-body" :style="'grid-template-columns: repeat(' + netBalancedCols($el, net.containers.length) + ', 1fr)'">
+                <template x-for="c in net.containers" :key="c.id || c.name">
+                  <div class="net-node" :class="{ expanded: netExpandedId === (c.id || c.name) }" @click="netToggleExpand(c, net)">
+                    <span class="node-dot" :class="c.state === 'running' ? (c.health === 'unhealthy' ? 'unhealthy' : 'running') : 'stopped'"></span>
+                    <span class="node-name" x-text="c.name"></span>
+                    <span class="node-shared" x-show="c.sharedVia" x-text="'→ ' + c.sharedVia"></span>
+                    <span class="node-parent-tag" x-show="net.type === 'shared' && !c.sharedVia && net.containers.length > 1">PARENT</span>
+                  </div>
+                </template>
+              </div>
+              <!-- Detail panel below the lane body -->
+              <template x-if="netExpandedContainer(net)">
+                <div class="net-node-detail" x-transition>
+                  <div class="net-detail-grid">
+                    <span class="net-detail-key">Container</span>
+                    <span class="net-detail-val" style="font-weight:600" x-text="netExpandedContainer(net).name"></span>
+                    <span class="net-detail-key">IP Address</span>
+                    <span class="net-detail-val" x-text="netExpandedContainer(net).ip || '—'"></span>
+                    <span class="net-detail-key">MAC Address</span>
+                    <span class="net-detail-val" x-text="netExpandedContainer(net).mac || '—'"></span>
+                    <span class="net-detail-key">Gateway</span>
+                    <span class="net-detail-val" x-text="netExpandedContainer(net).gateway || '—'"></span>
+                    <span class="net-detail-key">Ports</span>
+                    <span class="net-detail-val" x-text="netExpandedContainer(net).ports || '—'"></span>
+                    <template x-if="netExpandedContainer(net).sharedVia">
+                      <span style="display:contents">
+                        <span class="net-detail-key">Network via</span>
+                        <span class="net-detail-val" x-text="'container:' + netExpandedContainer(net).sharedVia"></span>
+                      </span>
+                    </template>
+                  </div>
+                  <div class="net-detail-section">
+                    <div class="net-detail-section-title">Reachable containers on this network</div>
+                    <div class="net-reach-list">
+                      <template x-for="other in net.containers.filter(o => o.name !== netExpandedContainer(net).name)" :key="other.name">
+                        <div class="net-reach-item">
+                          <span class="net-reach-dot" :style="'background:' + (other.state === 'running' ? '#3fb950' : '#f85149')"></span>
+                          <span x-text="other.name"></span>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </template>
     </div>
   </div>
 
@@ -1938,6 +2050,11 @@ function app() {
       '🟢','🟡','🔴','🔵','⭐','💡',
     ],
 
+    // Network tab
+    netData: null,
+    netLoading: false,
+    netExpandedId: null,
+
     async init() {
       await this.fetchContainers();
       this.fetchSuggestions();
@@ -1988,6 +2105,59 @@ function app() {
       if (tab === 'config' && !this.config) {
         this.fetchConfig();
       }
+      if (tab === 'network') {
+        this.fetchNetworks();
+      }
+    },
+
+    tabDesc() {
+      const descs = {
+        events: 'Container lifecycle events — state changes, health transitions, and memory threshold alerts. Updates in real time.',
+        sequences: 'Start and stop containers in order with dependency chains. Required steps must be healthy before the next step runs.',
+        network: 'Docker network topology — containers grouped by network. Click a container for details.',
+        config: 'Changes take effect after container restart.',
+      };
+      return descs[this.activeTab] || '';
+    },
+
+    // ---- Network topology ----
+    async fetchNetworks() {
+      this.netLoading = true;
+      try {
+        const res = await fetch('/api/networks');
+        this.netData = await res.json();
+      } catch (e) {
+        console.error('Failed to fetch networks:', e);
+      } finally {
+        this.netLoading = false;
+      }
+    },
+
+    netToggleExpand(container, net) {
+      const key = container.id || container.name;
+      if (this.netExpandedId === key) {
+        this.netExpandedId = null;
+        this._netExpandedData = null;
+      } else {
+        this.netExpandedId = key;
+        this._netExpandedData = container;
+      }
+    },
+
+    netExpandedContainer(net) {
+      if (!this.netExpandedId) return null;
+      if (this._netExpandedData) return this._netExpandedData;
+      return net.containers.find(c => (c.id || c.name) === this.netExpandedId) || null;
+    },
+
+    netBalancedCols(el, count) {
+      if (count <= 1) return 1;
+      const width = el?.offsetWidth || 1400;
+      const minCard = 155;
+      const maxPerRow = Math.max(1, Math.floor(width / minCard));
+      if (count <= maxPerRow) return count;
+      const rows = Math.ceil(count / maxPerRow);
+      return Math.ceil(count / rows);
     },
 
     // ---- Sorting ----
