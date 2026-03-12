@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"log"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
 )
@@ -165,6 +167,66 @@ func (app *App) WatchEvents(ctx context.Context) {
 	}
 }
 
+// fetchLastLogLines returns the last N log lines from a container, cleaned of ANSI codes.
+func (app *App) fetchLastLogLines(containerID string, n int) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	logReader, err := app.docker.ContainerLogs(ctx, containerID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       "50",
+	})
+	if err != nil {
+		return ""
+	}
+	defer logReader.Close()
+
+	// Check TTY mode
+	inspect, err := app.docker.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return ""
+	}
+
+	var lines []string
+	scanner := bufio.NewScanner(logReader)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if !inspect.Config.Tty && len(line) >= 8 {
+			line = line[8:]
+		}
+		cleaned := strings.TrimSpace(stripANSI(string(line)))
+		if cleaned != "" {
+			lines = append(lines, cleaned)
+		}
+	}
+
+	// Filter out generic shutdown noise, keep the actual context
+	var filtered []string
+	for _, l := range lines {
+		lower := strings.ToLower(l)
+		if strings.Contains(lower, "stopping the container") ||
+			strings.Contains(lower, "shutting down") ||
+			strings.Contains(lower, "graceful shutdown") ||
+			strings.Contains(lower, "signal received") ||
+			strings.Contains(lower, "sigterm") ||
+			strings.Contains(lower, "sigkill") ||
+			strings.Contains(lower, "s6-rc: info:") ||
+			strings.Contains(lower, "cont-finish") {
+			continue
+		}
+		filtered = append(filtered, l)
+	}
+	if len(filtered) == 0 {
+		filtered = lines
+	}
+	// Return last N lines after filtering
+	if len(filtered) > n {
+		filtered = filtered[len(filtered)-n:]
+	}
+	return strings.Join(filtered, "\n")
+}
+
 func (app *App) processDockerEvent(msg events.Message) {
 	name := msg.Actor.Attributes["name"]
 	image := msg.Actor.Attributes["image"]
@@ -188,11 +250,23 @@ func (app *App) processDockerEvent(msg events.Message) {
 	case "die":
 		exitCode := msg.Actor.Attributes["exitCode"]
 		if exitCode != "" && exitCode != "0" {
-			event = &Event{
-				Type:     "state",
-				Action:   "died",
-				ExitCode: exitCode,
-			}
+			// Fetch crash logs asynchronously to avoid blocking the event stream
+			ts := time.Unix(msg.Time, msg.TimeNano%1e9)
+			containerID := msg.Actor.ID
+			go func() {
+				detail := app.fetchLastLogLines(containerID, 5)
+				e := Event{
+					Timestamp: ts,
+					Container: name,
+					Image:     image,
+					Type:      "state",
+					Action:    "died",
+					ExitCode:  exitCode,
+					Detail:    detail,
+				}
+				app.events.Add(e)
+			}()
+			return // event added by goroutine
 		}
 	case "restart":
 		event = &Event{

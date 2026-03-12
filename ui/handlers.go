@@ -29,6 +29,10 @@ func networkListOptions() network.ListOptions {
 var validContainerID = regexp.MustCompile(`^[a-f0-9]{12,64}$`)
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
 
+func stripANSI(s string) string {
+	return ansiEscape.ReplaceAllString(s, "")
+}
+
 // Summary holds container count statistics
 type Summary struct {
 	Total     int `json:"total"`
@@ -191,6 +195,108 @@ func (app *App) handleRestartContainer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]string{"status": "restarted"})
+}
+
+func (app *App) handlePauseContainer(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validContainerID.MatchString(id) {
+		writeError(w, 400, "Invalid container ID")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	if err := app.docker.ContainerPause(ctx, id); err != nil {
+		log.Printf("Error pausing container %s: %v", id, err)
+		writeError(w, 500, fmt.Sprintf("Failed to pause container: %v", err))
+		return
+	}
+
+	writeJSON(w, map[string]string{"status": "paused"})
+}
+
+func (app *App) handleUnpauseContainer(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validContainerID.MatchString(id) {
+		writeError(w, 400, "Invalid container ID")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	if err := app.docker.ContainerUnpause(ctx, id); err != nil {
+		log.Printf("Error unpausing container %s: %v", id, err)
+		writeError(w, 500, fmt.Sprintf("Failed to unpause container: %v", err))
+		return
+	}
+
+	writeJSON(w, map[string]string{"status": "unpaused"})
+}
+
+func (app *App) handleKillContainer(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validContainerID.MatchString(id) {
+		writeError(w, 400, "Invalid container ID")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	if err := app.docker.ContainerKill(ctx, id, "SIGKILL"); err != nil {
+		log.Printf("Error killing container %s: %v", id, err)
+		writeError(w, 500, fmt.Sprintf("Failed to force stop container: %v", err))
+		return
+	}
+
+	writeJSON(w, map[string]string{"status": "killed"})
+}
+
+func (app *App) handleLogsTail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validContainerID.MatchString(id) {
+		writeError(w, 400, "Invalid container ID")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	logReader, err := app.docker.ContainerLogs(ctx, id, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       "10",
+	})
+	if err != nil {
+		writeError(w, 500, fmt.Sprintf("Failed to get logs: %v", err))
+		return
+	}
+	defer logReader.Close()
+
+	// Check TTY mode for stream format
+	inspect, err := app.docker.ContainerInspect(ctx, id)
+	if err != nil {
+		writeError(w, 500, "Container not found")
+		return
+	}
+
+	var lines []string
+	scanner := bufio.NewScanner(logReader)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if !inspect.Config.Tty && len(line) >= 8 {
+			line = line[8:] // strip Docker stream header
+		}
+		// Strip ANSI escape sequences
+		cleaned := stripANSI(string(line))
+		if cleaned = strings.TrimSpace(cleaned); cleaned != "" {
+			lines = append(lines, cleaned)
+		}
+	}
+
+	writeJSON(w, map[string]interface{}{"lines": lines})
 }
 
 func (app *App) handleHealthSuggestions(w http.ResponseWriter, r *http.Request) {

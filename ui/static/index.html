@@ -23,6 +23,8 @@
   .dot-red { background: #f85149; }
   .dot-yellow { background: #d29922; }
   .dot-grey { background: #484f58; }
+  .container-icon { width: 20px; height: 20px; border-radius: 4px; flex-shrink: 0; object-fit: contain; }
+  .container-icon-stopped { opacity: 0.5; filter: grayscale(0.8); }
   .dot-blue { background: #58a6ff; }
   .stat-num { color: #e1e4e8; font-weight: 600; }
   .header-live { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #3fb950; border-left: 1px solid #30363d; padding-left: 16px; margin-left: 4px; }
@@ -79,7 +81,13 @@
   /* Container name */
   .container-name { display: flex; align-items: center; gap: 8px; overflow: hidden; }
   .container-name span { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .container-image { color: #484f58; font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .container-sub { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .container-state-indicator { font-size: 10px; font-weight: 500; }
+  .csi-running { color: #3fb950; }
+  .csi-exited, .csi-dead { color: #f85149; }
+  .csi-paused { color: #d29922; }
+  .csi-created, .csi-restarting { color: #8b949e; }
+  .container-image { color: #484f58; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* Health badge */
   .badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
@@ -87,6 +95,7 @@
   .badge-unhealthy { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
   .badge-none { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
   .badge-stopped { background: #1c1c1c; color: #636e7b; border: 1px solid #30363d; }
+  .badge-paused { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
 
   /* Restart label */
   .label-yes { color: #3fb950; }
@@ -127,6 +136,11 @@
   .detail-btn.btn-stop:hover { background: rgba(248,81,73,0.1); }
   .detail-btn.btn-restart { color: #d29922; border-color: rgba(210,153,34,0.3); }
   .detail-btn.btn-restart:hover { background: rgba(210,153,34,0.1); }
+  .detail-btn.btn-pause { color: #d29922; border-color: rgba(210,153,34,0.3); }
+  .detail-btn.btn-pause:hover { background: rgba(210,153,34,0.1); }
+  .icon-stop { display: inline-block; width: 8px; height: 8px; background: currentColor; border-radius: 1px; }
+  .icon-pause { display: inline-flex; gap: 2px; align-items: center; height: 10px; }
+  .icon-pause span { display: inline-block; width: 2.5px; height: 9px; background: currentColor; border-radius: 1px; }
   .detail-btn.btn-start { color: #3fb950; border-color: rgba(63,185,80,0.3); }
   .detail-btn.btn-start:hover { background: rgba(63,185,80,0.1); }
   .detail-btn.btn-logs { color: #58a6ff; border-color: rgba(88,166,255,0.3); }
@@ -135,6 +149,8 @@
   .detail-btn.btn-config:hover { background: rgba(188,140,255,0.1); }
   .detail-btn.btn-config.active { background: rgba(188,140,255,0.15); border-color: rgba(188,140,255,0.5); }
   .detail-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  @keyframes btn-spin { to { transform: rotate(360deg); } }
+  .btn-spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid rgba(255,255,255,0.2); border-top-color: currentColor; border-radius: 50%; animation: btn-spin 0.8s linear infinite; }
 
   /* Container config panel */
   .config-panel { margin-top: 12px; border-top: 1px solid #21262d; padding-top: 12px; }
@@ -252,7 +268,7 @@
   .event-badge-restarted { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
   .event-badge-healthy { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
   .event-badge-unhealthy { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
-  .event-badge-paused { background: #1c1c1c; color: #636e7b; border: 1px solid #30363d; }
+  .event-badge-paused { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
   .event-badge-unpaused { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
   .event-badge-notify { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
   .event-badge-restart { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
@@ -260,8 +276,8 @@
   .event-badge-recovered { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
   .event-detail { font-size: 11px; color: #8b949e; }
   .event-exit { color: #f85149; }
+  .event-exit-has-detail { border-bottom: 1px dotted #f85149; cursor: help; }
   .event-auto { color: #d29922; }
-  .event-mem-detail { color: #8b949e; font-size: 12px; }
   .live-dot { width: 6px; height: 6px; background: #3fb950; border-radius: 50%; display: inline-block; animation: pulse 2s infinite; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
   .events-toolbar { padding: 12px 24px; display: flex; gap: 12px; align-items: center; border-bottom: 1px solid #21262d; background: #0d1117; }
@@ -569,7 +585,9 @@
 
   /* Confirm dialog */
   .confirm-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
-  .confirm-dialog { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; max-width: 400px; width: 90%; }
+  .confirm-dialog { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; max-width: 520px; width: 90%; }
+  .confirm-logs { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 10px 12px; margin-bottom: 16px; max-height: 180px; overflow-y: auto; font-family: monospace; font-size: 11px; color: #8b949e; line-height: 1.5; }
+  .confirm-logs div { word-break: break-all; }
   .confirm-dialog h3 { font-size: 16px; margin-bottom: 8px; }
   .confirm-dialog p { font-size: 13px; color: #8b949e; margin-bottom: 16px; }
   .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
@@ -769,10 +787,18 @@
               <tr class="clickable" :class="{ expanded: expandedId === c.id }" @click="toggleExpand(c.id)">
                 <td>
                   <div class="container-name">
-                    <span class="dot" :class="dotClass(c)"></span>
+                    <template x-if="c.icon">
+                      <img :src="c.icon" class="container-icon" :class="{ 'container-icon-stopped': c.state !== 'running' }" loading="lazy">
+                    </template>
+                    <template x-if="!c.icon">
+                      <span class="dot" :class="dotClass(c)"></span>
+                    </template>
                     <span x-text="c.name"></span>
                   </div>
-                  <div class="container-image" x-text="c.image"></div>
+                  <div class="container-sub">
+                    <span class="container-state-indicator" :class="'csi-' + c.state" x-text="(c.state === 'running' ? '\u25B6' : c.state === 'paused' ? '\u23F8' : '\u25A0') + ' ' + c.state"></span>
+                    <span class="container-image" x-text="c.image"></span>
+                  </div>
                 </td>
                 <td><span class="badge" :class="healthBadgeClass(c)" x-text="healthLabel(c)"></span></td>
                 <td>
@@ -1075,15 +1101,48 @@
                     <div class="detail-controls">
                       <template x-if="c.state === 'running'">
                         <div style="display:flex;gap:8px">
-                          <button class="detail-btn btn-stop" @click.stop="confirmAction('stop', c)" :disabled="actionInProgress">&#9632; Stop</button>
-                          <button class="detail-btn btn-restart" @click.stop="confirmAction('restart', c)" :disabled="actionInProgress">&#8635; Restart</button>
+                          <button class="detail-btn btn-stop" @click.stop="confirmAction('stop', c)" :disabled="actionInProgress">
+                            <template x-if="actionPendingId === c.id && actionPendingType === 'stop'"><span class="btn-spinner"></span></template>
+                            <template x-if="!(actionPendingId === c.id && actionPendingType === 'stop')"><span class="icon-stop"></span></template>
+                            <span x-text="actionPendingId === c.id && actionPendingType === 'stop' ? 'Stopping\u2026' : 'Stop'"></span>
+                          </button>
+                          <button class="detail-btn btn-restart" @click.stop="confirmAction('restart', c)" :disabled="actionInProgress">
+                            <template x-if="actionPendingId === c.id && actionPendingType === 'restart'"><span class="btn-spinner"></span></template>
+                            <template x-if="!(actionPendingId === c.id && actionPendingType === 'restart')"><span>&#8635;</span></template>
+                            <span x-text="actionPendingId === c.id && actionPendingType === 'restart' ? 'Restarting\u2026' : 'Restart'"></span>
+                          </button>
+                          <button class="detail-btn btn-pause" @click.stop="confirmAction('pause', c)" :disabled="actionInProgress">
+                            <template x-if="actionPendingId === c.id && actionPendingType === 'pause'"><span class="btn-spinner"></span></template>
+                            <template x-if="!(actionPendingId === c.id && actionPendingType === 'pause')"><span class="icon-pause"><span></span><span></span></span></template>
+                            <span x-text="actionPendingId === c.id && actionPendingType === 'pause' ? 'Pausing\u2026' : 'Pause'"></span>
+                          </button>
                           <button class="detail-btn btn-logs" @click.stop="switchToLogs(c)">&#128220; Logs</button>
                           <button class="detail-btn btn-config" :class="{ active: configOpenId === c.id }" @click.stop="toggleConfig(c.id)">&#9881; Config</button>
                         </div>
                       </template>
-                      <template x-if="c.state !== 'running'">
+                      <template x-if="c.state === 'paused'">
                         <div style="display:flex;gap:8px">
-                          <button class="detail-btn btn-start" @click.stop="confirmAction('start', c)" :disabled="actionInProgress">&#9654; Start</button>
+                          <button class="detail-btn btn-start" @click.stop="confirmAction('unpause', c)" :disabled="actionInProgress">
+                            <template x-if="actionPendingId === c.id && actionPendingType === 'unpause'"><span class="btn-spinner"></span></template>
+                            <template x-if="!(actionPendingId === c.id && actionPendingType === 'unpause')"><span>&#9654;</span></template>
+                            <span x-text="actionPendingId === c.id && actionPendingType === 'unpause' ? 'Resuming\u2026' : 'Resume'"></span>
+                          </button>
+                          <button class="detail-btn btn-stop" @click.stop="confirmAction('stop', c)" :disabled="actionInProgress">
+                            <template x-if="actionPendingId === c.id && actionPendingType === 'stop'"><span class="btn-spinner"></span></template>
+                            <template x-if="!(actionPendingId === c.id && actionPendingType === 'stop')"><span class="icon-stop"></span></template>
+                            <span x-text="actionPendingId === c.id && actionPendingType === 'stop' ? 'Stopping\u2026' : 'Stop'"></span>
+                          </button>
+                          <button class="detail-btn btn-logs" @click.stop="switchToLogs(c)">&#128220; Logs</button>
+                          <button class="detail-btn btn-config" :class="{ active: configOpenId === c.id }" @click.stop="toggleConfig(c.id)">&#9881; Config</button>
+                        </div>
+                      </template>
+                      <template x-if="c.state !== 'running' && c.state !== 'paused'">
+                        <div style="display:flex;gap:8px">
+                          <button class="detail-btn btn-start" @click.stop="confirmAction('start', c)" :disabled="actionInProgress">
+                            <template x-if="actionPendingId === c.id && actionPendingType === 'start'"><span class="btn-spinner"></span></template>
+                            <template x-if="!(actionPendingId === c.id && actionPendingType === 'start')"><span>&#9654;</span></template>
+                            <span x-text="actionPendingId === c.id && actionPendingType === 'start' ? 'Starting\u2026' : 'Start'"></span>
+                          </button>
                           <button class="detail-btn btn-logs" @click.stop="switchToLogs(c)">&#128220; Logs</button>
                           <button class="detail-btn btn-config" :class="{ active: configOpenId === c.id }" @click.stop="toggleConfig(c.id)">&#9881; Config</button>
                         </div>
@@ -1292,13 +1351,13 @@
           <!-- Single event (no group) -->
           <template x-if="g.events.length === 1">
             <div class="event-row">
+              <span style="min-width:12px"></span>
               <span class="event-time" :title="new Date(g.events[0].timestamp).toLocaleString()" x-text="formatEventTime(g.events[0].timestamp)"></span>
               <span class="event-container" x-text="g.events[0].container"></span>
               <span class="event-badge" :class="'event-badge-' + g.events[0].action" x-text="g.events[0].action"></span>
               <span class="event-detail">
-                <span x-show="g.events[0].exitCode" class="event-exit" x-text="'exit ' + g.events[0].exitCode"></span>
+                <span x-show="g.events[0].exitCode" class="event-exit" :class="{ 'event-exit-has-detail': g.events[0].detail }" :title="g.events[0].detail || ''" x-text="'exit ' + g.events[0].exitCode"></span>
                 <span x-show="g.events[0].autoRestart" class="event-auto">auto-restart</span>
-                <span x-show="g.events[0].detail" class="event-mem-detail" x-text="g.events[0].detail"></span>
               </span>
             </div>
           </template>
@@ -1324,9 +1383,8 @@
                     <span class="event-container" x-text="e.container"></span>
                     <span class="event-badge" :class="'event-badge-' + e.action" x-text="e.action"></span>
                     <span class="event-detail">
-                      <span x-show="e.exitCode" class="event-exit" x-text="'exit ' + e.exitCode"></span>
+                      <span x-show="e.exitCode" class="event-exit" :class="{ 'event-exit-has-detail': e.detail }" :title="e.detail || ''" x-text="'exit ' + e.exitCode"></span>
                       <span x-show="e.autoRestart" class="event-auto">auto-restart</span>
-                      <span x-show="e.detail" class="event-mem-detail" x-text="e.detail"></span>
                     </span>
                   </div>
                 </template>
@@ -1907,14 +1965,26 @@
     </div>
   </div>
 
-  <!-- Confirmation Dialog -->
-  <div class="confirm-overlay" x-show="confirmDialog.show" x-transition @click.self="confirmDialog.show = false">
+  <!-- Action Timeout Dialog -->
+  <div class="confirm-overlay" x-show="actionTimeoutDialog.show" x-transition @click.self="actionTimeoutDialog.show = false">
     <div class="confirm-dialog">
-      <h3 x-text="confirmDialog.title"></h3>
-      <p x-text="confirmDialog.message"></p>
+      <h3 x-text="actionTimeoutDialog.title"></h3>
+      <p x-text="actionTimeoutDialog.message"></p>
+      <template x-if="actionTimeoutDialog.logs && actionTimeoutDialog.logs.length > 0">
+        <div>
+          <div style="font-size:11px;color:#484f58;margin-bottom:6px">Recent logs:</div>
+          <div class="confirm-logs">
+            <template x-for="(line, i) in actionTimeoutDialog.logs" :key="i">
+              <div x-text="line"></div>
+            </template>
+          </div>
+        </div>
+      </template>
       <div class="confirm-actions">
-        <button class="btn-cancel" @click="confirmDialog.show = false">Cancel</button>
-        <button :class="confirmDialog.action === 'start' ? 'btn-confirm-start' : 'btn-confirm'" @click="executeAction()" x-text="confirmDialog.actionLabel"></button>
+        <button class="btn-cancel" @click="actionTimeoutDialog.show = false">Dismiss</button>
+        <template x-if="actionTimeoutDialog.showForceStop">
+          <button class="btn-confirm" @click="forceStopContainer()">Force Stop</button>
+        </template>
       </div>
     </div>
   </div>
@@ -1938,7 +2008,6 @@ function app() {
     configData: null,
     configRevealSecrets: {},
     refreshInterval: null,
-    confirmDialog: { show: false, title: '', message: '', action: '', container: null, actionLabel: '' },
 
     // Sorting
     sortColumn: 'name',
@@ -2394,6 +2463,7 @@ function app() {
     },
 
     healthBadgeClass(c) {
+      if (c.state === 'paused') return 'badge-paused';
       if (c.state !== 'running') return 'badge-stopped';
       if (c.health === 'healthy') return 'badge-healthy';
       if (c.health === 'unhealthy') return 'badge-unhealthy';
@@ -2401,6 +2471,7 @@ function app() {
     },
 
     healthLabel(c) {
+      if (c.state === 'paused') return 'Paused';
       if (c.state !== 'running') return 'Stopped';
       if (c.health === 'healthy') return 'Healthy';
       if (c.health === 'unhealthy') return 'Unhealthy';
@@ -2517,34 +2588,81 @@ function app() {
       return this.suggestions.find(s => s.container === name);
     },
 
-    confirmAction(action, container) {
-      const labels = { start: 'Start', stop: 'Stop', restart: 'Restart' };
-      this.confirmDialog = {
-        show: true,
-        title: labels[action] + ' Container',
-        message: `Are you sure you want to ${action} "${container.name}"?`,
-        action: action,
-        container: container,
-        actionLabel: labels[action],
-      };
-    },
+    actionPendingId: null,
+    actionPendingType: null,
+    actionTimeoutDialog: { show: false, title: '', message: '', logs: [], showForceStop: false, containerId: null },
 
-    async executeAction() {
-      const { action, container } = this.confirmDialog;
-      this.confirmDialog.show = false;
+    async confirmAction(action, container) {
+      this.actionPendingId = container.id;
+      this.actionPendingType = action;
       this.actionInProgress = true;
+      const minSpinnerEnd = Date.now() + 2000;
 
       try {
         const resp = await fetch(`/api/containers/${container.id}/${action}`, { method: 'POST' });
         if (!resp.ok) {
           const err = await resp.json();
           alert(`Failed to ${action}: ${err.error || 'Unknown error'}`);
+          return;
         }
-        setTimeout(() => this.fetchContainers(), 1000);
+        // Poll until container state actually changes
+        const expectState = { start: 'running', restart: 'running', unpause: 'running', pause: 'paused' };
+        const targetState = expectState[action];
+        let stateChanged = false;
+        for (let i = 0; i < 15; i++) {
+          await new Promise(r => setTimeout(r, 1000));
+          await this.fetchContainers();
+          const updated = this.containers.find(c => c.id === container.id);
+          if (updated && (targetState ? updated.state === targetState : updated.state !== 'running')) { stateChanged = true; break; }
+        }
+        // Ensure spinner shows for at least 2 seconds
+        const remaining = minSpinnerEnd - Date.now();
+        if (remaining > 0) await new Promise(r => setTimeout(r, remaining));
+        if (!stateChanged) {
+          // Fetch recent logs for context
+          let logs = [];
+          try {
+            const logResp = await fetch(`/api/containers/${container.id}/logs/tail`);
+            if (logResp.ok) { const data = await logResp.json(); logs = data.lines || []; }
+          } catch (_) {}
+          this.actionTimeoutDialog = {
+            show: true,
+            title: `${container.name} — ${action} timed out`,
+            message: `Container did not ${action} within 15 seconds.`,
+            logs: logs,
+            showForceStop: action === 'stop' || action === 'restart',
+            containerId: container.id,
+          };
+        }
       } catch (e) {
         alert(`Failed to ${action}: ${e.message}`);
       } finally {
         this.actionInProgress = false;
+        this.actionPendingId = null;
+        this.actionPendingType = null;
+      }
+    },
+
+    async forceStopContainer() {
+      const id = this.actionTimeoutDialog.containerId;
+      this.actionTimeoutDialog.show = false;
+      this.actionPendingId = id;
+      this.actionPendingType = 'stop';
+      this.actionInProgress = true;
+      try {
+        const resp = await fetch(`/api/containers/${id}/kill`, { method: 'POST' });
+        if (!resp.ok) {
+          const err = await resp.json();
+          alert(`Force stop failed: ${err.error || 'Unknown error'}`);
+        }
+        await new Promise(r => setTimeout(r, 1000));
+        await this.fetchContainers();
+      } catch (e) {
+        alert(`Force stop failed: ${e.message}`);
+      } finally {
+        this.actionInProgress = false;
+        this.actionPendingId = null;
+        this.actionPendingType = null;
       }
     },
 
@@ -3420,6 +3538,20 @@ function app() {
             expanded: false
           };
           groups.push(current);
+        }
+      }
+      // Clean up intermediate Docker events within groups
+      for (const g of groups) {
+        const actions = g.events.map(e => e.action);
+        if (actions.includes('restarted') || actions.includes('started')) {
+          // Restart/start sequence: died + stopped are intermediate, keep only the outcomes
+          g.events = g.events.filter(e => e.action !== 'died' && e.action !== 'stopped');
+        } else if (actions.includes('died') && actions.includes('stopped')) {
+          // Planned stop: died is just a signal exit, drop it
+          g.events = g.events.filter(e => e.action !== 'died');
+        } else if (actions.includes('paused') && actions.includes('unpaused')) {
+          // Pause+unpause: keep unpaused only (the resolution)
+          g.events = g.events.filter(e => e.action !== 'paused');
         }
       }
       return groups;

@@ -34,6 +34,7 @@ type Container struct {
 	Created         string      `json:"created,omitempty"`
 	RestartPolicy   string      `json:"restartPolicy"`
 	HealthcheckCmd  string      `json:"healthcheckCmd"`
+	Icon            string      `json:"icon,omitempty"`
 }
 
 // ListContainers returns all containers with their current state and resource usage
@@ -96,6 +97,8 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 			restartPolicy = string(inspect.HostConfig.RestartPolicy.Name)
 		}
 
+		icon := inspect.Config.Labels["net.unraid.docker.icon"]
+
 		healthcheckCmd := ""
 		if inspect.Config.Healthcheck != nil && len(inspect.Config.Healthcheck.Test) > 1 {
 			healthcheckCmd = strings.Join(inspect.Config.Healthcheck.Test[1:], " ")
@@ -135,6 +138,7 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 			Created:         inspect.Created,
 			RestartPolicy:   restartPolicy,
 			HealthcheckCmd:  healthcheckCmd,
+			Icon:            icon,
 			Networks:        networks,
 		}
 

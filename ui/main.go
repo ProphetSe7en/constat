@@ -100,6 +100,10 @@ func main() {
 	mux.HandleFunc("GET /api/containers/{id}/history", app.handleContainerHistory)
 	mux.HandleFunc("GET /api/containers/{id}/config", app.handleContainerConfig)
 	mux.HandleFunc("GET /api/containers/{id}/logs/stream", app.handleLogsSSE)
+	mux.HandleFunc("GET /api/containers/{id}/logs/tail", app.handleLogsTail)
+	mux.HandleFunc("POST /api/containers/{id}/kill", app.handleKillContainer)
+	mux.HandleFunc("POST /api/containers/{id}/pause", app.handlePauseContainer)
+	mux.HandleFunc("POST /api/containers/{id}/unpause", app.handleUnpauseContainer)
 	mux.HandleFunc("GET /api/stats/stream", app.handleStatsSSE)
 
 	// Network topology
