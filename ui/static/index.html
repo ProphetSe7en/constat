@@ -12,11 +12,11 @@
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e1e4e8; min-height: 100vh; }
 
   /* Header */
-  .header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 24px; display: flex; align-items: center; gap: 0; }
   .header-left { display: flex; align-items: center; gap: 12px; }
   .header-left svg { width: 28px; height: 28px; }
   .header-left h1 { font-size: 20px; font-weight: 600; }
-  .header-stats { display: flex; gap: 20px; font-size: 13px; color: #8b949e; }
+  .header-stats { display: flex; gap: 20px; font-size: 13px; color: #8b949e; margin-left: 20px; padding-left: 20px; border-left: 1px solid #30363d; }
   .header-stats .stat { display: flex; align-items: center; gap: 6px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
   .dot-green { background: #3fb950; }
@@ -180,7 +180,7 @@
   .net-lane-header { padding: 10px 16px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; }
   .net-lane-header .net-lane-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .net-lane-header .net-lane-count { color: #8b949e; font-weight: 400; font-size: 12px; }
-  .net-lane-header .net-lane-subnet { color: #8b949e; font-weight: 400; font-size: 11px; font-family: 'SFMono-Regular', Consolas, monospace; margin-left: auto; }
+  .net-lane-header .net-lane-subnet { color: #8b949e; font-weight: 400; font-size: 11px; font-family: 'SFMono-Regular', Consolas, monospace; }
   .net-lane-body { padding: 12px 16px; display: grid; gap: 6px 8px; background: #0d1117; }
   .lane-custom .net-lane-header { background: #0d1f3c; }
   .lane-custom .net-lane-dot { background: #58a6ff; }
@@ -324,7 +324,7 @@
   .add-entry-btn:hover { border-color: #58a6ff; }
   .color-field { display: flex; align-items: center; gap: 8px; }
   .color-preview { width: 20px; height: 20px; border-radius: 4px; border: 1px solid #30363d; flex-shrink: 0; }
-  .color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
+  .color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; max-width: 520px; }
   .save-bar { padding: 16px 24px; display: flex; gap: 12px; align-items: center; }
   .save-btn { padding: 8px 24px; border-radius: 6px; background: #1f6feb; border: none; color: #fff; font-size: 13px; cursor: pointer; font-weight: 500; }
   .save-btn:hover { background: #388bfd; }
@@ -421,9 +421,9 @@
   .seq-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
   .seq-toolbar h2 { font-size: 16px; font-weight: 600; }
   .seq-count { font-size: 13px; color: #8b949e; margin-left: 8px; }
-  .seq-new-btn { padding: 6px 16px; border-radius: 6px; background: #1a7f37; border: 1px solid #238636; color: #fff; font-size: 13px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 6px; }
-  .seq-new-btn:hover { background: #238636; }
-  .seq-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .seq-new-btn { padding: 4px 12px; border-radius: 6px; background: #21262d; border: 1px solid #30363d; color: #8b949e; font-size: 12px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 4px; }
+  .seq-new-btn:hover { border-color: #238636; color: #3fb950; }
+  .seq-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; margin-bottom: 8px; overflow: visible; }
   .seq-card-header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; }
   .seq-card-header:hover { background: #1c2128; }
   .seq-icon { font-size: 20px; flex-shrink: 0; width: 28px; text-align: center; }
@@ -436,21 +436,13 @@
   .seq-pill-stopped { background: #1c1c1c; color: #636e7b; border: 1px solid #30363d; }
   .seq-pill-partial { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
   .seq-card-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-right: 8px; }
-  .seq-run-btn { padding: 5px 14px; border-radius: 6px; background: #1f6feb; border: 1px solid #388bfd; color: #fff; font-size: 12px; cursor: pointer; font-weight: 500; }
-  .seq-run-btn:hover { background: #388bfd; }
-  .seq-run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .seq-dropdown { position: relative; display: inline-block; }
-  .seq-dropdown-btn { padding: 5px 8px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #c9d1d9; cursor: pointer; font-size: 12px; }
-  .seq-dropdown-btn:hover { border-color: #58a6ff; }
-  .seq-dropdown-menu { position: absolute; right: 0; top: 100%; margin-top: 4px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; min-width: 180px; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.4); overflow: hidden; }
-  .seq-dropdown-item { padding: 8px 14px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; color: #c9d1d9; }
-  .seq-dropdown-item:hover { background: #1c2128; }
-  .seq-dropdown-item.red { color: #f85149; }
-  .seq-dropdown-item.red:hover { background: rgba(248,81,73,0.1); }
-  .seq-edit-btn { padding: 5px 8px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #8b949e; cursor: pointer; font-size: 13px; }
-  .seq-edit-btn:hover { border-color: #58a6ff; color: #e1e4e8; }
-  .seq-del-btn { padding: 5px 8px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #8b949e; cursor: pointer; font-size: 13px; }
-  .seq-del-btn:hover { border-color: #f85149; color: #f85149; }
+  .seq-action-btn { padding: 4px 8px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #8b949e; cursor: pointer; font-size: 12px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; }
+  .seq-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .seq-action-start:hover:not(:disabled) { border-color: #238636; color: #3fb950; }
+  .seq-action-stop:hover:not(:disabled) { border-color: #f85149; color: #f85149; }
+  .seq-action-restart:hover:not(:disabled) { border-color: #d29922; color: #d29922; }
+  .seq-action-edit:hover { border-color: #58a6ff; color: #58a6ff; }
+  .seq-action-delete:hover { border-color: #f85149; color: #f85149; }
   .seq-expanded { padding: 0 16px 16px; border-top: 1px solid #21262d; }
   .seq-chain { margin-top: 12px; }
   .seq-chain-step { display: flex; align-items: flex-start; gap: 12px; padding: 6px 0; position: relative; }
@@ -1585,60 +1577,60 @@
               <!-- Rules overview with live stats -->
               <div style="margin-top:16px;font-size:12px;color:#8b949e;font-weight:600;margin-bottom:8px">Rules</div>
               <div x-show="config.memoryWatch.length === 0" style="font-size:12px;color:#484f58;margin-bottom:8px">No rules defined. Add rules from the Containers tab or below.</div>
-              <template x-for="(entry, idx) in config.memoryWatch" :key="idx">
-                <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:10px 12px;margin-bottom:8px" :style="config.memoryPaused === 'true' ? 'opacity:0.5' : ''">
-                  <template x-if="mwatchEditIdx !== idx">
-                    <div>
-                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                        <span style="font-size:13px;font-weight:600;color:#c9d1d9" x-text="entry.name || '(unnamed)'"></span>
-                        <div style="display:flex;gap:6px">
+              <div class="mwatch-grid cols-1" x-show="config.memoryWatch.length > 0" :style="config.memoryPaused === 'true' ? 'opacity:0.5' : ''">
+                <template x-for="(entry, idx) in config.memoryWatch" :key="idx">
+                  <div class="mwatch-card">
+                    <template x-if="mwatchEditIdx !== idx">
+                      <div>
+                        <div style="font-size:13px;font-weight:600;color:#c9d1d9;margin-bottom:6px" x-text="entry.name || '(unnamed)'"></div>
+                        <div class="mwatch-info" style="margin-bottom:6px">
+                          <span><span style="color:#8b949e">Limit:</span> <span x-text="entry.limit"></span></span>
+                          <span><span style="color:#8b949e">Action:</span> <span x-text="entry.action"></span></span>
+                          <span x-show="entry.duration"><span style="color:#8b949e">Duration:</span> <span x-text="entry.duration + 's'"></span></span>
+                        </div>
+                        <template x-if="getContainerByName(entry.name)">
+                          <div>
+                            <div class="mwatch-bar">
+                              <div class="mwatch-bar-fill"
+                                :class="memoryWatchBarClassForEntry(getContainerByName(entry.name), entry)"
+                                :style="'width:' + Math.min(memoryWatchPercentForEntry(getContainerByName(entry.name), entry), 100) + '%'"></div>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;font-size:11px;color:#484f58;margin-top:2px">
+                              <span x-text="formatBytes(getContainerByName(entry.name).memory)"></span>
+                              <span x-text="memoryWatchPercentForEntry(getContainerByName(entry.name), entry).toFixed(0) + '%'"></span>
+                              <span x-text="entry.limit"></span>
+                            </div>
+                            <div x-show="mwatchElapsedSec(entry.name, idx) >= 0"
+                              style="font-size:11px;margin-top:4px;font-weight:600"
+                              :style="entry.action === 'restart' ? 'color:#f85149' : 'color:#d29922'"
+                              x-text="mwatchTimerText(entry.name, idx, entry)">
+                            </div>
+                          </div>
+                        </template>
+                        <div x-show="!getContainerByName(entry.name)" style="font-size:11px;color:#484f58;margin-top:4px">Container not running — no live data</div>
+                        <div style="display:flex;gap:8px;margin-top:6px">
                           <button class="mwatch-btn" @click.stop="startEditMemoryWatch(idx)">Edit</button>
                           <button class="mwatch-btn mwatch-btn-remove" @click.stop="removeMemoryWatchByIdx(idx)">Remove</button>
                         </div>
                       </div>
-                      <div class="mwatch-info" style="margin-bottom:6px">
-                        <span><span style="color:#8b949e">Limit:</span> <span x-text="entry.limit"></span></span>
-                        <span><span style="color:#8b949e">Action:</span> <span x-text="entry.action"></span></span>
-                        <span x-show="entry.duration"><span style="color:#8b949e">Duration:</span> <span x-text="entry.duration + 's'"></span></span>
+                    </template>
+                    <template x-if="mwatchEditIdx === idx">
+                      <div class="mwatch-inline-form" @click.stop>
+                        <input type="text" x-model="mwatchEditForm.name" placeholder="container-name" style="width:140px">
+                        <input type="text" x-model="mwatchEditForm.limit" placeholder="512m, 1.5g" style="width:80px">
+                        <select x-model="mwatchEditForm.action">
+                          <option value="notify">notify</option>
+                          <option value="restart">restart</option>
+                        </select>
+                        <input type="text" x-model="mwatchEditForm.duration" placeholder="duration (s)" style="width:90px">
+                        <button class="mwatch-btn" @click.stop="saveEditMemoryWatchConfig(idx)" style="background:#1f6feb;border-color:#1f6feb;color:#fff">Save</button>
+                        <button class="mwatch-btn" @click.stop="mwatchEditIdx = -1">Cancel</button>
                       </div>
-                      <template x-if="getContainerByName(entry.name)">
-                        <div>
-                          <div class="mwatch-bar">
-                            <div class="mwatch-bar-fill"
-                              :class="memoryWatchBarClassForEntry(getContainerByName(entry.name), entry)"
-                              :style="'width:' + Math.min(memoryWatchPercentForEntry(getContainerByName(entry.name), entry), 100) + '%'"></div>
-                          </div>
-                          <div style="display:flex;justify-content:space-between;font-size:11px;color:#484f58;margin-top:2px">
-                            <span x-text="formatBytes(getContainerByName(entry.name).memory)"></span>
-                            <span x-text="memoryWatchPercentForEntry(getContainerByName(entry.name), entry).toFixed(0) + '%'"></span>
-                            <span x-text="entry.limit"></span>
-                          </div>
-                          <div x-show="mwatchElapsedSec(entry.name, idx) >= 0"
-                            style="font-size:11px;margin-top:4px;font-weight:600"
-                            :style="entry.action === 'restart' ? 'color:#f85149' : 'color:#d29922'"
-                            x-text="mwatchTimerText(entry.name, idx, entry)">
-                          </div>
-                        </div>
-                      </template>
-                      <div x-show="!getContainerByName(entry.name)" style="font-size:11px;color:#484f58;margin-top:4px">Container not running — no live data</div>
-                    </div>
-                  </template>
-                  <template x-if="mwatchEditIdx === idx">
-                    <div class="mwatch-inline-form" @click.stop>
-                      <input type="text" x-model="mwatchEditForm.name" placeholder="container-name" style="width:140px">
-                      <input type="text" x-model="mwatchEditForm.limit" placeholder="512m, 1.5g" style="width:80px">
-                      <select x-model="mwatchEditForm.action">
-                        <option value="notify">notify</option>
-                        <option value="restart">restart</option>
-                      </select>
-                      <input type="text" x-model="mwatchEditForm.duration" placeholder="duration (s)" style="width:90px">
-                      <button class="mwatch-btn" @click.stop="saveEditMemoryWatchConfig(idx)" style="background:#1f6feb;border-color:#1f6feb;color:#fff">Save</button>
-                      <button class="mwatch-btn" @click.stop="mwatchEditIdx = -1">Cancel</button>
-                    </div>
-                  </template>
-                </div>
-              </template>
-              <button class="add-entry-btn" @click="config.memoryWatch.push({name:'', limit:'', action:'notify', duration:''}); configDirty = true; $nextTick(() => startEditMemoryWatch(config.memoryWatch.length - 1))">+ Add rule</button>
+                    </template>
+                  </div>
+                </template>
+              </div>
+              <button class="add-entry-btn" @click="config.memoryWatch.push({name:'', limit:'', action:'notify', duration:''}); configDirty = true; $nextTick(() => startEditMemoryWatch(config.memoryWatch.length - 1))" style="margin-top:8px">+ Add rule</button>
             </div>
           </div>
 
@@ -1829,17 +1821,11 @@
             <div class="seq-card">
               <div class="seq-card-header" @click="seqToggleExpand(seq.id)">
                 <div class="seq-card-actions" @click.stop>
-                  <button class="seq-run-btn" @click="seqRunStart(seq.id)" :disabled="seqIsRunning() || seqActionPending">&#9654; Run</button>
-                  <div class="seq-dropdown" x-data="{ open: false }">
-                    <button class="seq-dropdown-btn" @click="open = !open">&#9660;</button>
-                    <div class="seq-dropdown-menu" x-show="open" @click.outside="open = false" x-transition x-cloak>
-                      <div class="seq-dropdown-item" :style="(seqIsRunning() || seqActionPending) ? 'opacity:0.4;cursor:not-allowed' : ''" @click="!(seqIsRunning() || seqActionPending) && (seqRunStart(seq.id), open = false)">&#9654; Start sequence</div>
-                      <div class="seq-dropdown-item red" :style="(seqIsRunning() || seqActionPending) ? 'opacity:0.4;cursor:not-allowed' : ''" @click="!(seqIsRunning() || seqActionPending) && (seqRunStop(seq.id), open = false)">&#9632; Stop sequence</div>
-                      <div class="seq-dropdown-item" :style="(seqIsRunning() || seqActionPending) ? 'opacity:0.4;cursor:not-allowed' : 'color:#d29922'" @click="!(seqIsRunning() || seqActionPending) && (seqRunRestart(seq.id), open = false)">&#8635; Restart sequence</div>
-                    </div>
-                  </div>
-                  <button class="seq-edit-btn" @click="seqEditSequence(seq)" title="Edit">&#9998;</button>
-                  <button class="seq-del-btn" @click="seqConfirmDeleteId = seq.id" title="Delete">&times;</button>
+                  <button class="seq-action-btn seq-action-start" @click="seqRunStart(seq.id)" :disabled="seqIsRunning() || seqActionPending" title="Start sequence">&#9654;</button>
+                  <button class="seq-action-btn seq-action-stop" @click="seqRunStop(seq.id)" :disabled="seqIsRunning() || seqActionPending" title="Stop sequence">&#9632;</button>
+                  <button class="seq-action-btn seq-action-restart" @click="seqRunRestart(seq.id)" :disabled="seqIsRunning() || seqActionPending" title="Restart sequence">&#8635;</button>
+                  <button class="seq-action-btn seq-action-edit" @click="seqEditSequence(seq)" title="Edit">&#9998;</button>
+                  <button class="seq-action-btn seq-action-delete" @click="seqConfirmDeleteId = seq.id" title="Delete">&times;</button>
                 </div>
                 <span class="seq-icon" x-text="seq.icon || '&#9654;'"></span>
                 <div class="seq-card-info">
@@ -1907,12 +1893,12 @@
               <div class="net-lane-header">
                 <span class="net-lane-dot"></span>
                 <span x-text="net.name"></span>
-                <span class="net-lane-count" x-text="net.containers.length + ' container' + (net.containers.length !== 1 ? 's' : '')"></span>
                 <span class="net-lane-subnet">
                   <span x-show="net.subnet" x-text="net.subnet"></span>
                   <span x-show="net.driver && net.driver !== 'bridge'" x-text="'(' + net.driver + ')'"></span>
                   <span x-show="net.type === 'shared'" x-text="'shared namespace'"></span>
                 </span>
+                <span class="net-lane-count" x-text="net.containers.length + ' container' + (net.containers.length !== 1 ? 's' : '')"></span>
               </div>
               <div class="net-lane-body" :style="'grid-template-columns: repeat(' + netBalancedCols($el, net.containers.length) + ', 1fr)'">
                 <template x-for="c in net.containers" :key="c.id || c.name">

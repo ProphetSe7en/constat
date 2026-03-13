@@ -35,6 +35,7 @@ type Container struct {
 	RestartPolicy   string      `json:"restartPolicy"`
 	HealthcheckCmd  string      `json:"healthcheckCmd"`
 	Icon            string      `json:"icon,omitempty"`
+	InternalPorts   []uint16    `json:"-"` // internal container ports, used for healthcheck suggestions
 }
 
 // ListContainers returns all containers with their current state and resource usage
@@ -104,6 +105,24 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 			healthcheckCmd = strings.Join(inspect.Config.Healthcheck.Test[1:], " ")
 		}
 
+		// Collect internal (private) TCP ports from port bindings for healthcheck suggestions
+		var internalPorts []uint16
+		for _, p := range c.Ports {
+			if p.Type == "tcp" && p.PrivatePort > 0 {
+				// Deduplicate (same private port can appear multiple times with different host bindings)
+				found := false
+				for _, existing := range internalPorts {
+					if existing == p.PrivatePort {
+						found = true
+						break
+					}
+				}
+				if !found {
+					internalPorts = append(internalPorts, p.PrivatePort)
+				}
+			}
+		}
+
 		var networks []string
 		if inspect.NetworkSettings != nil {
 			for netName := range inspect.NetworkSettings.Networks {
@@ -139,6 +158,7 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 			RestartPolicy:   restartPolicy,
 			HealthcheckCmd:  healthcheckCmd,
 			Icon:            icon,
+			InternalPorts:   internalPorts,
 			Networks:        networks,
 		}
 

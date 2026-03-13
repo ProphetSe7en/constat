@@ -12,6 +12,10 @@ A Docker container monitor with a built-in web UI. Track container health, view 
 |--------|-----------|
 | ![Events](screenshots/events.png) | ![Sequences](screenshots/sequences.png) |
 
+| Network Topology |
+|------------------|
+| ![Network](screenshots/network.png) |
+
 ## Features
 
 - **Live stats** — CPU, RAM, and network usage updated every 3 seconds via streaming
@@ -178,7 +182,7 @@ Rules can also be managed from the Config tab in the Web UI.
 
 ### Healthcheck Suggestions
 
-Constat includes a built-in database of recommended healthcheck commands for common Docker images (Plex, Radarr, Sonarr, Prowlarr, Bazarr, PostgreSQL, MariaDB, qBittorrent, SWAG, and more). When a running container has no healthcheck configured, a suggestion appears in the expanded view with the command to add as an Extra Parameter.
+Constat includes a built-in database of recommended healthcheck commands for common Docker images (Plex, Radarr, Sonarr, Prowlarr, Bazarr, PostgreSQL, MariaDB, qBittorrent, SWAG, and more). When a running container has no healthcheck configured, a suggestion appears in the expanded view with the command to add as an Extra Parameter. Ports are automatically detected from the container's actual port bindings — if a non-standard port is in use, the suggestion adjusts automatically.
 
 ### Docker Socket Proxy
 
