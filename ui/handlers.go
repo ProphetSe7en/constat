@@ -1188,8 +1188,12 @@ func (app *App) handleContainerConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(inspect.HostConfig.Tmpfs) > 0 {
-		for path := range inspect.HostConfig.Tmpfs {
-			extras = append(extras, fmt.Sprintf("--tmpfs %s", path))
+		for path, opts := range inspect.HostConfig.Tmpfs {
+			if opts != "" {
+				extras = append(extras, fmt.Sprintf("--tmpfs %s:%s", path, opts))
+			} else {
+				extras = append(extras, fmt.Sprintf("--tmpfs %s", path))
+			}
 		}
 	}
 	if inspect.HostConfig.ShmSize > 0 && inspect.HostConfig.ShmSize != 67108864 { // 64MB is default
