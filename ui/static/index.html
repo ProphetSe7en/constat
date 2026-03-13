@@ -64,7 +64,8 @@
   /* Table */
   .table-wrap { padding: 0 24px 24px; }
   table { width: 100%; border-collapse: collapse; margin-top: 12px; table-layout: fixed; }
-  th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; padding: 8px 12px; border-bottom: 1px solid #21262d; }
+  thead { position: sticky; top: 0; z-index: 5; }
+  th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; padding: 8px 12px; border-bottom: 1px solid #21262d; background: #0d1117; }
   td { padding: 10px 12px; border-bottom: 1px solid #161b22; font-size: 13px; vertical-align: middle; }
   col.col-cpu { width: 13%; } col.col-ram { width: 13%; } col.col-net { width: 13%; }
   col.col-networks { width: 10%; }
@@ -566,7 +567,7 @@
   .seq-exec-error { font-size: 13px; color: #f85149; flex: 1; }
   .seq-abort-btn { padding: 6px 16px; border-radius: 6px; background: #da3633; border: 1px solid #f85149; color: #fff; font-size: 12px; cursor: pointer; margin-left: auto; }
   .seq-abort-btn:hover { background: #f85149; }
-  .seq-close-btn { padding: 6px 16px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #c9d1d9; font-size: 12px; cursor: pointer; margin-left: auto; }
+  .seq-close-btn { padding: 6px 16px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #c9d1d9; font-size: 12px; cursor: pointer; }
   .seq-close-btn:hover { border-color: #58a6ff; }
   .seq-retry-btn { padding: 6px 16px; border-radius: 6px; background: #1f6feb; border: 1px solid #388bfd; color: #fff; font-size: 12px; cursor: pointer; }
   .seq-retry-btn:hover { background: #388bfd; }
@@ -1638,6 +1639,114 @@
             </div>
           </div>
 
+          <!-- Maintenance -->
+          <div class="config-section">
+            <div class="config-section-header" @click="configSections.maintenance = !configSections.maintenance; if(configSections.maintenance && !imageData) fetchImages()">
+              Maintenance
+              <span class="arrow" x-text="configSections.maintenance ? '&#9660;' : '&#9654;'"></span>
+            </div>
+            <div class="config-section-body" x-show="configSections.maintenance" x-transition>
+              <div style="font-size:11px;color:#484f58;margin-bottom:10px">Remove unused and dangling Docker images to reclaim disk space.</div>
+
+              <div x-show="imageLoading" style="font-size:12px;color:#8b949e">Loading images...</div>
+              <div x-show="imageError" style="font-size:12px;color:#f85149;margin-bottom:8px" x-text="imageError"></div>
+
+              <template x-if="imageData && !imageLoading">
+                <div>
+                  <!-- Summary -->
+                  <div style="display:flex;gap:16px;margin-bottom:12px;font-size:12px">
+                    <span><span style="color:#8b949e">Total:</span> <span x-text="imageData.images.length + ' images'"></span></span>
+                    <span><span style="color:#f85149">Orphans:</span> <span x-text="imageData.dangling"></span></span>
+                    <span><span style="color:#d29922">Unused:</span> <span x-text="imageData.unused"></span></span>
+                    <span><span style="color:#3fb950">In use:</span> <span x-text="imageData.inUse"></span></span>
+                    <span x-show="imageData.reclaimableSize > 0" style="color:#8b949e">Reclaimable: <span style="color:#c9d1d9" x-text="formatBytes(imageData.reclaimableSize)"></span></span>
+                    <button class="mwatch-btn" @click="fetchImages()" :disabled="imageLoading" style="color:#8b949e;padding:2px 8px;font-size:11px">Refresh</button>
+                  </div>
+
+                  <div x-show="imageData.dangling === 0 && imageData.unused === 0" style="font-size:12px;color:#3fb950;margin-bottom:12px">No orphan or unused images — nothing to clean up.</div>
+
+                  <!-- Orphan Images (dangling) -->
+                  <template x-if="imageData.dangling > 0">
+                    <div style="margin-bottom:16px">
+                      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                        <span style="font-size:12px;font-weight:600;color:#f85149;cursor:pointer" @click="orphanListExpanded = !orphanListExpanded">
+                          <span x-text="orphanListExpanded ? '&#9660;' : '&#9654;'"></span>
+                          Orphan Images
+                          <span style="font-weight:400;color:#8b949e" x-text="'(' + imageData.dangling + ')'"></span>
+                        </span>
+                        <button class="mwatch-btn mwatch-btn-remove" style="padding:2px 8px;font-size:11px" @click="pruneImages('dangling')" :disabled="imagePruning">
+                          <span x-show="!imagePruning">Delete all orphans</span>
+                          <span x-show="imagePruning">Deleting...</span>
+                        </button>
+                      </div>
+                      <div style="font-size:11px;color:#484f58;margin-bottom:8px">Untagged images from previous builds — always safe to remove.</div>
+                      <div x-show="orphanListExpanded" x-transition>
+                        <!-- Column headers -->
+                        <div style="display:flex;gap:8px;padding:2px 10px;font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">
+                          <span style="width:100px">ID</span>
+                          <span style="width:130px">Created</span>
+                          <span style="width:70px">Size</span>
+                          <span style="width:56px"></span>
+                        </div>
+                        <template x-for="img in imageData.images.filter(i => i.status === 'dangling')" :key="img.id">
+                          <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#161b22;border:1px solid #21262d;border-radius:6px;margin-bottom:3px;font-size:12px">
+                            <span style="width:100px;flex-shrink:0;font-family:monospace;font-size:11px;color:#8b949e" x-text="img.id"></span>
+                            <span style="width:130px;flex-shrink:0;font-size:11px;color:#8b949e" x-text="_formatDatePart(new Date(img.created * 1000))"></span>
+                            <span style="width:70px;flex-shrink:0;font-size:11px;color:#c9d1d9" x-text="formatBytes(img.size)"></span>
+                            <button class="mwatch-btn mwatch-btn-remove" style="padding:2px 8px;font-size:11px" @click="removeImage(img.id)" :disabled="imageRemoving[img.id]">
+                              <span x-show="!imageRemoving[img.id]">Remove</span>
+                              <span x-show="imageRemoving[img.id]">...</span>
+                            </button>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- Unused Images (tagged but not referenced by any container) -->
+                  <template x-if="imageData.unused > 0">
+                    <div>
+                      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                        <span style="font-size:12px;font-weight:600;color:#d29922;cursor:pointer" @click="unusedListExpanded = !unusedListExpanded">
+                          <span x-text="unusedListExpanded ? '&#9660;' : '&#9654;'"></span>
+                          Unused Images
+                          <span style="font-weight:400;color:#8b949e" x-text="'(' + imageData.unused + ')'"></span>
+                        </span>
+                        <button class="mwatch-btn" style="padding:2px 8px;font-size:11px;color:#d29922" @click="pruneImages('unused')" :disabled="imagePruning">
+                          <span x-show="!imagePruning">Delete all unused</span>
+                          <span x-show="imagePruning">Deleting...</span>
+                        </button>
+                      </div>
+                      <div style="font-size:11px;color:#484f58;margin-bottom:8px">Tagged images not used by any container (running or stopped).</div>
+                      <div x-show="unusedListExpanded" x-transition>
+                        <!-- Column headers -->
+                        <div style="display:flex;gap:8px;padding:2px 10px;font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">
+                          <span style="width:100px">ID</span>
+                          <span style="width:70px">Size</span>
+                          <span style="width:80px">Tag</span>
+                          <span style="width:56px"></span>
+                          <span>Repository</span>
+                        </div>
+                        <template x-for="img in imageData.images.filter(i => i.status === 'unused')" :key="img.id">
+                          <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#161b22;border:1px solid #21262d;border-radius:6px;margin-bottom:3px;font-size:12px">
+                            <span style="width:100px;flex-shrink:0;font-family:monospace;font-size:11px;color:#8b949e" x-text="img.id"></span>
+                            <span style="width:70px;flex-shrink:0;font-size:11px;color:#c9d1d9" x-text="formatBytes(img.size)"></span>
+                            <span style="width:80px;flex-shrink:0;font-size:11px;color:#3fb950" x-text="img.repoTags[0] ? img.repoTags[0].split(':')[1] || 'latest' : ''"></span>
+                            <button class="mwatch-btn mwatch-btn-remove" style="padding:2px 8px;font-size:11px;flex-shrink:0" @click="removeImage(img.id)" :disabled="imageRemoving[img.id]">
+                              <span x-show="!imageRemoving[img.id]">Remove</span>
+                              <span x-show="imageRemoving[img.id]">...</span>
+                            </button>
+                            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#8b949e" x-text="img.repoTags[0] ? img.repoTags[0].split(':')[0] : ''"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+
           <!-- Save bar -->
           <div class="save-bar">
             <button class="save-btn" @click="saveConfig()" :disabled="configSaving || !configDirty">
@@ -2019,7 +2128,14 @@ function app() {
     configDirty: false,
     configError: '',
     configSuccess: '',
-    configSections: { discord: true, behavior: false, display: false, restart: false, memory: false },
+    configSections: { discord: true, behavior: false, display: false, restart: false, memory: false, maintenance: false },
+    imageData: null,
+    imageLoading: false,
+    imagePruning: false,
+    imageRemoving: {},
+    orphanListExpanded: false,
+    unusedListExpanded: false,
+    imageError: '',
 
     // Webhook testing
     webhookTesting: null,
@@ -3649,6 +3765,49 @@ function app() {
         setTimeout(() => {
           this.webhookTestResult = { ...this.webhookTestResult, [field]: '' };
         }, 5000);
+      }
+    },
+
+    // ---- Image Management ----
+    async fetchImages() {
+      this.imageLoading = true;
+      this.imageError = '';
+      try {
+        const resp = await fetch('/api/images');
+        if (resp.ok) { this.imageData = await resp.json(); }
+        else { this.imageError = 'Failed to load images'; }
+      } catch (e) {
+        this.imageError = 'Failed to connect';
+      } finally {
+        this.imageLoading = false;
+      }
+    },
+
+    async removeImage(id) {
+      this.imageRemoving = { ...this.imageRemoving, [id]: true };
+      this.imageError = '';
+      try {
+        const resp = await fetch('/api/images/' + id, { method: 'DELETE' });
+        if (resp.ok) { await this.fetchImages(); }
+        else { const err = await resp.json().catch(() => ({})); this.imageError = err.error || 'Failed to remove image'; }
+      } catch (e) {
+        this.imageError = 'Failed to remove image';
+      } finally {
+        this.imageRemoving = { ...this.imageRemoving, [id]: false };
+      }
+    },
+
+    async pruneImages(mode) {
+      this.imagePruning = true;
+      this.imageError = '';
+      try {
+        const resp = await fetch('/api/images/prune?mode=' + mode, { method: 'POST' });
+        if (resp.ok) { await this.fetchImages(); }
+        else { const err = await resp.json().catch(() => ({})); this.imageError = err.error || 'Failed to prune images'; }
+      } catch (e) {
+        this.imageError = 'Failed to prune images';
+      } finally {
+        this.imagePruning = false;
       }
     },
 

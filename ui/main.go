@@ -124,6 +124,11 @@ func main() {
 	mux.HandleFunc("GET /api/sequences/status", app.handleSequenceStatus)
 	mux.HandleFunc("GET /api/sequences/stream", app.handleSequencesSSE)
 
+	// Image management
+	mux.HandleFunc("GET /api/images", app.handleListImages)
+	mux.HandleFunc("DELETE /api/images/{id}", app.handleRemoveImage)
+	mux.HandleFunc("POST /api/images/prune", app.handlePruneImages)
+
 	// Static files
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
