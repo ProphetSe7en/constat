@@ -872,7 +872,7 @@
                       <span x-show="c.created"><span class="il">Created</span> <span class="pill-val" x-text="formatDate(c.created)"></span></span>
                       <span><span class="il">Restart</span> <span class="pill-val" :class="c.hasLabel ? (c.hasRestartLabel ? 'state-healthy label-clickable' : 'label-override label-clickable') : 'state-none'" :style="c.hasLabel ? 'cursor:pointer' : ''" x-text="c.hasRestartLabel ? 'Yes' : 'No'" @click.stop="c.hasLabel && toggleRestart(c)"></span></span>
                       <span><span class="il">Excluded</span> <span class="pill-val label-clickable" :class="isExcluded(c.name) ? 'state-unhealthy' : 'state-none'" style="cursor:pointer" x-text="isExcluded(c.name) ? 'Yes' : 'No'" @click.stop="toggleExclude(c.name)"></span></span>
-                      <span x-show="c.healthcheckCmd"><span class="il">Health</span> <span class="pill-val" style="font-size:10px" x-text="c.healthcheckCmd"></span></span>
+                      <span x-show="imageTag(c.image)"><span class="il">Tag</span> <span class="pill-val" style="font-size:10px;background:#0d2818;color:#3fb950;border-color:rgba(63,185,80,0.2)" x-text="imageTag(c.image)"></span></span>
                       <span x-show="configData && configData.networks && configData.networks.length > 0"><span class="il">Networks</span> <template x-for="n in (configData ? configData.networks : [])" :key="n.name"><span class="pill-val" style="font-size:10px;margin-right:4px" x-text="n.name + ' ' + n.ip"></span></template></span>
                     </div>
 
@@ -1154,7 +1154,7 @@
                             <template x-if="c.startedAt"><div style="display:contents"><span class="config-kv-key">Started</span><span class="config-kv-val" x-text="formatDate(c.startedAt)"></span></div></template>
                             <template x-if="c.created"><div style="display:contents"><span class="config-kv-key">Created</span><span class="config-kv-val" x-text="formatDate(c.created)"></span></div></template>
                             <span class="config-kv-key">Restart</span><span class="config-kv-val" :class="c.hasLabel ? (c.hasRestartLabel ? 'label-clickable' : 'label-override label-clickable') : ''" :style="c.hasLabel ? 'cursor:pointer' : ''" x-text="c.hasRestartLabel ? 'Yes' : 'No'" @click.stop="c.hasLabel && toggleRestart(c)"></span>
-                            <template x-if="c.healthcheckCmd"><div style="display:contents"><span class="config-kv-key">Health</span><span class="config-kv-val" style="font-size:10px" x-text="c.healthcheckCmd"></span></div></template>
+                            <span class="config-kv-key">Image Tag</span><span class="config-kv-val" x-text="imageTag(c.image) || 'latest (implicit)'"></span>
                           </div>
                         </div>
 
@@ -1242,11 +1242,15 @@
                                 <span class="config-kv-val" x-text="Object.entries(configData.settings.sysctls).map(([k,v]) => k + '=' + v).join(', ')"></span>
                               </div>
                             </template>
-                            <template x-if="configData.healthcheck">
-                              <div style="display:contents">
-                                <span class="config-kv-key">Healthcheck</span>
-                                <span class="config-kv-val" x-text="configData.healthcheck.test"></span>
-                              </div>
+                          </div>
+                        </div>
+
+                        <!-- Extra Parameters -->
+                        <div class="config-section" x-show="configData.settings.extraParameters && configData.settings.extraParameters.length > 0">
+                          <div class="config-section-title">Extra Parameters</div>
+                          <div class="config-tag-list" style="flex-direction:column;align-items:flex-start">
+                            <template x-for="p in configData.settings.extraParameters || []" :key="p">
+                              <span class="config-tag" style="background:#1c1c1c;color:#c9d1d9;border-color:#30363d;font-family:monospace;font-size:11px;white-space:normal;word-break:break-all" x-text="p"></span>
                             </template>
                           </div>
                         </div>
@@ -2497,6 +2501,20 @@ function app() {
       if (bytes >= 1048576) return (bytes / 1048576).toFixed(0) + ' MiB';
       if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KiB';
       return bytes + ' B';
+    },
+
+    imageTag(image) {
+      if (!image) return '';
+      // Strip digest
+      const atIdx = image.indexOf('@');
+      if (atIdx !== -1) image = image.substring(0, atIdx);
+      // Extract tag after last colon (but not port-like patterns in registry URLs)
+      const lastColon = image.lastIndexOf(':');
+      if (lastColon === -1) return '';
+      const tag = image.substring(lastColon + 1);
+      // If tag looks like a port number in a registry URL, no tag
+      if (/^\d+$/.test(tag) && image.substring(0, lastColon).includes('/')) return '';
+      return tag;
     },
 
     formatRate(bps) {

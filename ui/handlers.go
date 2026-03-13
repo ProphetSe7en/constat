@@ -1038,11 +1038,12 @@ type EnvVar struct {
 }
 
 type ContainerSettings struct {
-	RestartPolicy string            `json:"restartPolicy"`
-	Privileged    bool              `json:"privileged"`
-	NetworkMode   string            `json:"networkMode"`
-	Capabilities  []string          `json:"capabilities,omitempty"`
-	Sysctls       map[string]string `json:"sysctls,omitempty"`
+	RestartPolicy   string            `json:"restartPolicy"`
+	Privileged      bool              `json:"privileged"`
+	NetworkMode     string            `json:"networkMode"`
+	Capabilities    []string          `json:"capabilities,omitempty"`
+	Sysctls         map[string]string `json:"sysctls,omitempty"`
+	ExtraParameters []string          `json:"extraParameters,omitempty"`
 }
 
 type HealthcheckConfig struct {
@@ -1157,6 +1158,47 @@ func (app *App) handleContainerConfig(w http.ResponseWriter, r *http.Request) {
 		Capabilities:  inspect.HostConfig.CapAdd,
 		Sysctls:       inspect.HostConfig.Sysctls,
 	}
+
+	// Extra Parameters — Docker flags not covered by standard Unraid UI fields
+	var extras []string
+	if inspect.Config.Healthcheck != nil && len(inspect.Config.Healthcheck.Test) > 1 {
+		test := strings.Join(inspect.Config.Healthcheck.Test[1:], " ")
+		extras = append(extras, fmt.Sprintf("--health-cmd='%s'", test))
+		if d := inspect.Config.Healthcheck.Interval; d > 0 {
+			extras = append(extras, fmt.Sprintf("--health-interval=%s", d))
+		}
+		if d := inspect.Config.Healthcheck.Timeout; d > 0 {
+			extras = append(extras, fmt.Sprintf("--health-timeout=%s", d))
+		}
+		if r := inspect.Config.Healthcheck.Retries; r > 0 {
+			extras = append(extras, fmt.Sprintf("--health-retries=%d", r))
+		}
+		if d := inspect.Config.Healthcheck.StartPeriod; d > 0 {
+			extras = append(extras, fmt.Sprintf("--health-start-period=%s", d))
+		}
+	}
+	if len(inspect.HostConfig.ExtraHosts) > 0 {
+		for _, h := range inspect.HostConfig.ExtraHosts {
+			extras = append(extras, fmt.Sprintf("--add-host=%s", h))
+		}
+	}
+	if len(inspect.HostConfig.DNS) > 0 {
+		for _, d := range inspect.HostConfig.DNS {
+			extras = append(extras, fmt.Sprintf("--dns=%s", d))
+		}
+	}
+	if len(inspect.HostConfig.Tmpfs) > 0 {
+		for path := range inspect.HostConfig.Tmpfs {
+			extras = append(extras, fmt.Sprintf("--tmpfs %s", path))
+		}
+	}
+	if inspect.HostConfig.ShmSize > 0 && inspect.HostConfig.ShmSize != 67108864 { // 64MB is default
+		extras = append(extras, fmt.Sprintf("--shm-size=%d", inspect.HostConfig.ShmSize))
+	}
+	if inspect.HostConfig.PidMode != "" && inspect.HostConfig.PidMode != "private" {
+		extras = append(extras, fmt.Sprintf("--pid=%s", inspect.HostConfig.PidMode))
+	}
+	cfg.Settings.ExtraParameters = extras
 
 	// Healthcheck
 	if inspect.Config.Healthcheck != nil && len(inspect.Config.Healthcheck.Test) > 0 {
