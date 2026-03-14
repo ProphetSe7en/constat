@@ -80,6 +80,11 @@ func main() {
 	// Start Docker event watcher
 	go app.WatchEvents(ctx)
 
+	// Start image cleanup scheduler
+	imageCleaner := &ImageCleaner{docker: cli, app: app}
+	app.imageCleaner = imageCleaner
+	go imageCleaner.Run(ctx)
+
 	// Set up HTTP routes
 	mux := http.NewServeMux()
 
@@ -128,6 +133,7 @@ func main() {
 	mux.HandleFunc("GET /api/images", app.handleListImages)
 	mux.HandleFunc("DELETE /api/images/{id}", app.handleRemoveImage)
 	mux.HandleFunc("POST /api/images/prune", app.handlePruneImages)
+	mux.HandleFunc("GET /api/image-cleanup/status", app.handleImageCleanupStatus)
 
 	// Static files
 	staticFS, err := fs.Sub(staticFiles, "static")
@@ -174,6 +180,7 @@ type App struct {
 	restartLabel    string
 	stats           *StatsCollector
 	sequences       *SequenceExecutor
+	imageCleaner    *ImageCleaner
 	restartDisabled map[string]bool
 	restartMu       sync.RWMutex
 }

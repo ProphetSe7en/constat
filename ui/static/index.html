@@ -311,7 +311,7 @@
   .config-input { flex: 1; max-width: 400px; padding: 6px 12px; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; font-size: 13px; outline: none; }
   .config-input:focus { border-color: #58a6ff; }
   .config-input.wide { max-width: 600px; }
-  .config-hint { font-size: 11px; color: #484f58; padding: 0 0 4px; margin-left: 192px; }
+  .config-hint { font-size: 11px; color: #6e7681; padding: 0 0 4px; margin-left: 192px; }
   .config-toggle { position: relative; width: 36px; height: 20px; background: #30363d; border-radius: 10px; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
   .config-toggle.on { background: #1f6feb; }
   .config-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: #e1e4e8; border-radius: 50%; transition: transform 0.2s; }
@@ -1019,7 +1019,7 @@
                     <template x-if="c.state === 'running' && config">
                       <div class="mwatch-section">
                         <h3 style="font-size:12px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Memory Watch</h3>
-                        <div style="font-size:11px;color:#484f58;margin-bottom:8px">Monitor memory usage and trigger alerts or auto-restart when thresholds are exceeded.</div>
+                        <div style="font-size:11px;color:#6e7681;margin-bottom:8px">Monitor memory usage and trigger alerts or auto-restart when thresholds are exceeded.</div>
                         <!-- Card grid for existing rules -->
                         <div class="mwatch-grid" :class="mwatchGridClass(getMemoryWatches(c.name).length)" x-show="getMemoryWatches(c.name).length > 0">
                           <template x-for="mw in getMemoryWatches(c.name)" :key="mw.idx">
@@ -1514,6 +1514,7 @@
                   <option value="24h">24h (14:30)</option>
                   <option value="12h">12h (2:30 PM)</option>
                 </select>
+                <div class="config-hint" style="margin-left:0">Applies to logs, events, charts, and scheduled cleanup</div>
               </div>
               <div class="config-field">
                 <span class="config-label">Date format</span>
@@ -1544,7 +1545,7 @@
               <span class="arrow" x-text="configSections.restart ? '&#9660;' : '&#9654;'"></span>
             </div>
             <div class="config-section-body" x-show="configSections.restart" x-transition>
-              <div style="font-size:11px;color:#484f58;margin-bottom:10px">Automatically restart containers when they become unhealthy. Enable per container by adding <span style="color:#8b949e;font-family:monospace">constat.restart=true</span> as a label or <span style="color:#8b949e;font-family:monospace">--label constat.restart=true</span> in Extra Parameters.</div>
+              <div style="font-size:11px;color:#6e7681;margin-bottom:10px">Automatically restart containers when they become unhealthy. Enable per container by adding <span style="color:#8b949e;font-family:monospace">constat.restart=true</span> as a label or <span style="color:#8b949e;font-family:monospace">--label constat.restart=true</span> in Extra Parameters.</div>
               <div class="config-field">
                 <span class="config-label">Restart label</span>
                 <input type="text" class="config-input" x-model="config.restartLabel" @input="configDirty = true">
@@ -1569,7 +1570,7 @@
               <span class="arrow" x-text="configSections.memory ? '&#9660;' : '&#9654;'"></span>
             </div>
             <div class="config-section-body" x-show="configSections.memory" x-transition>
-              <div style="font-size:11px;color:#484f58;margin-bottom:10px">Monitor memory usage and trigger alerts or auto-restart when thresholds are exceeded.</div>
+              <div style="font-size:11px;color:#6e7681;margin-bottom:10px">Monitor memory usage and trigger alerts or auto-restart when thresholds are exceeded.</div>
               <div class="config-field">
                 <span class="config-label">Pause all rules</span>
                 <div class="config-toggle" :class="{ on: config.memoryPaused === 'true' }" @click="config.memoryPaused = config.memoryPaused === 'true' ? 'false' : 'true'; configDirty = true"></div>
@@ -1618,7 +1619,7 @@
                             </div>
                           </div>
                         </template>
-                        <div x-show="!getContainerByName(entry.name)" style="font-size:11px;color:#484f58;margin-top:4px">Container not running — no live data</div>
+                        <div x-show="!getContainerByName(entry.name)" style="font-size:11px;color:#6e7681;margin-top:4px">Container not running — no live data</div>
                         <div style="display:flex;gap:8px;margin-top:6px">
                           <button class="mwatch-btn" @click.stop="startEditMemoryWatch(idx)">Edit</button>
                           <button class="mwatch-btn mwatch-btn-remove" @click.stop="removeMemoryWatchByIdx(idx)">Remove</button>
@@ -1652,8 +1653,62 @@
               <span class="arrow" x-text="configSections.maintenance ? '&#9660;' : '&#9654;'"></span>
             </div>
             <div class="config-section-body" x-show="configSections.maintenance" x-transition>
-              <div style="font-size:11px;color:#484f58;margin-bottom:10px">Remove unused and dangling Docker images to reclaim disk space.</div>
+              <div style="font-size:11px;color:#6e7681;margin-bottom:10px">Remove unused and dangling Docker images to reclaim disk space.</div>
 
+              <!-- Scheduled Cleanup -->
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                <span style="font-size:12px;font-weight:600;color:#c9d1d9">Scheduled Cleanup</span>
+                <div class="config-toggle" :class="{ on: config.imageCleanupEnabled === 'true' }" @click="config.imageCleanupEnabled = config.imageCleanupEnabled === 'true' ? 'false' : 'true'; configDirty = true"></div>
+              </div>
+              <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 16px;margin-bottom:16px">
+                <div style="font-size:11px;color:#6e7681;margin-bottom:10px">Automatically clean up images daily at a set time.</div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+                  <div>
+                    <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:3px">Time</label>
+                    <input type="text" class="config-input" style="width:140px" x-model="config.imageCleanupTime" @input="configDirty = true" :placeholder="config.timeFormat === '12h' ? '03:00 AM' : '03:00'" maxlength="8">
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:3px">Mode</label>
+                    <select class="config-input" style="max-width:180px" x-model="config.imageCleanupMode" @change="configDirty = true">
+                      <option value="dangling">Dangling only</option>
+                      <option value="all">Dangling + Unused</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:3px">Dry run</label>
+                    <div class="config-toggle" :class="{ on: config.imageCleanupDryRun === 'true' }" @click="config.imageCleanupDryRun = config.imageCleanupDryRun === 'true' ? 'false' : 'true'; configDirty = true"></div>
+                  </div>
+                </div>
+                <div x-show="config.imageCleanupDryRun === 'true'" style="font-size:11px;color:#d29922;margin-top:8px">Dry run enabled — images will be logged but not deleted.</div>
+
+                <!-- Last run status -->
+                <div style="margin-top:10px" x-init="fetch('/api/image-cleanup/status').then(r=>r.json()).then(d=>{cleanupStatus=d.lastRun}).catch(()=>{})">
+                  <template x-if="cleanupStatus">
+                    <div style="font-size:11px;color:#8b949e;padding:6px 10px;background:#0d1117;border-radius:4px;border:1px solid #21262d">
+                      <span>Last run: </span>
+                      <span x-text="new Date(cleanupStatus.time).toLocaleString()"></span>
+                      <span x-show="cleanupStatus.dryRun" style="color:#d29922"> (dry run)</span>
+                      <span> — </span>
+                      <template x-if="cleanupStatus.error">
+                        <span style="color:#f85149" x-text="'Error: ' + cleanupStatus.error"></span>
+                      </template>
+                      <template x-if="!cleanupStatus.error">
+                        <span>
+                          <span x-text="cleanupStatus.dryRun ? (cleanupStatus.imagesFound + ' images would be removed') : (cleanupStatus.imagesDeleted + ' images removed')"></span>,
+                          <span x-text="formatBytes(cleanupStatus.spaceReclaimed)"></span> reclaimed
+                        </span>
+                      </template>
+                    </div>
+                  </template>
+                  <template x-if="!cleanupStatus">
+                    <div style="font-size:11px;color:#6e7681">No scheduled cleanup has run yet.</div>
+                  </template>
+                </div>
+              </div>
+
+              <!-- Manual Cleanup -->
+              <div style="font-size:12px;font-weight:600;color:#c9d1d9;margin-bottom:8px">Manual Cleanup</div>
+              <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 16px">
               <div x-show="imageLoading" style="font-size:12px;color:#8b949e">Loading images...</div>
               <div x-show="imageError" style="font-size:12px;color:#f85149;margin-bottom:8px" x-text="imageError"></div>
 
@@ -1685,7 +1740,7 @@
                           <span x-show="imagePruning">Deleting...</span>
                         </button>
                       </div>
-                      <div style="font-size:11px;color:#484f58;margin-bottom:8px">Untagged images from previous builds — always safe to remove.</div>
+                      <div style="font-size:11px;color:#6e7681;margin-bottom:8px">Untagged images from previous builds — always safe to remove.</div>
                       <div x-show="orphanListExpanded" x-transition>
                         <!-- Column headers -->
                         <div style="display:flex;gap:8px;padding:2px 10px;font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">
@@ -1723,7 +1778,7 @@
                           <span x-show="imagePruning">Deleting...</span>
                         </button>
                       </div>
-                      <div style="font-size:11px;color:#484f58;margin-bottom:8px">Tagged images not used by any container (running or stopped).</div>
+                      <div style="font-size:11px;color:#6e7681;margin-bottom:8px">Tagged images not used by any container (running or stopped).</div>
                       <div x-show="unusedListExpanded" x-transition>
                         <!-- Column headers -->
                         <div style="display:flex;gap:8px;padding:2px 10px;font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">
@@ -1750,6 +1805,7 @@
                   </template>
                 </div>
               </template>
+              </div>
             </div>
           </div>
 
@@ -2077,7 +2133,7 @@
       <p x-text="actionTimeoutDialog.message"></p>
       <template x-if="actionTimeoutDialog.logs && actionTimeoutDialog.logs.length > 0">
         <div>
-          <div style="font-size:11px;color:#484f58;margin-bottom:6px">Recent logs:</div>
+          <div style="font-size:11px;color:#6e7681;margin-bottom:6px">Recent logs:</div>
           <div class="confirm-logs">
             <template x-for="(line, i) in actionTimeoutDialog.logs" :key="i">
               <div x-text="line"></div>
@@ -2141,6 +2197,7 @@ function app() {
     imageRemoving: {},
     orphanListExpanded: false,
     unusedListExpanded: false,
+    cleanupStatus: null,
     imageError: '',
 
     // Webhook testing

@@ -30,6 +30,11 @@ type ConfigData struct {
 	MemoryPollInterval    string             `json:"memoryPollInterval"`
 	MemoryDefaultDuration string             `json:"memoryDefaultDuration"`
 	MemoryWatch           []MemoryWatchEntry `json:"memoryWatch"`
+	// Image cleanup
+	ImageCleanupEnabled string `json:"imageCleanupEnabled"` // "true" or "false"
+	ImageCleanupTime    string `json:"imageCleanupTime"`    // "HH:MM"
+	ImageCleanupMode    string `json:"imageCleanupMode"`    // "dangling" or "all"
+	ImageCleanupDryRun  string `json:"imageCleanupDryRun"`  // "true" or "false"
 	// Display
 	Timezone       string `json:"timezone"`
 	TimeFormat     string `json:"timeFormat"`     // "24h" or "12h"
@@ -79,6 +84,10 @@ var keyToField = map[string]string{
 	"COLOR_RESTARTING":        "colorRestarting",
 	"COLOR_MEMORY_WARN":       "colorMemoryWarn",
 	"COLOR_MEMORY_CRIT":       "colorMemoryCrit",
+	"IMAGE_CLEANUP_ENABLED":   "imageCleanupEnabled",
+	"IMAGE_CLEANUP_TIME":      "imageCleanupTime",
+	"IMAGE_CLEANUP_MODE":      "imageCleanupMode",
+	"IMAGE_CLEANUP_DRY_RUN":   "imageCleanupDryRun",
 	"TIMEZONE":                "timezone",
 	"TIME_FORMAT":             "timeFormat",
 	"DATE_FORMAT":             "dateFormat",
@@ -97,6 +106,14 @@ func init() {
 }
 
 var kvPattern = regexp.MustCompile(`^([A-Z_]+)="(.*)"$`)
+
+// shellSanitizer escapes characters that are dangerous inside double-quoted bash strings
+var shellSanitizer = strings.NewReplacer(
+	`"`, `\"`,
+	`$`, `\$`,
+	"`", "\\`",
+	`\`, `\\`,
+)
 
 // ReadConfig parses a constat.conf file into ConfigData
 func ReadConfig(path string) (*ConfigData, error) {
@@ -179,6 +196,22 @@ func ReadConfig(path string) (*ConfigData, error) {
 	data.ColorRestarting = values["COLOR_RESTARTING"]
 	data.ColorMemoryWarn = values["COLOR_MEMORY_WARN"]
 	data.ColorMemoryCrit = values["COLOR_MEMORY_CRIT"]
+	data.ImageCleanupEnabled = values["IMAGE_CLEANUP_ENABLED"]
+	if data.ImageCleanupEnabled == "" {
+		data.ImageCleanupEnabled = "false"
+	}
+	data.ImageCleanupTime = values["IMAGE_CLEANUP_TIME"]
+	if data.ImageCleanupTime == "" {
+		data.ImageCleanupTime = "03:00"
+	}
+	data.ImageCleanupMode = values["IMAGE_CLEANUP_MODE"]
+	if data.ImageCleanupMode == "" {
+		data.ImageCleanupMode = "dangling"
+	}
+	data.ImageCleanupDryRun = values["IMAGE_CLEANUP_DRY_RUN"]
+	if data.ImageCleanupDryRun == "" {
+		data.ImageCleanupDryRun = "true"
+	}
 	data.Timezone = values["TIMEZONE"]
 	if data.Timezone == "" {
 		data.Timezone = os.Getenv("TZ")
@@ -233,6 +266,10 @@ func WriteConfig(path string, data *ConfigData) error {
 		"COLOR_RESTARTING":        data.ColorRestarting,
 		"COLOR_MEMORY_WARN":       data.ColorMemoryWarn,
 		"COLOR_MEMORY_CRIT":       data.ColorMemoryCrit,
+		"IMAGE_CLEANUP_ENABLED":   data.ImageCleanupEnabled,
+		"IMAGE_CLEANUP_TIME":      data.ImageCleanupTime,
+		"IMAGE_CLEANUP_MODE":      data.ImageCleanupMode,
+		"IMAGE_CLEANUP_DRY_RUN":   data.ImageCleanupDryRun,
 		"TIMEZONE":                data.Timezone,
 		"TIME_FORMAT":             data.TimeFormat,
 		"DATE_FORMAT":             data.DateFormat,
@@ -288,7 +325,7 @@ func WriteConfig(path string, data *ConfigData) error {
 		if m != nil {
 			key := m[1]
 			if val, ok := newValues[key]; ok {
-				output = append(output, fmt.Sprintf(`%s="%s"`, key, val))
+				output = append(output, fmt.Sprintf(`%s="%s"`, key, shellSanitizer.Replace(val)))
 				continue
 			}
 		}
@@ -313,7 +350,7 @@ func WriteConfig(path string, data *ConfigData) error {
 	var missing []string
 	for key, val := range newValues {
 		if !writtenKeys[key] {
-			missing = append(missing, fmt.Sprintf(`%s="%s"`, key, val))
+			missing = append(missing, fmt.Sprintf(`%s="%s"`, key, shellSanitizer.Replace(val)))
 		}
 	}
 	if len(missing) > 0 {
@@ -339,7 +376,7 @@ func buildMemoryWatchBlock(entries []MemoryWatchEntry) []string {
 	}
 	lines := []string{"MEMORY_WATCH=("}
 	for _, e := range entries {
-		entry := fmt.Sprintf("%s:%s:%s", e.Name, e.Limit, e.Action)
+		entry := fmt.Sprintf("%s:%s:%s", shellSanitizer.Replace(e.Name), shellSanitizer.Replace(e.Limit), shellSanitizer.Replace(e.Action))
 		if e.Duration != "" {
 			entry += ":" + e.Duration
 		}
