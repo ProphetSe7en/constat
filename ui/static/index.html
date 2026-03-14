@@ -57,9 +57,12 @@
   .filter-btn { padding: 5px 12px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #c9d1d9; font-size: 12px; cursor: pointer; transition: all 0.15s; }
   .filter-btn:hover { border-color: #58a6ff; }
   .filter-btn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
-  .search { flex: 1; max-width: 300px; padding: 5px 12px; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; font-size: 13px; outline: none; }
+  .search-wrap { position: relative; flex: 1; max-width: 300px; }
+  .search { width: 100%; padding: 5px 28px 5px 12px; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; font-size: 13px; outline: none; }
   .search:focus { border-color: #58a6ff; }
   .search::placeholder { color: #484f58; }
+  .search-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #484f58; cursor: pointer; font-size: 14px; padding: 0 4px; line-height: 1; }
+  .search-clear:hover { color: #e1e4e8; }
 
   /* Table */
   .table-wrap { padding: 0 24px 24px; }
@@ -747,7 +750,10 @@
           <span>Stopped</span>
         </div>
       </div>
-      <input type="text" class="search" placeholder="Search containers..." x-model="searchQuery">
+      <div class="search-wrap">
+        <input type="text" class="search" placeholder="Search... (space = OR)" x-model="searchQuery">
+        <button class="search-clear" x-show="searchQuery" @click="searchQuery = ''" title="Clear search">&times;</button>
+      </div>
     </div>
 
     <!-- Container Table -->
@@ -2395,8 +2401,11 @@ function app() {
       }
 
       if (this.searchQuery) {
-        const q = this.searchQuery.toLowerCase();
-        list = list.filter(c => c.name.toLowerCase().includes(q) || c.image.toLowerCase().includes(q));
+        const terms = this.searchQuery.toLowerCase().split(/\s+/).filter(t => t);
+        list = list.filter(c => {
+          const name = c.name.toLowerCase(), img = c.image.toLowerCase();
+          return terms.some(t => name.includes(t) || img.includes(t));
+        });
       }
 
       const col = this.sortColumn;
