@@ -481,9 +481,10 @@ const configPath = "/config/constat.conf"
 const configSamplePath = "/config/constat.conf.sample"
 
 var (
-	validWebhookURL  = regexp.MustCompile(`^https://(discord\.com|discordapp\.com)/api/webhooks/`)
-	validMemoryLimit = regexp.MustCompile(`(?i)^\d+(\.\d+)?[mg]$`)
-	validHexColor    = regexp.MustCompile(`^[0-9a-fA-F]{6}$`)
+	validWebhookURL    = regexp.MustCompile(`^https://(discord\.com|discordapp\.com)/api/webhooks/`)
+	validMemoryLimit   = regexp.MustCompile(`(?i)^\d+(\.\d+)?[mg]$`)
+	validHexColor      = regexp.MustCompile(`^[0-9a-fA-F]{6}$`)
+	validContainerName = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 )
 
 // ensureConfig copies .sample to config if config doesn't exist yet
@@ -550,6 +551,26 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate image cleanup fields
+	if config.ImageCleanupEnabled != "" && config.ImageCleanupEnabled != "true" && config.ImageCleanupEnabled != "false" {
+		writeError(w, 400, "imageCleanupEnabled must be 'true' or 'false'")
+		return
+	}
+	if config.ImageCleanupDryRun != "" && config.ImageCleanupDryRun != "true" && config.ImageCleanupDryRun != "false" {
+		writeError(w, 400, "imageCleanupDryRun must be 'true' or 'false'")
+		return
+	}
+	if config.ImageCleanupMode != "" && config.ImageCleanupMode != "dangling" && config.ImageCleanupMode != "all" {
+		writeError(w, 400, "imageCleanupMode must be 'dangling' or 'all'")
+		return
+	}
+	if config.ImageCleanupTime != "" {
+		if _, err := parseCleanupTime(config.ImageCleanupTime); err != nil {
+			writeError(w, 400, "imageCleanupTime must be a valid time (HH:MM or HH:MM AM/PM)")
+			return
+		}
+	}
+
 	// Validate time format
 	if config.TimeFormat != "" && config.TimeFormat != "24h" && config.TimeFormat != "12h" {
 		writeError(w, 400, "timeFormat must be '24h' or '12h'")
@@ -601,10 +622,22 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Validate timezone
+	if config.Timezone != "" {
+		if _, err := time.LoadLocation(config.Timezone); err != nil {
+			writeError(w, 400, fmt.Sprintf("Invalid timezone '%s': use TZ database names like Europe/Oslo", config.Timezone))
+			return
+		}
+	}
+
 	// Validate memory watch entries
 	for _, entry := range config.MemoryWatch {
 		if strings.TrimSpace(entry.Name) == "" {
 			writeError(w, 400, "Memory watch entry name cannot be empty")
+			return
+		}
+		if !validContainerName.MatchString(entry.Name) {
+			writeError(w, 400, fmt.Sprintf("Invalid memory watch name '%s': only letters, numbers, dots, hyphens, and underscores allowed", entry.Name))
 			return
 		}
 		if !validMemoryLimit.MatchString(entry.Limit) {

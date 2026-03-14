@@ -75,6 +75,22 @@ MEMORY_DEFAULT_DURATION="300"
 #   )
 MEMORY_WATCH=()
 
+#=== IMAGE CLEANUP ===========================================================#
+# Automatically remove dangling (orphan) and optionally unused Docker images
+# on a daily schedule. Helps reclaim disk space without manual intervention.
+
+# Enable scheduled image cleanup
+IMAGE_CLEANUP_ENABLED="false"
+
+# Time of day to run cleanup (24h format, HH:MM)
+IMAGE_CLEANUP_TIME="03:00"
+
+# What to clean: "dangling" (untagged orphans only) or "all" (dangling + unused)
+IMAGE_CLEANUP_MODE="dangling"
+
+# Dry run: log what would be deleted without actually removing anything
+IMAGE_CLEANUP_DRY_RUN="true"
+
 #=== DISPLAY =================================================================#
 # Timezone for timestamps in Discord notifications and web UI charts.
 # Uses TZ database names (e.g., "Europe/Oslo", "America/New_York", "UTC").

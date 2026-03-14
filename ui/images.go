@@ -190,3 +190,13 @@ func (app *App) handlePruneImages(w http.ResponseWriter, r *http.Request) {
 		"spaceReclaimed": report.SpaceReclaimed,
 	})
 }
+
+// handleImageCleanupStatus returns the last scheduled cleanup result
+func (app *App) handleImageCleanupStatus(w http.ResponseWriter, r *http.Request) {
+	if app.imageCleaner == nil {
+		writeJSON(w, map[string]interface{}{"lastRun": nil})
+		return
+	}
+	result := app.imageCleaner.GetLastResult()
+	writeJSON(w, map[string]interface{}{"lastRun": result})
+}
