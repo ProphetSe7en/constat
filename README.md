@@ -6,15 +6,15 @@ A Docker container monitor with a built-in web UI. Track container health, view 
 
 | Containers | Expanded View |
 |-----------|---------------|
-| ![Containers](screenshots/containers.png) | ![Expanded](screenshots/expandedview.png) |
+| ![Containers](docs/images/containers.png) | ![Expanded](docs/images/expandedview.png) |
 
 | Events | Sequences |
 |--------|-----------|
-| ![Events](screenshots/events.png) | ![Sequences](screenshots/sequences.png) |
+| ![Events](docs/images/events.png) | ![Sequences](docs/images/sequences.png) |
 
 | Network Topology |
 |------------------|
-| ![Network](screenshots/network.png) |
+| ![Network](docs/images/network.png) |
 
 ## Features
 
@@ -253,23 +253,11 @@ Built-in healthcheck calls `/api/summary` every 60 seconds. Docker (and platform
 
 ### Unraid
 
-Constat includes an Unraid Docker template for easy installation.
+**Install via template:** Download [`constat.xml`](https://raw.githubusercontent.com/prophetse7en/unraid-templates/main/constat.xml) and place it in `/boot/config/plugins/dockerMan/templates-user/` on your Unraid server. Then go to **Docker** → **Add Container** and select **constat** from the Template dropdown.
 
-**Add the template repository (one-time):**
+**Or install manually:** Go to **Docker** → **Add Container**, set Repository to `ghcr.io/prophetse7en/constat:latest`, and add the required paths and ports (see above).
 
-1. In the Unraid web UI, go to **Docker** tab
-2. Scroll to the bottom and click **Template Repositories**
-3. Add this URL: `https://github.com/prophetse7en/constat`
-4. Click **Save**
-
-**Install the container:**
-
-1. Click **Add Container**
-2. From the **Template** dropdown, select **constat**
-3. Adjust the timezone if needed (default: `America/New_York`)
-4. Click **Apply**
-
-Unraid will pull the image and start the container. The Web UI is available at `http://your-unraid-ip:7890`. Config and stats are stored in `/mnt/user/appdata/constat` by default.
+The Web UI is available at `http://your-unraid-ip:7890`. Config and stats are stored in `/mnt/user/appdata/constat` by default.
 
 **Updating:** Click the Constat icon in the Docker tab and select **Force Update** to pull the latest image.
 
