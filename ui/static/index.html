@@ -894,7 +894,7 @@
                           <span class="toggle-dot ram-dot"></span> RAM
                         </button>
                         <div class="chart-range-btns" style="margin-bottom:0;margin-left:4px" x-show="anyChartActive()">
-                          <template x-for="r in ['1h','6h','24h','72h']" :key="r">
+                          <template x-for="r in ['1h','6h','24h','3d','7d']" :key="r">
                             <button class="chart-range-btn" :class="{ active: chartRange === r }" @click.stop="chartRange = r; fetchChartData(c.id, r); if (compareContainers.length > 0) compareFetchAll()" x-text="r"></button>
                           </template>
                         </div>
@@ -2887,7 +2887,7 @@ function app() {
 
     async fetchChartData(id, range) {
       this.chartLoading = true;
-      const ranges = { '1h': 3600, '6h': 21600, '24h': 86400, '72h': 259200 };
+      const ranges = { '1h': 3600, '6h': 21600, '24h': 86400, '3d': 259200, '7d': 604800 };
       const since = Math.floor(Date.now() / 1000) - (ranges[range] || 3600);
       try {
         const resp = await fetch(`/api/containers/${id}/history?since=${since}`);
@@ -3083,7 +3083,7 @@ function app() {
     chartTimeLabelIndices() {
       if (!this.chartData || this.chartData.length < 2) return [0];
       const n = this.chartData.length - 1;
-      const count = (this.chartRange === '6h' || this.chartRange === '24h' || this.chartRange === '72h') ? 7 : 5;
+      const count = (this.chartRange === '6h' || this.chartRange === '24h' || this.chartRange === '3d' || this.chartRange === '7d') ? 7 : 5;
       const indices = [];
       for (let i = 0; i < count; i++) {
         indices.push(Math.round(i * n / (count - 1)));
@@ -3096,7 +3096,7 @@ function app() {
       const d = new Date(point.t * 1000);
       const h12 = this.config && this.config.timeFormat === '12h';
       const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: h12 });
-      if (this.chartRange === '72h') {
+      if (this.chartRange === '3d' || this.chartRange === '7d') {
         return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;
       }
       return time;
@@ -3146,7 +3146,7 @@ function app() {
 
     async compareFetchAll() {
       if (this.compareContainers.length === 0) return;
-      const ranges = { '1h': 3600, '6h': 21600, '24h': 86400, '72h': 259200 };
+      const ranges = { '1h': 3600, '6h': 21600, '24h': 86400, '3d': 259200, '7d': 604800 };
       const since = Math.floor(Date.now() / 1000) - (ranges[this.chartRange] || 3600);
       try {
         await Promise.all(this.compareContainers.map(async (cc) => {
@@ -3162,7 +3162,7 @@ function app() {
     },
 
     async compareFetchOne(id, name) {
-      const ranges = { '1h': 3600, '6h': 21600, '24h': 86400, '72h': 259200 };
+      const ranges = { '1h': 3600, '6h': 21600, '24h': 86400, '3d': 259200, '7d': 604800 };
       const since = Math.floor(Date.now() / 1000) - (ranges[this.chartRange] || 3600);
       try {
         const resp = await fetch(`/api/containers/${id}/history?since=${since}`);
@@ -3238,7 +3238,9 @@ function app() {
         const diff = Math.abs(pts[i].t - refT);
         if (diff < minDiff) { minDiff = diff; closest = i; }
       }
-      if (minDiff > 120) return null;
+      // Allow larger gaps for longer time ranges (data is downsampled)
+      const maxGap = { '1h': 60, '6h': 300, '24h': 900, '3d': 2700, '7d': 5400 };
+      if (minDiff > (maxGap[this.chartRange] || 120)) return null;
       return field === 'c' ? (pts[closest].c || 0) : (pts[closest].m || 0);
     },
 
@@ -3513,7 +3515,7 @@ function app() {
                   tx: live.netTxRate || 0
                 });
                 // Trim points older than selected range
-                const ranges = { '1h': 3600, '6h': 21600, '24h': 86400, '72h': 259200 };
+                const ranges = { '1h': 3600, '6h': 21600, '24h': 86400, '3d': 259200, '7d': 604800 };
                 const cutoff = now - (ranges[this.chartRange] || 3600);
                 while (this.chartData.length > 0 && this.chartData[0].t < cutoff) {
                   this.chartData.shift();
@@ -3530,7 +3532,7 @@ function app() {
           // Live update compare overlay data
           if (this.compareContainers.length > 0 && this.expandedId && this.anyChartActive() && batch.containers) {
             const now = Math.floor(Date.now() / 1000);
-            const ranges = { '1h': 3600, '6h': 21600, '24h': 86400, '72h': 259200 };
+            const ranges = { '1h': 3600, '6h': 21600, '24h': 86400, '3d': 259200, '7d': 604800 };
             const cutoffC = now - (ranges[this.chartRange] || 3600);
             let changed = false;
             for (const cc of this.compareContainers) {

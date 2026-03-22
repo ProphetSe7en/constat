@@ -62,7 +62,7 @@ type StatPoint struct {
 	NetTx  float64 `json:"tx,omitempty"` // Network TX bytes/sec
 }
 
-const statsHistorySize = 8640 // 72h at 30s intervals
+const statsHistorySize = 20160 // 7d at 30s intervals
 const statsPersistPath = "/config/stats-history.json"
 
 // statsRingBuffer is a fixed-size ring buffer for StatPoint time series
