@@ -2,9 +2,12 @@
 <Container version="2">
   <Name>constat</Name>
   <Repository>ghcr.io/prophetse7en/constat:latest</Repository>
-  <Registry/>
+  <Registry>https://github.com/prophetse7en/constat/pkgs/container/constat</Registry>
+  <Branch>
+    <Tag>latest</Tag>
+    <TagDescription>Latest stable release</TagDescription>
+  </Branch>
   <Network>bridge</Network>
-  <MyIP/>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
   <Support>https://github.com/ProphetSe7en/constat/issues</Support>
@@ -12,11 +15,10 @@
   <Overview>Docker container monitor with web UI — live stats, health tracking, auto-restart, memory monitoring, log viewer, and container sequences. All configuration in /config/constat.conf.</Overview>
   <Category>Tools:</Category>
   <WebUI>http://[IP]:[PORT:7890]/</WebUI>
-  <TemplateURL/>
+  <TemplateURL>https://raw.githubusercontent.com/prophetse7en/unraid-templates/main/constat.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/prophetse7en/constat/main/icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>
-  <CPUset/>
   <DonateText/>
   <DonateLink/>
   <Requires/>
