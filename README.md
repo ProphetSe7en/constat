@@ -6,15 +6,15 @@ A Docker container monitor with a built-in web UI. Track container health, view 
 
 | Containers | Expanded View |
 |-----------|---------------|
-| ![Containers](screenshots/containers.png) | ![Expanded](screenshots/expandedview.png) |
+| ![Containers](docs/images/containers.png) | ![Expanded](docs/images/expandedview.png) |
 
 | Events | Sequences |
 |--------|-----------|
-| ![Events](screenshots/events.png) | ![Sequences](screenshots/sequences.png) |
+| ![Events](docs/images/events.png) | ![Sequences](docs/images/sequences.png) |
 
 | Network Topology |
 |------------------|
-| ![Network](screenshots/network.png) |
+| ![Network](docs/images/network.png) |
 
 ## Features
 
