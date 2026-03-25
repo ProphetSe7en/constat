@@ -1,0 +1,88 @@
+# Changelog
+
+## v0.9.0
+
+### Features
+- **Mobile view** — Dedicated mobile UI with auto-detect (screen width <=768px) and manual toggle in header
+- **Container cards** — Compact cards showing name, status, health badge, CPU%, RAM%, and uptime
+- **Tap to expand** — Memory watch rules with progress bars, simplified CPU/RAM charts (1h-7d), action buttons (restart/stop/pause/start)
+- **Sort and filter** — Sort by name, CPU, RAM, or health with ascending/descending toggle. Filter by status (all/running/unhealthy/stopped)
+- **Resource summary** — Total CPU, RAM, and network I/O displayed in compact bar
+- **Mobile events** — Simplified event timeline with grouped events and container filter
+- **View persistence** — Mobile/desktop preference saved in localStorage
+
+## v0.8.0
+
+### Features
+- **Scheduled image cleanup** — Daily scheduler (ImageCleaner goroutine) with configurable time, mode (dangling/all), and dry-run
+- **Search improvements** — Clear button and multi-term OR search (space-separated)
+
+### Bug fixes
+- **Security hardening** — Shell injection prevention in config write, data race mutex on LastResult, timezone/name validation, strict time parsing
+
+## v0.7.1
+
+### Features
+- **Search clear button** — Quick-clear search with X button
+- **Multi-term OR search** — Space-separated terms match as OR conditions
+
+## v0.7.0
+
+### Features
+- **Orphan image cleanup** — Config > Maintenance section for removing unused Docker images
+- **Sticky table header** — Column headers stay visible when scrolling
+- **Sequence action buttons** — Run/delete buttons in sequence cards
+- **Image tag badge** — Shows image tag in container details
+- **Port-aware healthcheck suggestions** — Auto-detects actual container ports for accurate healthcheck commands
+- **Extra parameters panel** — View Docker extra parameters per container
+
+## v0.6.0
+
+### Features
+- **Memory notifications** — Discord notifications for memory watch threshold events
+- **Container icons** — Automatic icon detection from container labels
+- **Pause/unpause** — Full container pause/unpause support with state indicators
+- **Restart override toggle** — Clickable Yes/No in table to override auto-restart per container
+- **Sparkline click-to-chart** — Click sparkline to jump directly to full chart
+- **Event cleanup** — Crash context in events, improved event grouping
+- **Network tab** — Swim lane topology with click-to-expand details and balanced grid layout
+- **Sequences** — Multi-step container orchestration with dependency chains, emoji picker, searchable dropdown, and step delay
+
+## v0.5.0
+
+### Features
+- **Log viewer** — Real-time log streaming with server-side timestamp extraction, ANSI escape stripping, and level detection (error/warn/info/debug)
+- **Dozzle-inspired styling** — Color-coded left borders per log level, row striping
+- **Memory watch multi-rule** — Multiple memory watch rules per container
+- **Display toggles** — Show/hide stats columns and charts via config
+- **Docker proxy support** — `DOCKER_HOST=tcp://dockerproxy:2375` support
+
+## v0.4.0
+
+### Features
+- **Streaming stats** — Replaced polling with `docker stats` streaming goroutines via SSE (3s updates)
+- **Network I/O** — Live upload/download rates per container
+- **Webhook test** — Test Discord webhooks from Config tab
+- **Sortable columns** — Sort by any column in container table
+- **Sparklines** — Mini CPU/RAM graphs in each table row
+- **Event grouping** — Rapid events grouped with expand/collapse
+
+## v0.3.0
+
+### Features
+- **Charts** — CPU/RAM history graphs with selectable time range
+- **Events tab** — Docker event history (start/stop/die/health changes)
+- **Config editor** — Edit all settings from the browser
+- **Discord notifications** — State changes and health events with colored embeds
+
+## v0.2.0
+
+### Features
+- **Health monitoring** — Docker healthcheck status tracking
+- **Auto-restart** — Label-gated restart for unhealthy containers with cooldown
+- **Memory watch** — Per-container memory thresholds with notify or restart actions
+
+## v0.1.0
+
+### Features
+- **Initial release** — Container list with live CPU/RAM stats, health badges, web UI on port 7890
