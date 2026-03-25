@@ -25,7 +25,8 @@ A Docker container monitor with a built-in web UI. Track container health, view 
 - **Log viewer** — real-time log streaming with level detection and color-coded display
 - **Event history** — Docker events (start, stop, die, health changes) with grouping
 - **Sequences** — multi-step container orchestration (start/stop chains with dependencies)
-- **Charts** — CPU/RAM history graphs with 1h/6h/24h/72h range selection
+- **Charts** — CPU/RAM history graphs with 1h/6h/24h/3d/7d range selection
+- **Mobile view** — dedicated mobile UI with container cards, sort/filter, charts, and events
 - **Healthcheck suggestions** — built-in database of recommended healthchecks for common images
 - **Config inspector** — view ports, volumes, networks, env vars, and labels per container
 - **Discord notifications** — state changes and health events with colored embeds
@@ -76,10 +77,21 @@ The main view — a sortable table of all containers with live-updating stats:
 **Expanded view** (click a container row):
 - Container details: image, state, started/created dates, healthcheck command
 - Config inspector: ports, volumes, networks, environment variables, labels
-- CPU/RAM charts with selectable range (1h, 6h, 24h, 72h) and multi-container comparison
+- CPU/RAM charts with selectable range (1h, 6h, 24h, 3d, 7d) and multi-container comparison
 - Memory watch rules with live progress bars
 - Healthcheck suggestions for containers without a healthcheck
 - Quick actions: Start, Stop, Restart
+
+### Mobile View
+
+A dedicated mobile-optimized UI — auto-detected on small screens, with a manual toggle in the header:
+
+- **Container cards** — compact cards showing name, status, health, CPU, RAM, and uptime
+- **Tap to expand** — memory watch rules with progress bars, CPU/RAM charts, and action buttons
+- **Sort and filter** — filter by status (all/running/stopped) and sort by name, CPU, RAM, or health
+- **Resource summary** — total CPU, RAM, and network I/O at a glance
+- **Events tab** — simplified event timeline with grouped events
+- **Persistent preference** — your view choice is saved in localStorage
 
 ### Logs Tab
 
@@ -285,7 +297,7 @@ Docker Engine
 **Stats pipeline:**
 - N goroutines stream `docker stats` per container
 - Stats batched every 3s → SSE to frontend (patches in-place)
-- History appended every 30s (ring buffer, up to 72h)
+- History appended every 30s (ring buffer, up to 7d)
 - Persisted to disk every 5 minutes
 
 **Frontend:** Alpine.js single-page app with Tailwind-inspired styling. No build step — single `index.html` embedded in the Go binary.
