@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.2
+
+### Improvements
+- **Memory optimization** — Stats history uses two-tier storage: recent 24h at 30s intervals, older data aggregated to 5min intervals. Reduces RAM usage ~75% (509 MiB → ~130 MiB) and stats file size ~90% with no visible difference in charts
+- **Compare bar visibility** — "Compare:" label and "+ Add" button now more visible (brighter text and blue dashed border)
+
 ## v0.9.1
 
 ### Bug fixes
