@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.1
+
+### Bug fixes
+- **Chart time scale distortion** — Live SSE data points (every 3s) caused chart to compress historical data into a tiny area. Fixed by using timestamp-based x-positioning instead of array-index spacing
+- **Compare chart not updating live** — Compare overlay now correctly aligns with time-based main chart
+- **Chart hover accuracy** — Tooltip snaps to nearest data point by timestamp (binary search) instead of linear index mapping
+
 ## v0.9.0
 
 ### Features
