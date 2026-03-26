@@ -1,0 +1,5 @@
+dev/
+.git/
+.gitignore
+*.md
+!README.md
