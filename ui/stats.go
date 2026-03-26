@@ -62,7 +62,9 @@ type StatPoint struct {
 	NetTx  float64 `json:"tx,omitempty"` // Network TX bytes/sec
 }
 
-const statsHistorySize = 20160 // 7d at 30s intervals
+const statsHistorySize = 2880          // 24h at 30s intervals (recent high-resolution data)
+const statsAggregateInterval int64 = 300 // 5 minutes — older data aggregated to this interval
+const statsMaxAgeDays = 7               // keep up to 7 days of aggregated history
 const statsPersistPath = "/config/stats-history.json"
 
 // statsRingBuffer is a fixed-size ring buffer for StatPoint time series
@@ -164,7 +166,8 @@ type StatsCollector struct {
 	mu          sync.RWMutex
 	docker      *client.Client
 	averages    map[string]*ContainerAvg    // keyed by container name
-	history     map[string]*statsRingBuffer // keyed by container name
+	history     map[string]*statsRingBuffer // keyed by container name — recent 24h at 30s
+	aggregated  map[string][]StatPoint      // keyed by container name — older data at 5min intervals
 	prevNet     map[string]netSnapshot      // keyed by container name
 	latest      map[string]*ContainerLive   // keyed by container name
 	streams     map[string]context.CancelFunc // keyed by container name
@@ -182,6 +185,7 @@ func NewStatsCollector(docker *client.Client, hostCPUs int, hostMemory uint64) *
 		docker:      docker,
 		averages:    make(map[string]*ContainerAvg),
 		history:     make(map[string]*statsRingBuffer),
+		aggregated:  make(map[string][]StatPoint),
 		prevNet:     make(map[string]netSnapshot),
 		latest:      make(map[string]*ContainerLive),
 		streams:     make(map[string]context.CancelFunc),
@@ -502,15 +506,45 @@ func (sc *StatsCollector) GetRecentStats(name string, n int) []StatPoint {
 	return rb.recent(n)
 }
 
-// GetHistory returns all StatPoints since the given Unix timestamp
+// GetHistory returns all StatPoints since the given Unix timestamp,
+// combining aggregated (older, 5min intervals) and recent (ring buffer, 30s) data.
 func (sc *StatsCollector) GetHistory(name string, since int64) []StatPoint {
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
+
+	var result []StatPoint
+
+	// 1. Add aggregated points that fall within range
+	if agg, ok := sc.aggregated[name]; ok {
+		for _, p := range agg {
+			if p.Time >= since {
+				result = append(result, p)
+			}
+		}
+	}
+
+	// 2. Add recent ring buffer points
 	rb, ok := sc.history[name]
 	if !ok {
-		return nil
+		return result
 	}
-	return rb.since(since)
+	recent := rb.since(since)
+
+	// 3. Merge — skip aggregated points that overlap with ring buffer
+	if len(result) > 0 && len(recent) > 0 {
+		cutoff := recent[0].Time
+		filtered := result[:0]
+		for _, p := range result {
+			if p.Time < cutoff {
+				filtered = append(filtered, p)
+			}
+		}
+		result = append(filtered, recent...)
+	} else {
+		result = append(result, recent...)
+	}
+
+	return result
 }
 
 // SubscribeStats creates a channel that receives StatsBatch updates
@@ -535,20 +569,101 @@ func (sc *StatsCollector) UnsubscribeStats(ch chan StatsBatch) {
 
 // persistedData is the JSON structure for saving/loading stats
 type persistedData struct {
-	Averages map[string]*ContainerAvg `json:"averages"`
-	History  map[string][]StatPoint   `json:"history"`
+	Averages   map[string]*ContainerAvg `json:"averages"`
+	History    map[string][]StatPoint   `json:"history"`    // recent 24h at 30s
+	Aggregated map[string][]StatPoint   `json:"aggregated"` // older data at 5min intervals
+}
+
+// aggregatePoints downsamples points to statsAggregateInterval (5min) buckets.
+// Each bucket averages CPU/NetRx/NetTx and takes max Memory.
+func aggregatePoints(points []StatPoint) []StatPoint {
+	if len(points) == 0 {
+		return nil
+	}
+	var result []StatPoint
+	bucketStart := (points[0].Time / statsAggregateInterval) * statsAggregateInterval
+	var cpuSum, rxSum, txSum float64
+	var memMax uint64
+	var count int
+	var lastTime int64
+
+	flush := func() {
+		if count > 0 {
+			result = append(result, StatPoint{
+				Time:   lastTime,
+				CPU:    cpuSum / float64(count),
+				Memory: memMax,
+				NetRx:  rxSum / float64(count),
+				NetTx:  txSum / float64(count),
+			})
+		}
+	}
+
+	for _, p := range points {
+		bucket := (p.Time / statsAggregateInterval) * statsAggregateInterval
+		if bucket != bucketStart {
+			flush()
+			bucketStart = bucket
+			cpuSum, rxSum, txSum = 0, 0, 0
+			memMax = 0
+			count = 0
+		}
+		cpuSum += p.CPU
+		rxSum += p.NetRx
+		txSum += p.NetTx
+		if p.Memory > memMax {
+			memMax = p.Memory
+		}
+		lastTime = p.Time
+		count++
+	}
+	flush()
+	return result
 }
 
 func (sc *StatsCollector) saveToDisk() {
 	sc.mu.RLock()
 	data := persistedData{
-		Averages: sc.averages,
-		History:  make(map[string][]StatPoint, len(sc.history)),
+		Averages:   sc.averages,
+		History:    make(map[string][]StatPoint, len(sc.history)),
+		Aggregated: make(map[string][]StatPoint, len(sc.aggregated)),
 	}
+
+	now := time.Now().Unix()
+	recentCutoff := now - 86400 // 24h ago
+	maxAge := now - int64(statsMaxAgeDays)*86400
+
 	for name, rb := range sc.history {
 		points := rb.all()
 		if points != nil {
 			data.History[name] = points
+		}
+	}
+
+	// Build aggregated: existing aggregated + ring buffer points older than 24h
+	for name := range sc.history {
+		var oldPoints []StatPoint
+
+		// Keep existing aggregated points within max age
+		if existing, ok := sc.aggregated[name]; ok {
+			for _, p := range existing {
+				if p.Time >= maxAge && p.Time < recentCutoff {
+					oldPoints = append(oldPoints, p)
+				}
+			}
+		}
+
+		// Add ring buffer points that are older than 24h (they'll be aggregated)
+		if rb, ok := sc.history[name]; ok {
+			for _, p := range rb.all() {
+				if p.Time < recentCutoff && p.Time >= maxAge {
+					oldPoints = append(oldPoints, p)
+				}
+			}
+		}
+
+		if len(oldPoints) > 0 {
+			data.Aggregated[name] = aggregatePoints(oldPoints)
 		}
 	}
 	sc.mu.RUnlock()
@@ -564,7 +679,7 @@ func (sc *StatsCollector) saveToDisk() {
 		return
 	}
 	os.Chown(statsPersistPath, 99, 100)
-	log.Printf("StatsCollector: saved stats to disk (%d containers)", len(data.Averages))
+	log.Printf("StatsCollector: saved stats to disk (%d containers, history %d KB)", len(data.Averages), len(bytes)/1024)
 }
 
 func (sc *StatsCollector) loadFromDisk() {
@@ -585,6 +700,9 @@ func (sc *StatsCollector) loadFromDisk() {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
+	now := time.Now().Unix()
+	maxAge := now - int64(statsMaxAgeDays)*86400
+
 	// Skip entries keyed by old-style hex container IDs (migration from ID→name keying)
 	skipped := 0
 	if data.Averages != nil {
@@ -596,13 +714,40 @@ func (sc *StatsCollector) loadFromDisk() {
 			sc.averages[key] = avg
 		}
 	}
+
+	// Load aggregated data (older, 5min intervals)
+	if data.Aggregated != nil {
+		for key, points := range data.Aggregated {
+			if looksLikeHexID(key) {
+				continue
+			}
+			// Filter out points older than max age
+			var valid []StatPoint
+			for _, p := range points {
+				if p.Time >= maxAge {
+					valid = append(valid, p)
+				}
+			}
+			if len(valid) > 0 {
+				sc.aggregated[key] = valid
+			}
+		}
+	}
+
+	// Load recent history into ring buffer
 	if data.History != nil {
 		for key, points := range data.History {
 			if looksLikeHexID(key) {
 				continue
 			}
+			// Only load points that fit in the ring buffer (recent 24h)
+			recentCutoff := now - 86400
 			rb := &statsRingBuffer{}
-			rb.loadFrom(points)
+			for _, p := range points {
+				if p.Time >= recentCutoff {
+					rb.add(p)
+				}
+			}
 			sc.history[key] = rb
 		}
 	}
@@ -610,5 +755,5 @@ func (sc *StatsCollector) loadFromDisk() {
 	if skipped > 0 {
 		log.Printf("StatsCollector: skipped %d old ID-keyed entries during migration", skipped)
 	}
-	log.Printf("StatsCollector: loaded stats from disk (%d containers)", len(sc.averages))
+	log.Printf("StatsCollector: loaded stats from disk (%d containers, %d with aggregated history)", len(sc.averages), len(sc.aggregated))
 }
