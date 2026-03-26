@@ -602,8 +602,8 @@
   .compare-pill .cpill-remove { cursor: pointer; color: #8b949e; font-size: 13px; line-height: 1; margin-left: 1px; }
   .compare-pill .cpill-remove:hover { color: #f85149; }
   .compare-add-wrap { position: relative; display: inline-flex; }
-  .compare-add-btn { padding: 2px 8px; border-radius: 10px; border: 1px dashed #30363d; background: transparent; color: #484f58; font-size: 11px; cursor: pointer; }
-  .compare-add-btn:hover { border-color: #58a6ff; color: #8b949e; }
+  .compare-add-btn { padding: 2px 8px; border-radius: 10px; border: 1px dashed #58a6ff; background: transparent; color: #8b949e; font-size: 11px; cursor: pointer; }
+  .compare-add-btn:hover { border-color: #79c0ff; color: #c9d1d9; }
   .compare-add-dd { position: absolute; bottom: 100%; left: 0; margin-bottom: 4px; background: #1c2128; border: 1px solid #30363d; border-radius: 8px; width: 220px; max-height: 180px; overflow-y: auto; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
   .compare-add-dd input { width: 100%; padding: 6px 8px; border: none; border-bottom: 1px solid #30363d; background: transparent; color: #e1e4e8; font-size: 11px; outline: none; }
   .compare-add-dd .cdd-item { padding: 5px 8px; cursor: pointer; font-size: 11px; color: #c9d1d9; }
@@ -1234,7 +1234,7 @@
                       </template>
                       <!-- Compare: add containers to overlay -->
                       <div class="compare-bar" x-show="anyChartActive()" x-cloak @click.outside="compareDropdownOpen = false">
-                        <span style="font-size:11px;color:#484f58">Compare:</span>
+                        <span style="font-size:11px;color:#8b949e">Compare:</span>
                         <template x-for="(cc, idx) in compareContainers" :key="'cpill-'+cc.id">
                           <span class="compare-pill">
                             <span class="cpill-dot" :style="'background:' + compareColors[idx]"></span>
@@ -3245,10 +3245,13 @@ function app() {
       const scale = this.chartScaleFor(field === 'c' ? 'cpu' : 'ram');
       const pad = 4;
       const n = this.chartData.length;
+      const tMin = this.chartData[0].t;
+      const tMax = this.chartData[n - 1].t;
+      const tRange = tMax - tMin || 1;
       const xs = [], ys = [];
       for (let i = 0; i < n; i++) {
         const v = field === 'c' ? (this.chartData[i].c || 0) : (this.chartData[i].m || 0);
-        xs.push((i / (n - 1)) * w);
+        xs.push(((this.chartData[i].t - tMin) / tRange) * w);
         ys.push(pad + (h - 2 * pad) - Math.min(v / scale.max, 1) * (h - 2 * pad));
       }
       if (n === 2) return 'M ' + xs[0].toFixed(1) + ',' + ys[0].toFixed(1) + ' L ' + xs[1].toFixed(1) + ',' + ys[1].toFixed(1);
@@ -3290,10 +3293,12 @@ function app() {
 
     chartSmoothAreaPathFor(field, w, h) {
       const linePath = this.chartSmoothPathFor(field, w, h);
-      if (!linePath) return '';
-      const n = this.chartData.length;
-      const firstX = (0).toFixed(1);
-      const lastX = w.toFixed(1);
+      if (!linePath || !this.chartData || this.chartData.length < 2) return '';
+      const tMin = this.chartData[0].t;
+      const tMax = this.chartData[this.chartData.length - 1].t;
+      const tRange = tMax - tMin || 1;
+      const firstX = (((this.chartData[0].t - tMin) / tRange) * w).toFixed(1);
+      const lastX = (((this.chartData[this.chartData.length - 1].t - tMin) / tRange) * w).toFixed(1);
       return linePath + ' L ' + lastX + ',' + h + ' L ' + firstX + ',' + h + ' Z';
     },
 
@@ -3320,9 +3325,19 @@ function app() {
       const rect = svg.getBoundingClientRect();
       const clientX = event.touches ? event.touches[0].clientX : event.clientX;
       const relX = (clientX - rect.left) / rect.width;
-      const idx = Math.round(relX * (this.chartData.length - 1));
-      this.chartHoverIdx = Math.max(0, Math.min(idx, this.chartData.length - 1));
-      this.chartHoverX = (this.chartHoverIdx / (this.chartData.length - 1)) * 300;
+      const tMin = this.chartData[0].t;
+      const tMax = this.chartData[this.chartData.length - 1].t;
+      const tTarget = tMin + relX * (tMax - tMin);
+      // Binary search for closest point by timestamp
+      let lo = 0, hi = this.chartData.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (this.chartData[mid].t < tTarget) lo = mid + 1;
+        else hi = mid;
+      }
+      if (lo > 0 && Math.abs(this.chartData[lo - 1].t - tTarget) < Math.abs(this.chartData[lo].t - tTarget)) lo--;
+      this.chartHoverIdx = lo;
+      this.chartHoverX = ((this.chartData[lo].t - tMin) / (tMax - tMin || 1)) * 300;
       // Pixel position for smooth tooltip
       const container = svg.closest('.chart-container');
       if (container) {
@@ -3400,11 +3415,21 @@ function app() {
 
     chartTimeLabelIndices() {
       if (!this.chartData || this.chartData.length < 2) return [0];
-      const n = this.chartData.length - 1;
       const count = (this.chartRange === '6h' || this.chartRange === '24h' || this.chartRange === '3d' || this.chartRange === '7d') ? 7 : 5;
+      const tMin = this.chartData[0].t;
+      const tMax = this.chartData[this.chartData.length - 1].t;
+      const tRange = tMax - tMin || 1;
       const indices = [];
       for (let i = 0; i < count; i++) {
-        indices.push(Math.round(i * n / (count - 1)));
+        const tTarget = tMin + (i / (count - 1)) * tRange;
+        // Find closest data point to this time
+        let best = 0;
+        let bestDist = Math.abs(this.chartData[0].t - tTarget);
+        for (let j = 1; j < this.chartData.length; j++) {
+          const dist = Math.abs(this.chartData[j].t - tTarget);
+          if (dist < bestDist) { best = j; bestDist = dist; }
+        }
+        indices.push(best);
       }
       return indices;
     },
