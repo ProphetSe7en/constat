@@ -10,7 +10,7 @@
   <Network>bridge</Network>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/ProphetSe7en/constat/issues</Support>
+  <Support>https://discordapp.com/channels/492590071455940612/1486391669384417300</Support>
   <Project>https://github.com/ProphetSe7en/constat</Project>
   <Overview>Docker container monitor with web UI — live stats, health tracking, auto-restart, memory monitoring, log viewer, and container sequences. All configuration in /config/constat.conf.</Overview>
   <Category>Tools:</Category>
