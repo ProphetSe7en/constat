@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.3
+
+### Bug fixes
+- **CPU avg overflow** — Docker occasionally reports bogus CPU deltas, causing avg values in the millions. Now clamped to sane range and corrupted averages auto-reset on load.
+
 ## v0.9.2
 
 ### Improvements

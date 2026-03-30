@@ -203,7 +203,12 @@ func calculateCPUPercent(stats *container.StatsResponse) float64 {
 		if cpuCount == 0 {
 			cpuCount = float64(runtime.NumCPU())
 		}
-		return (cpuDelta / systemDelta) * cpuCount * 100.0
+		pct := (cpuDelta / systemDelta) * cpuCount * 100.0
+		// Clamp to sane range — Docker can report bogus deltas on first read or clock skew
+		if pct > cpuCount*100.0 {
+			return 0.0
+		}
+		return pct
 	}
 	return 0.0
 }

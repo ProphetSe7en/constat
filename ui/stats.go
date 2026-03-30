@@ -711,6 +711,14 @@ func (sc *StatsCollector) loadFromDisk() {
 				skipped++
 				continue
 			}
+			// Reset corrupted averages (bogus CPU values from Docker stats glitches)
+			if avg.AvgCPU > 10000 || avg.CPUSum > 10000*float64(avg.Samples+1) {
+				avg.CPUSum = 0
+				avg.Samples = 0
+				avg.AvgCPU = 0
+				avg.MemorySum = 0
+				avg.AvgMemory = 0
+			}
 			sc.averages[key] = avg
 		}
 	}
