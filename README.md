@@ -265,7 +265,7 @@ Built-in healthcheck calls `/api/summary` every 60 seconds. Docker (and platform
 
 ### Unraid
 
-**Install via template:** Download [`constat.xml`](https://raw.githubusercontent.com/prophetse7en/unraid-templates/main/constat.xml) and place it in `/boot/config/plugins/dockerMan/templates-user/` on your Unraid server. Then go to **Docker** → **Add Container** and select **constat** from the Template dropdown.
+**Install via Community Apps:** Search for **constat** in the Apps tab — click Install and configure your settings.
 
 **Or install manually:** Go to **Docker** → **Add Container**, set Repository to `ghcr.io/prophetse7en/constat:latest`, and add the required paths and ports (see above).
 
