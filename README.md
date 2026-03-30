@@ -311,6 +311,13 @@ The Web UI has no authentication — anyone with network access to port 7890 can
 - Docker socket access grants full container control — use a socket proxy for read-only if you don't need restart/start/stop
 - Config can contain Discord webhook URLs — treat port 7890 as a trusted interface
 
+## Support
+
+For questions, help, or bug reports:
+
+- **Discord:** [`#prophetse7en-apps`](https://discordapp.com/channels/492590071455940612/1486391669384417300) on the [TRaSH Guides Discord](https://trash-guides.info/discord) (under Community Apps)
+- **GitHub:** [ProphetSe7en/constat/issues](https://github.com/ProphetSe7en/constat/issues)
+
 ## License
 
 MIT
