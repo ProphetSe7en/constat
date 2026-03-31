@@ -135,6 +135,11 @@ func main() {
 	mux.HandleFunc("POST /api/images/prune", app.handlePruneImages)
 	mux.HandleFunc("GET /api/image-cleanup/status", app.handleImageCleanupStatus)
 
+	// Volume management
+	mux.HandleFunc("GET /api/volumes", app.handleListVolumes)
+	mux.HandleFunc("DELETE /api/volumes/{name}", app.handleRemoveVolume)
+	mux.HandleFunc("POST /api/volumes/prune", app.handlePruneVolumes)
+
 	// Static files
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {

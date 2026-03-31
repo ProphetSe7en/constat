@@ -311,7 +311,7 @@
   .config-input { flex: 1; max-width: 400px; padding: 6px 12px; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; font-size: 13px; outline: none; }
   .config-input:focus { border-color: #58a6ff; }
   .config-input.wide { max-width: 600px; }
-  .config-hint { font-size: 11px; color: #6e7681; padding: 0 0 4px; margin-left: 192px; }
+  .config-hint { font-size: 11px; color: #8b949e; padding: 0 0 4px; margin-left: 192px; }
   .config-toggle { position: relative; width: 36px; height: 20px; background: #30363d; border-radius: 10px; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
   .config-toggle.on { background: #1f6feb; }
   .config-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: #e1e4e8; border-radius: 50%; transition: transform 0.2s; }
@@ -329,7 +329,7 @@
   .color-field { display: flex; align-items: center; gap: 8px; }
   .color-preview { width: 20px; height: 20px; border-radius: 4px; border: 1px solid #30363d; flex-shrink: 0; }
   .color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; max-width: 520px; }
-  .save-bar { padding: 16px 24px; display: flex; gap: 12px; align-items: center; }
+  .save-bar { position: sticky; bottom: 0; padding: 16px 24px; display: flex; gap: 12px; align-items: center; background: #161b22; border-top: 1px solid #30363d; z-index: 10; }
   .save-btn { padding: 8px 24px; border-radius: 6px; background: #1f6feb; border: none; color: #fff; font-size: 13px; cursor: pointer; font-weight: 500; }
   .save-btn:hover { background: #388bfd; }
   .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -772,6 +772,7 @@
     <div class="tab" :class="{ active: activeTab === 'events' }" @click="switchTab('events')">Events</div>
     <div class="tab" x-show="!mobileView" :class="{ active: activeTab === 'sequences' }" @click="switchTab('sequences')">Sequences</div>
     <div class="tab" x-show="!mobileView" :class="{ active: activeTab === 'network' }" @click="switchTab('network')">Network</div>
+    <div class="tab" x-show="!mobileView" :class="{ active: activeTab === 'tools' }" @click="switchTab('tools')">Tools</div>
     <div class="tab" x-show="!mobileView" :class="{ active: activeTab === 'config' }" @click="switchTab('config')">Config</div>
   </div>
 
@@ -859,7 +860,7 @@
                         :class="memoryWatchBarClassForEntry(c, mw)"
                         :style="'width:' + Math.min(memoryWatchPercentForEntry(c, mw), 100) + '%'"></div>
                     </div>
-                    <div style="display:flex;justify-content:space-between;font-size:10px;color:#484f58;margin-top:2px">
+                    <div style="display:flex;justify-content:space-between;font-size:10px;color:#8b949e;margin-top:2px">
                       <span x-text="formatBytes(c.memory)"></span>
                       <span x-text="mw.limit"></span>
                     </div>
@@ -1260,7 +1261,7 @@
                     <template x-if="c.state === 'running' && config">
                       <div class="mwatch-section">
                         <h3 style="font-size:12px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Memory Watch</h3>
-                        <div style="font-size:11px;color:#6e7681;margin-bottom:8px">Monitor memory usage and trigger alerts or auto-restart when thresholds are exceeded.</div>
+                        <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Monitor memory usage and trigger alerts or auto-restart when thresholds are exceeded.</div>
                         <!-- Card grid for existing rules -->
                         <div class="mwatch-grid" :class="mwatchGridClass(getMemoryWatches(c.name).length)" x-show="getMemoryWatches(c.name).length > 0">
                           <template x-for="mw in getMemoryWatches(c.name)" :key="mw.idx">
@@ -1278,7 +1279,7 @@
                                       :class="memoryWatchBarClassForEntry(c, mw)"
                                       :style="'width:' + Math.min(memoryWatchPercentForEntry(c, mw), 100) + '%'"></div>
                                   </div>
-                                  <div style="display:flex;justify-content:space-between;font-size:11px;color:#484f58;margin-top:2px">
+                                  <div style="display:flex;justify-content:space-between;font-size:11px;color:#8b949e;margin-top:2px">
                                     <span x-text="formatBytes(c.memory)"></span>
                                     <span x-text="memoryWatchPercentForEntry(c, mw).toFixed(0) + '%'"></span>
                                     <span x-text="mw.limit"></span>
@@ -1700,6 +1701,363 @@
     </div>
   </div>
 
+  <!-- Tools Tab -->
+  <div x-show="activeTab === 'tools'" x-cloak>
+    <div class="config-wrap">
+
+      <!-- Memory Watch -->
+      <div class="config-section">
+        <div class="config-section-header" @click="toolsSections.memory = !toolsSections.memory">
+          Memory Watch
+          <span x-show="config.memoryWatch.length > 0" style="font-size:11px;font-weight:400;color:#8b949e;margin-left:8px" x-text="config.memoryWatch.length + ' rule' + (config.memoryWatch.length !== 1 ? 's' : '')"></span>
+          <span class="arrow" x-text="toolsSections.memory ? '&#9660;' : '&#9654;'"></span>
+        </div>
+        <div class="config-section-body" x-show="toolsSections.memory" x-transition>
+          <div style="font-size:13px;color:#c9d1d9;margin-bottom:10px">Monitor memory usage and trigger alerts or auto-restart when thresholds are exceeded.</div>
+          <div class="config-field">
+            <span class="config-label">Pause all rules</span>
+            <div class="config-toggle" :class="{ on: config.memoryPaused === 'true' }" @click="config.memoryPaused = config.memoryPaused === 'true' ? 'false' : 'true'; configDirty = true"></div>
+          </div>
+          <div class="config-hint" x-show="config.memoryPaused === 'true'" style="color:#d29922">All memory rules are paused — no actions will trigger</div>
+          <div class="config-field">
+            <span class="config-label">Poll interval (sec)</span>
+            <input type="text" class="config-input" style="max-width:100px" x-model="config.memoryPollInterval" @input="configDirty = true">
+          </div>
+          <div class="config-field">
+            <span class="config-label">Default duration (sec)</span>
+            <input type="text" class="config-input" style="max-width:100px" x-model="config.memoryDefaultDuration" @input="configDirty = true">
+            <span style="font-size:12px;color:#8b949e;margin-left:8px">How long memory must stay above threshold before action</span>
+          </div>
+
+          <!-- Rules grouped by container -->
+          <div style="margin-top:16px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer" @click="toolsSections.rules = !toolsSections.rules">
+              <span style="font-size:12px;color:#8b949e;font-weight:600">Rules</span>
+              <span x-show="config.memoryWatch.length > 0" style="font-size:11px;color:#8b949e" x-text="config.memoryWatch.length + ' rule' + (config.memoryWatch.length !== 1 ? 's' : '') + ' on ' + groupedMemoryWatches().length + ' container' + (groupedMemoryWatches().length !== 1 ? 's' : '')"></span>
+              <span class="arrow" x-text="toolsSections.rules ? '&#9660;' : '&#9654;'" style="color:#484f58;font-size:10px"></span>
+            </div>
+          </div>
+          <div x-show="toolsSections.rules" x-transition>
+          <div x-show="config.memoryWatch.length === 0" style="font-size:12px;color:#484f58;margin-bottom:8px">No rules defined. Add rules from the Containers tab or below.</div>
+          <div x-show="config.memoryWatch.length > 0" :style="config.memoryPaused === 'true' ? 'opacity:0.5' : ''">
+            <template x-for="group in groupedMemoryWatches()" :key="group.name">
+              <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+                <!-- Container header -->
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-size:13px;font-weight:600;color:#c9d1d9" x-text="group.name || '(unnamed)'"></span>
+                    <span x-show="group.container" style="font-size:11px;color:#8b949e" x-text="group.container ? formatBytes(group.container.memory) : ''"></span>
+                  </div>
+                  <span x-show="!group.container" style="font-size:11px;color:#8b949e">not running</span>
+                </div>
+                <!-- Rules for this container -->
+                <template x-for="entry in group.rules" :key="entry.idx">
+                  <div>
+                    <template x-if="mwatchEditIdx !== entry.idx">
+                      <div style="display:flex;align-items:center;gap:10px;padding:4px 0" :style="group.rules.indexOf(entry) > 0 ? 'border-top:1px solid #21262d;margin-top:4px;padding-top:8px' : ''">
+                        <!-- Action + limit label -->
+                        <div style="min-width:120px;flex-shrink:0">
+                          <span style="font-size:11px;font-weight:600" :style="entry.action === 'restart' ? 'color:#f85149' : 'color:#d29922'" x-text="entry.action"></span>
+                          <span style="font-size:11px;color:#c9d1d9;margin-left:2px">at <span x-text="entry.limit"></span></span>
+                          <span x-show="entry.duration" style="font-size:10px;color:#8b949e;margin-left:4px" x-text="'(' + entry.duration + 's)'"></span>
+                        </div>
+                        <!-- Progress bar -->
+                        <div style="flex:1;min-width:80px" x-show="group.container">
+                          <div class="mwatch-bar" style="margin-top:0">
+                            <div class="mwatch-bar-fill"
+                              :class="memoryWatchBarClassForEntry(group.container, entry)"
+                              :style="'width:' + Math.min(memoryWatchPercentForEntry(group.container, entry), 100) + '%'"></div>
+                          </div>
+                        </div>
+                        <!-- Percentage -->
+                        <span x-show="group.container" style="font-size:11px;color:#8b949e;min-width:32px;text-align:right" x-text="memoryWatchPercentForEntry(group.container, entry).toFixed(0) + '%'"></span>
+                        <!-- Timer warning -->
+                        <span x-show="mwatchElapsedSec(entry.name, entry.idx) >= 0"
+                          style="font-size:11px;font-weight:600;min-width:60px"
+                          :style="entry.action === 'restart' ? 'color:#f85149' : 'color:#d29922'"
+                          x-text="mwatchTimerText(entry.name, entry.idx, entry)">
+                        </span>
+                        <!-- Actions -->
+                        <div style="display:flex;gap:4px;flex-shrink:0">
+                          <button class="mwatch-btn" style="padding:2px 6px;font-size:10px" @click.stop="startEditMemoryWatch(entry.idx)">Edit</button>
+                          <button class="mwatch-btn mwatch-btn-remove" style="padding:2px 6px;font-size:10px" @click.stop="removeMemoryWatchByIdx(entry.idx)">Remove</button>
+                        </div>
+                      </div>
+                    </template>
+                    <template x-if="mwatchEditIdx === entry.idx">
+                      <div class="mwatch-inline-form" @click.stop style="margin-top:4px">
+                        <input type="text" x-model="mwatchEditForm.name" placeholder="container-name" style="width:140px">
+                        <input type="text" x-model="mwatchEditForm.limit" placeholder="512m, 1.5g" style="width:80px">
+                        <select x-model="mwatchEditForm.action">
+                          <option value="notify">notify</option>
+                          <option value="restart">restart</option>
+                        </select>
+                        <input type="text" x-model="mwatchEditForm.duration" placeholder="duration (s)" style="width:90px">
+                        <button class="mwatch-btn" @click.stop="saveEditMemoryWatchConfig(entry.idx)" style="background:#1f6feb;border-color:#1f6feb;color:#fff">Save</button>
+                        <button class="mwatch-btn" @click.stop="mwatchEditIdx = -1">Cancel</button>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+          <button class="add-entry-btn" @click="config.memoryWatch.push({name:'', limit:'', action:'notify', duration:''}); configDirty = true; $nextTick(() => startEditMemoryWatch(config.memoryWatch.length - 1))" style="margin-top:8px">+ Add rule</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Image Cleanup -->
+      <div class="config-section">
+        <div class="config-section-header" @click="toolsSections.imageCleanup = !toolsSections.imageCleanup; if(toolsSections.imageCleanup && !imageData) fetchImages()">
+          Image Cleanup
+          <span class="arrow" x-text="toolsSections.imageCleanup ? '&#9660;' : '&#9654;'"></span>
+        </div>
+        <div class="config-section-body" x-show="toolsSections.imageCleanup" x-transition>
+          <div style="font-size:13px;color:#c9d1d9;margin-bottom:10px">Remove unused and dangling Docker images to reclaim disk space.</div>
+
+          <!-- Scheduled Cleanup -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="font-size:12px;font-weight:600;color:#c9d1d9">Scheduled Cleanup</span>
+            <div class="config-toggle" :class="{ on: config.imageCleanupEnabled === 'true' }" @click="config.imageCleanupEnabled = config.imageCleanupEnabled === 'true' ? 'false' : 'true'; configDirty = true"></div>
+          </div>
+          <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 16px;margin-bottom:16px">
+            <div style="font-size:11px;color:#8b949e;margin-bottom:10px">Automatically clean up images daily at a set time.</div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+              <div>
+                <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:3px">Time</label>
+                <input type="text" class="config-input" style="width:140px" x-model="config.imageCleanupTime" @input="configDirty = true" :placeholder="config.timeFormat === '12h' ? '03:00 AM' : '03:00'" maxlength="8">
+              </div>
+              <div>
+                <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:3px">Mode</label>
+                <select class="config-input" style="max-width:180px" x-model="config.imageCleanupMode" @change="configDirty = true">
+                  <option value="dangling">Dangling only</option>
+                  <option value="all">Dangling + Unused</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:3px">Dry run</label>
+                <div class="config-toggle" :class="{ on: config.imageCleanupDryRun === 'true' }" @click="config.imageCleanupDryRun = config.imageCleanupDryRun === 'true' ? 'false' : 'true'; configDirty = true"></div>
+              </div>
+            </div>
+            <div x-show="config.imageCleanupDryRun === 'true'" style="font-size:11px;color:#d29922;margin-top:8px">Dry run enabled — scheduled cleanup will log images but not delete them. Manual cleanup buttons below are not affected by this setting.</div>
+
+            <!-- Last run status -->
+            <div style="margin-top:10px" x-init="fetchCleanupStatus()">
+              <template x-if="cleanupStatus">
+                <div style="font-size:11px;color:#8b949e;padding:6px 10px;background:#0d1117;border-radius:4px;border:1px solid #21262d">
+                  <span>Last run: </span>
+                  <span x-text="new Date(cleanupStatus.time).toLocaleString()"></span>
+                  <span x-show="cleanupStatus.dryRun" style="color:#d29922"> (dry run)</span>
+                  <span> — </span>
+                  <template x-if="cleanupStatus.error">
+                    <span style="color:#f85149" x-text="'Error: ' + cleanupStatus.error"></span>
+                  </template>
+                  <template x-if="!cleanupStatus.error">
+                    <span>
+                      <span x-text="cleanupStatus.dryRun ? (cleanupStatus.imagesFound + ' images would be removed') : (cleanupStatus.imagesDeleted + ' images removed')"></span>,
+                      <span x-text="formatBytes(cleanupStatus.spaceReclaimed)"></span> reclaimed
+                    </span>
+                  </template>
+                </div>
+              </template>
+              <template x-if="!cleanupStatus">
+                <div style="font-size:11px;color:#8b949e">No scheduled cleanup has run yet.</div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Manual Cleanup -->
+          <div style="font-size:12px;font-weight:600;color:#c9d1d9;margin-bottom:8px">Manual Cleanup</div>
+          <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 16px">
+          <div x-show="imageLoading" style="font-size:12px;color:#8b949e">Loading images...</div>
+          <div x-show="imageError" style="font-size:12px;color:#f85149;margin-bottom:8px" x-text="imageError"></div>
+
+          <template x-if="imageData && !imageLoading">
+            <div>
+              <!-- Summary -->
+              <div style="display:flex;gap:16px;margin-bottom:12px;font-size:13px">
+                <span><span style="color:#8b949e">Total:</span> <span x-text="imageData.images.length + ' images'"></span></span>
+                <span><span style="color:#f85149">Orphans:</span> <span x-text="imageData.dangling"></span></span>
+                <span><span style="color:#d29922">Unused:</span> <span x-text="imageData.unused"></span></span>
+                <span><span style="color:#3fb950">In use:</span> <span x-text="imageData.inUse"></span></span>
+                <span x-show="imageData.reclaimableSize > 0" style="color:#8b949e">Reclaimable: <span style="color:#c9d1d9" x-text="formatBytes(imageData.reclaimableSize)"></span></span>
+                <button class="mwatch-btn" @click="fetchImages()" :disabled="imageLoading" style="color:#8b949e;padding:2px 8px;font-size:11px">Refresh</button>
+              </div>
+
+              <div x-show="imageData.dangling === 0 && imageData.unused === 0" style="font-size:12px;color:#3fb950;margin-bottom:12px">No orphan or unused images — nothing to clean up.</div>
+
+              <!-- Orphan Images (dangling) -->
+              <template x-if="imageData.dangling > 0">
+                <div style="margin-bottom:16px">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                    <span style="font-size:13px;font-weight:600;color:#f85149;cursor:pointer" @click="orphanListExpanded = !orphanListExpanded">
+                      <span x-text="orphanListExpanded ? '&#9660;' : '&#9654;'"></span>
+                      Orphan Images
+                      <span style="font-weight:400;color:#8b949e" x-text="'(' + imageData.dangling + ')'"></span>
+                    </span>
+                    <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;color:#f85149" @click="pruneImages('dangling')" :disabled="imagePruning">
+                      <span x-show="!imagePruning">Delete all orphans</span>
+                      <span x-show="imagePruning">Deleting...</span>
+                    </button>
+                  </div>
+                  <div style="font-size:12px;color:#8b949e;margin-bottom:8px">Untagged images from previous builds — always safe to remove.</div>
+                  <div x-show="orphanListExpanded" x-transition>
+                    <!-- Column headers -->
+                    <template x-for="img in imageData.images.filter(i => i.status === 'dangling')" :key="img.id">
+                      <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#161b22;border:1px solid #21262d;border-radius:6px;margin-bottom:3px;font-size:13px">
+                        <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;flex-shrink:0;color:#f85149;border-color:#f8514933" @click="removeImage(img.id)" :disabled="imageRemoving[img.id]">
+                          <span x-show="!imageRemoving[img.id]">Delete</span>
+                          <span x-show="imageRemoving[img.id]">...</span>
+                        </button>
+                        <span style="width:100px;flex-shrink:0;font-family:monospace;font-size:12px;color:#8b949e" x-text="img.id"></span>
+                        <span style="width:130px;flex-shrink:0;font-size:12px;color:#8b949e" x-text="_formatDatePart(new Date(img.created * 1000))"></span>
+                        <span style="font-size:12px;color:#c9d1d9" x-text="formatBytes(img.size)"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Unused Images (tagged but not referenced by any container) -->
+              <template x-if="imageData.unused > 0">
+                <div>
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                    <span style="font-size:13px;font-weight:600;color:#d29922;cursor:pointer" @click="unusedListExpanded = !unusedListExpanded">
+                      <span x-text="unusedListExpanded ? '&#9660;' : '&#9654;'"></span>
+                      Unused Images
+                      <span style="font-weight:400;color:#8b949e" x-text="'(' + imageData.unused + ')'"></span>
+                    </span>
+                    <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;color:#d29922" @click="pruneImages('unused')" :disabled="imagePruning">
+                      <span x-show="!imagePruning">Delete all unused</span>
+                      <span x-show="imagePruning">Deleting...</span>
+                    </button>
+                  </div>
+                  <div style="font-size:12px;color:#8b949e;margin-bottom:8px">Tagged images not used by any container (running or stopped).</div>
+                  <div x-show="unusedListExpanded" x-transition>
+                    <!-- Column headers -->
+                    <template x-for="img in imageData.images.filter(i => i.status === 'unused')" :key="img.id">
+                      <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#161b22;border:1px solid #21262d;border-radius:6px;margin-bottom:3px;font-size:13px">
+                        <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;flex-shrink:0;color:#f85149;border-color:#f8514933" @click="removeImage(img.id)" :disabled="imageRemoving[img.id]">
+                          <span x-show="!imageRemoving[img.id]">Delete</span>
+                          <span x-show="imageRemoving[img.id]">...</span>
+                        </button>
+                        <span style="width:100px;flex-shrink:0;font-family:monospace;font-size:12px;color:#8b949e" x-text="img.id"></span>
+                        <span style="width:70px;flex-shrink:0;font-size:12px;color:#c9d1d9" x-text="formatBytes(img.size)"></span>
+                        <span style="width:80px;flex-shrink:0;font-size:12px;color:#3fb950" x-text="img.repoTags[0] ? img.repoTags[0].split(':')[1] || 'latest' : ''"></span>
+                        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#8b949e" x-text="img.repoTags[0] ? img.repoTags[0].split(':')[0] : ''"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- Volume Cleanup -->
+      <div class="config-section">
+        <div class="config-section-header" @click="toolsSections.volumeCleanup = !toolsSections.volumeCleanup; if(toolsSections.volumeCleanup && !volumeData) fetchVolumes()">
+          Volume Cleanup
+          <span class="arrow" x-text="toolsSections.volumeCleanup ? '&#9660;' : '&#9654;'"></span>
+        </div>
+        <div class="config-section-body" x-show="toolsSections.volumeCleanup" x-transition>
+          <div style="font-size:13px;color:#c9d1d9;margin-bottom:10px">Remove unused Docker volumes to reclaim disk space. Volumes used by any container (running or stopped) are protected.</div>
+
+          <div x-show="volumeLoading" style="font-size:12px;color:#8b949e">Loading volumes...</div>
+          <div x-show="volumeError" style="font-size:12px;color:#f85149;margin-bottom:8px" x-text="volumeError"></div>
+
+          <template x-if="volumeData && !volumeLoading">
+            <div>
+              <!-- Summary -->
+              <div style="display:flex;gap:16px;margin-bottom:12px;font-size:13px">
+                <span><span style="color:#8b949e">Total:</span> <span x-text="volumeData.volumes.length + ' volumes'"></span></span>
+                <span><span style="color:#d29922">Unused:</span> <span x-text="volumeData.unused"></span></span>
+                <span><span style="color:#3fb950">In use:</span> <span x-text="volumeData.inUse"></span></span>
+                <button class="mwatch-btn" @click="fetchVolumes()" :disabled="volumeLoading" style="color:#8b949e;padding:2px 8px;font-size:12px">Refresh</button>
+              </div>
+
+              <div x-show="volumeData.unused === 0" style="font-size:13px;color:#3fb950;margin-bottom:12px">No unused volumes — nothing to clean up.</div>
+
+              <!-- Unused Volumes -->
+              <template x-if="volumeData.unused > 0">
+                <div style="margin-bottom:16px">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                    <span style="font-size:13px;font-weight:600;color:#d29922;cursor:pointer" @click="volumeListExpanded = !volumeListExpanded">
+                      <span x-text="volumeListExpanded ? '&#9660;' : '&#9654;'"></span>
+                      Unused Volumes
+                      <span style="font-weight:400;color:#8b949e" x-text="'(' + volumeData.unused + ')'"></span>
+                    </span>
+                    <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;color:#d29922" @click="pruneVolumes()" :disabled="volumePruning">
+                      <span x-show="!volumePruning">Delete all unused</span>
+                      <span x-show="volumePruning">Deleting...</span>
+                    </button>
+                  </div>
+                  <div style="font-size:12px;color:#8b949e;margin-bottom:8px">Named volumes not referenced by any container (running or stopped).</div>
+                  <div x-show="volumeListExpanded" x-transition>
+                    <template x-for="vol in volumeData.volumes.filter(v => v.status === 'unused')" :key="vol.name">
+                      <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#161b22;border:1px solid #21262d;border-radius:6px;margin-bottom:3px">
+                        <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;flex-shrink:0;color:#f85149;border-color:#f8514933" @click="removeVolume(vol.name)" :disabled="volumeRemoving[vol.name]">
+                          <span x-show="!volumeRemoving[vol.name]">Delete</span>
+                          <span x-show="volumeRemoving[vol.name]">...</span>
+                        </button>
+                        <span style="width:180px;flex-shrink:0;font-size:12px;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="vol.name" :title="vol.name"></span>
+                        <span style="width:60px;flex-shrink:0;font-size:12px;color:#8b949e" x-text="vol.driver"></span>
+                        <span style="min-width:0;font-size:11px;color:#8b949e;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="vol.mountpoint" :title="vol.mountpoint"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+
+              <!-- In-use Volumes -->
+              <template x-if="volumeData.inUse > 0">
+                <div>
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                    <span style="font-size:13px;font-weight:600;color:#3fb950;cursor:pointer" @click="volumeInUseExpanded = !volumeInUseExpanded">
+                      <span x-text="volumeInUseExpanded ? '&#9660;' : '&#9654;'"></span>
+                      In Use
+                      <span style="font-weight:400;color:#8b949e" x-text="'(' + volumeData.inUse + ')'"></span>
+                    </span>
+                  </div>
+                  <div x-show="volumeInUseExpanded" x-transition>
+                    <div style="display:flex;gap:8px;padding:2px 10px;font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">
+                      <span style="width:140px">Used by</span>
+                      <span style="width:180px">Name</span>
+                      <span style="width:60px">Driver</span>
+                      <span style="flex:1">Mountpoint</span>
+                    </div>
+                    <template x-for="vol in volumeData.volumes.filter(v => v.status === 'in-use')" :key="vol.name">
+                      <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#161b22;border:1px solid #21262d;border-radius:6px;margin-bottom:3px">
+                        <span style="width:140px;flex-shrink:0;font-size:12px;font-weight:600;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="vol.containerNames.join(', ')" :title="vol.containerNames.join(', ')"></span>
+                        <span style="width:180px;flex-shrink:0;font-size:11px;color:#8b949e;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="vol.name" :title="vol.name"></span>
+                        <span style="width:60px;flex-shrink:0;font-size:12px;color:#8b949e" x-text="vol.driver"></span>
+                        <span style="flex:1;min-width:0;font-size:11px;color:#8b949e;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="vol.mountpoint" :title="vol.mountpoint"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Save bar (for scheduled cleanup settings) -->
+      <div class="save-bar">
+        <button class="save-btn" @click="saveConfig()" :disabled="configSaving || !configDirty">
+          <span x-show="!configSaving">Save</span>
+          <span x-show="configSaving">Saving...</span>
+        </button>
+        <span class="save-msg success" x-show="configSuccess" x-text="configSuccess" x-transition></span>
+        <span class="save-msg error" x-show="configError" x-text="configError" x-transition></span>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Config Tab -->
   <div x-show="activeTab === 'config'">
     <div class="config-wrap">
@@ -1842,7 +2200,7 @@
               <span class="arrow" x-text="configSections.restart ? '&#9660;' : '&#9654;'"></span>
             </div>
             <div class="config-section-body" x-show="configSections.restart" x-transition>
-              <div style="font-size:11px;color:#6e7681;margin-bottom:10px">Automatically restart containers when they become unhealthy. Enable per container by adding <span style="color:#8b949e;font-family:monospace">constat.restart=true</span> as a label or <span style="color:#8b949e;font-family:monospace">--label constat.restart=true</span> in Extra Parameters.</div>
+              <div style="font-size:11px;color:#8b949e;margin-bottom:10px">Automatically restart containers when they become unhealthy. Enable per container by adding <span style="color:#8b949e;font-family:monospace">constat.restart=true</span> as a label or <span style="color:#8b949e;font-family:monospace">--label constat.restart=true</span> in Extra Parameters.</div>
               <div class="config-field">
                 <span class="config-label">Restart label</span>
                 <input type="text" class="config-input" x-model="config.restartLabel" @input="configDirty = true">
@@ -1859,252 +2217,7 @@
             </div>
           </div>
 
-          <!-- Memory Monitoring -->
-          <div class="config-section">
-            <div class="config-section-header" @click="configSections.memory = !configSections.memory">
-              Memory Monitoring
-              <span x-show="config.memoryWatch.length > 0" style="font-size:11px;font-weight:400;color:#8b949e;margin-left:8px" x-text="config.memoryWatch.length + ' rule' + (config.memoryWatch.length !== 1 ? 's' : '')"></span>
-              <span class="arrow" x-text="configSections.memory ? '&#9660;' : '&#9654;'"></span>
-            </div>
-            <div class="config-section-body" x-show="configSections.memory" x-transition>
-              <div style="font-size:11px;color:#6e7681;margin-bottom:10px">Monitor memory usage and trigger alerts or auto-restart when thresholds are exceeded.</div>
-              <div class="config-field">
-                <span class="config-label">Pause all rules</span>
-                <div class="config-toggle" :class="{ on: config.memoryPaused === 'true' }" @click="config.memoryPaused = config.memoryPaused === 'true' ? 'false' : 'true'; configDirty = true"></div>
-              </div>
-              <div class="config-hint" x-show="config.memoryPaused === 'true'" style="color:#d29922">All memory rules are paused — no actions will trigger</div>
-              <div class="config-field">
-                <span class="config-label">Poll interval (sec)</span>
-                <input type="text" class="config-input" style="max-width:100px" x-model="config.memoryPollInterval" @input="configDirty = true">
-              </div>
-              <div class="config-field">
-                <span class="config-label">Default duration (sec)</span>
-                <input type="text" class="config-input" style="max-width:100px" x-model="config.memoryDefaultDuration" @input="configDirty = true">
-              </div>
-              <div class="config-hint">How long memory must stay above threshold before action</div>
 
-              <!-- Rules overview with live stats -->
-              <div style="margin-top:16px;font-size:12px;color:#8b949e;font-weight:600;margin-bottom:8px">Rules</div>
-              <div x-show="config.memoryWatch.length === 0" style="font-size:12px;color:#484f58;margin-bottom:8px">No rules defined. Add rules from the Containers tab or below.</div>
-              <div class="mwatch-grid cols-1" x-show="config.memoryWatch.length > 0" :style="config.memoryPaused === 'true' ? 'opacity:0.5' : ''">
-                <template x-for="(entry, idx) in config.memoryWatch" :key="idx">
-                  <div class="mwatch-card">
-                    <template x-if="mwatchEditIdx !== idx">
-                      <div>
-                        <div style="font-size:13px;font-weight:600;color:#c9d1d9;margin-bottom:6px" x-text="entry.name || '(unnamed)'"></div>
-                        <div class="mwatch-info" style="margin-bottom:6px">
-                          <span><span style="color:#8b949e">Limit:</span> <span x-text="entry.limit"></span></span>
-                          <span><span style="color:#8b949e">Action:</span> <span x-text="entry.action"></span></span>
-                          <span x-show="entry.duration"><span style="color:#8b949e">Duration:</span> <span x-text="entry.duration + 's'"></span></span>
-                        </div>
-                        <template x-if="getContainerByName(entry.name)">
-                          <div>
-                            <div class="mwatch-bar">
-                              <div class="mwatch-bar-fill"
-                                :class="memoryWatchBarClassForEntry(getContainerByName(entry.name), entry)"
-                                :style="'width:' + Math.min(memoryWatchPercentForEntry(getContainerByName(entry.name), entry), 100) + '%'"></div>
-                            </div>
-                            <div style="display:flex;justify-content:space-between;font-size:11px;color:#484f58;margin-top:2px">
-                              <span x-text="formatBytes(getContainerByName(entry.name).memory)"></span>
-                              <span x-text="memoryWatchPercentForEntry(getContainerByName(entry.name), entry).toFixed(0) + '%'"></span>
-                              <span x-text="entry.limit"></span>
-                            </div>
-                            <div x-show="mwatchElapsedSec(entry.name, idx) >= 0"
-                              style="font-size:11px;margin-top:4px;font-weight:600"
-                              :style="entry.action === 'restart' ? 'color:#f85149' : 'color:#d29922'"
-                              x-text="mwatchTimerText(entry.name, idx, entry)">
-                            </div>
-                          </div>
-                        </template>
-                        <div x-show="!getContainerByName(entry.name)" style="font-size:11px;color:#6e7681;margin-top:4px">Container not running — no live data</div>
-                        <div style="display:flex;gap:8px;margin-top:6px">
-                          <button class="mwatch-btn" @click.stop="startEditMemoryWatch(idx)">Edit</button>
-                          <button class="mwatch-btn mwatch-btn-remove" @click.stop="removeMemoryWatchByIdx(idx)">Remove</button>
-                        </div>
-                      </div>
-                    </template>
-                    <template x-if="mwatchEditIdx === idx">
-                      <div class="mwatch-inline-form" @click.stop>
-                        <input type="text" x-model="mwatchEditForm.name" placeholder="container-name" style="width:140px">
-                        <input type="text" x-model="mwatchEditForm.limit" placeholder="512m, 1.5g" style="width:80px">
-                        <select x-model="mwatchEditForm.action">
-                          <option value="notify">notify</option>
-                          <option value="restart">restart</option>
-                        </select>
-                        <input type="text" x-model="mwatchEditForm.duration" placeholder="duration (s)" style="width:90px">
-                        <button class="mwatch-btn" @click.stop="saveEditMemoryWatchConfig(idx)" style="background:#1f6feb;border-color:#1f6feb;color:#fff">Save</button>
-                        <button class="mwatch-btn" @click.stop="mwatchEditIdx = -1">Cancel</button>
-                      </div>
-                    </template>
-                  </div>
-                </template>
-              </div>
-              <button class="add-entry-btn" @click="config.memoryWatch.push({name:'', limit:'', action:'notify', duration:''}); configDirty = true; $nextTick(() => startEditMemoryWatch(config.memoryWatch.length - 1))" style="margin-top:8px">+ Add rule</button>
-            </div>
-          </div>
-
-          <!-- Maintenance -->
-          <div class="config-section">
-            <div class="config-section-header" @click="configSections.maintenance = !configSections.maintenance; if(configSections.maintenance && !imageData) fetchImages()">
-              Maintenance
-              <span class="arrow" x-text="configSections.maintenance ? '&#9660;' : '&#9654;'"></span>
-            </div>
-            <div class="config-section-body" x-show="configSections.maintenance" x-transition>
-              <div style="font-size:11px;color:#6e7681;margin-bottom:10px">Remove unused and dangling Docker images to reclaim disk space.</div>
-
-              <!-- Scheduled Cleanup -->
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-                <span style="font-size:12px;font-weight:600;color:#c9d1d9">Scheduled Cleanup</span>
-                <div class="config-toggle" :class="{ on: config.imageCleanupEnabled === 'true' }" @click="config.imageCleanupEnabled = config.imageCleanupEnabled === 'true' ? 'false' : 'true'; configDirty = true"></div>
-              </div>
-              <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 16px;margin-bottom:16px">
-                <div style="font-size:11px;color:#6e7681;margin-bottom:10px">Automatically clean up images daily at a set time.</div>
-                <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
-                  <div>
-                    <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:3px">Time</label>
-                    <input type="text" class="config-input" style="width:140px" x-model="config.imageCleanupTime" @input="configDirty = true" :placeholder="config.timeFormat === '12h' ? '03:00 AM' : '03:00'" maxlength="8">
-                  </div>
-                  <div>
-                    <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:3px">Mode</label>
-                    <select class="config-input" style="max-width:180px" x-model="config.imageCleanupMode" @change="configDirty = true">
-                      <option value="dangling">Dangling only</option>
-                      <option value="all">Dangling + Unused</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:3px">Dry run</label>
-                    <div class="config-toggle" :class="{ on: config.imageCleanupDryRun === 'true' }" @click="config.imageCleanupDryRun = config.imageCleanupDryRun === 'true' ? 'false' : 'true'; configDirty = true"></div>
-                  </div>
-                </div>
-                <div x-show="config.imageCleanupDryRun === 'true'" style="font-size:11px;color:#d29922;margin-top:8px">Dry run enabled — images will be logged but not deleted.</div>
-
-                <!-- Last run status -->
-                <div style="margin-top:10px" x-init="fetch('/api/image-cleanup/status').then(r=>r.json()).then(d=>{cleanupStatus=d.lastRun}).catch(()=>{})">
-                  <template x-if="cleanupStatus">
-                    <div style="font-size:11px;color:#8b949e;padding:6px 10px;background:#0d1117;border-radius:4px;border:1px solid #21262d">
-                      <span>Last run: </span>
-                      <span x-text="new Date(cleanupStatus.time).toLocaleString()"></span>
-                      <span x-show="cleanupStatus.dryRun" style="color:#d29922"> (dry run)</span>
-                      <span> — </span>
-                      <template x-if="cleanupStatus.error">
-                        <span style="color:#f85149" x-text="'Error: ' + cleanupStatus.error"></span>
-                      </template>
-                      <template x-if="!cleanupStatus.error">
-                        <span>
-                          <span x-text="cleanupStatus.dryRun ? (cleanupStatus.imagesFound + ' images would be removed') : (cleanupStatus.imagesDeleted + ' images removed')"></span>,
-                          <span x-text="formatBytes(cleanupStatus.spaceReclaimed)"></span> reclaimed
-                        </span>
-                      </template>
-                    </div>
-                  </template>
-                  <template x-if="!cleanupStatus">
-                    <div style="font-size:11px;color:#6e7681">No scheduled cleanup has run yet.</div>
-                  </template>
-                </div>
-              </div>
-
-              <!-- Manual Cleanup -->
-              <div style="font-size:12px;font-weight:600;color:#c9d1d9;margin-bottom:8px">Manual Cleanup</div>
-              <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 16px">
-              <div x-show="imageLoading" style="font-size:12px;color:#8b949e">Loading images...</div>
-              <div x-show="imageError" style="font-size:12px;color:#f85149;margin-bottom:8px" x-text="imageError"></div>
-
-              <template x-if="imageData && !imageLoading">
-                <div>
-                  <!-- Summary -->
-                  <div style="display:flex;gap:16px;margin-bottom:12px;font-size:12px">
-                    <span><span style="color:#8b949e">Total:</span> <span x-text="imageData.images.length + ' images'"></span></span>
-                    <span><span style="color:#f85149">Orphans:</span> <span x-text="imageData.dangling"></span></span>
-                    <span><span style="color:#d29922">Unused:</span> <span x-text="imageData.unused"></span></span>
-                    <span><span style="color:#3fb950">In use:</span> <span x-text="imageData.inUse"></span></span>
-                    <span x-show="imageData.reclaimableSize > 0" style="color:#8b949e">Reclaimable: <span style="color:#c9d1d9" x-text="formatBytes(imageData.reclaimableSize)"></span></span>
-                    <button class="mwatch-btn" @click="fetchImages()" :disabled="imageLoading" style="color:#8b949e;padding:2px 8px;font-size:11px">Refresh</button>
-                  </div>
-
-                  <div x-show="imageData.dangling === 0 && imageData.unused === 0" style="font-size:12px;color:#3fb950;margin-bottom:12px">No orphan or unused images — nothing to clean up.</div>
-
-                  <!-- Orphan Images (dangling) -->
-                  <template x-if="imageData.dangling > 0">
-                    <div style="margin-bottom:16px">
-                      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-                        <span style="font-size:12px;font-weight:600;color:#f85149;cursor:pointer" @click="orphanListExpanded = !orphanListExpanded">
-                          <span x-text="orphanListExpanded ? '&#9660;' : '&#9654;'"></span>
-                          Orphan Images
-                          <span style="font-weight:400;color:#8b949e" x-text="'(' + imageData.dangling + ')'"></span>
-                        </span>
-                        <button class="mwatch-btn mwatch-btn-remove" style="padding:2px 8px;font-size:11px" @click="pruneImages('dangling')" :disabled="imagePruning">
-                          <span x-show="!imagePruning">Delete all orphans</span>
-                          <span x-show="imagePruning">Deleting...</span>
-                        </button>
-                      </div>
-                      <div style="font-size:11px;color:#6e7681;margin-bottom:8px">Untagged images from previous builds — always safe to remove.</div>
-                      <div x-show="orphanListExpanded" x-transition>
-                        <!-- Column headers -->
-                        <div style="display:flex;gap:8px;padding:2px 10px;font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">
-                          <span style="width:100px">ID</span>
-                          <span style="width:130px">Created</span>
-                          <span style="width:70px">Size</span>
-                          <span style="width:56px"></span>
-                        </div>
-                        <template x-for="img in imageData.images.filter(i => i.status === 'dangling')" :key="img.id">
-                          <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#161b22;border:1px solid #21262d;border-radius:6px;margin-bottom:3px;font-size:12px">
-                            <span style="width:100px;flex-shrink:0;font-family:monospace;font-size:11px;color:#8b949e" x-text="img.id"></span>
-                            <span style="width:130px;flex-shrink:0;font-size:11px;color:#8b949e" x-text="_formatDatePart(new Date(img.created * 1000))"></span>
-                            <span style="width:70px;flex-shrink:0;font-size:11px;color:#c9d1d9" x-text="formatBytes(img.size)"></span>
-                            <button class="mwatch-btn mwatch-btn-remove" style="padding:2px 8px;font-size:11px" @click="removeImage(img.id)" :disabled="imageRemoving[img.id]">
-                              <span x-show="!imageRemoving[img.id]">Remove</span>
-                              <span x-show="imageRemoving[img.id]">...</span>
-                            </button>
-                          </div>
-                        </template>
-                      </div>
-                    </div>
-                  </template>
-
-                  <!-- Unused Images (tagged but not referenced by any container) -->
-                  <template x-if="imageData.unused > 0">
-                    <div>
-                      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-                        <span style="font-size:12px;font-weight:600;color:#d29922;cursor:pointer" @click="unusedListExpanded = !unusedListExpanded">
-                          <span x-text="unusedListExpanded ? '&#9660;' : '&#9654;'"></span>
-                          Unused Images
-                          <span style="font-weight:400;color:#8b949e" x-text="'(' + imageData.unused + ')'"></span>
-                        </span>
-                        <button class="mwatch-btn" style="padding:2px 8px;font-size:11px;color:#d29922" @click="pruneImages('unused')" :disabled="imagePruning">
-                          <span x-show="!imagePruning">Delete all unused</span>
-                          <span x-show="imagePruning">Deleting...</span>
-                        </button>
-                      </div>
-                      <div style="font-size:11px;color:#6e7681;margin-bottom:8px">Tagged images not used by any container (running or stopped).</div>
-                      <div x-show="unusedListExpanded" x-transition>
-                        <!-- Column headers -->
-                        <div style="display:flex;gap:8px;padding:2px 10px;font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">
-                          <span style="width:100px">ID</span>
-                          <span style="width:70px">Size</span>
-                          <span style="width:80px">Tag</span>
-                          <span style="width:56px"></span>
-                          <span>Repository</span>
-                        </div>
-                        <template x-for="img in imageData.images.filter(i => i.status === 'unused')" :key="img.id">
-                          <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#161b22;border:1px solid #21262d;border-radius:6px;margin-bottom:3px;font-size:12px">
-                            <span style="width:100px;flex-shrink:0;font-family:monospace;font-size:11px;color:#8b949e" x-text="img.id"></span>
-                            <span style="width:70px;flex-shrink:0;font-size:11px;color:#c9d1d9" x-text="formatBytes(img.size)"></span>
-                            <span style="width:80px;flex-shrink:0;font-size:11px;color:#3fb950" x-text="img.repoTags[0] ? img.repoTags[0].split(':')[1] || 'latest' : ''"></span>
-                            <button class="mwatch-btn mwatch-btn-remove" style="padding:2px 8px;font-size:11px;flex-shrink:0" @click="removeImage(img.id)" :disabled="imageRemoving[img.id]">
-                              <span x-show="!imageRemoving[img.id]">Remove</span>
-                              <span x-show="imageRemoving[img.id]">...</span>
-                            </button>
-                            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#8b949e" x-text="img.repoTags[0] ? img.repoTags[0].split(':')[0] : ''"></span>
-                          </div>
-                        </template>
-                      </div>
-                    </div>
-                  </template>
-                </div>
-              </template>
-              </div>
-            </div>
-          </div>
 
           <!-- Save bar -->
           <div class="save-bar">
@@ -2430,7 +2543,7 @@
       <p x-text="actionTimeoutDialog.message"></p>
       <template x-if="actionTimeoutDialog.logs && actionTimeoutDialog.logs.length > 0">
         <div>
-          <div style="font-size:11px;color:#6e7681;margin-bottom:6px">Recent logs:</div>
+          <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Recent logs:</div>
           <div class="confirm-logs">
             <template x-for="(line, i) in actionTimeoutDialog.logs" :key="i">
               <div x-text="line"></div>
@@ -2488,7 +2601,8 @@ function app() {
     configDirty: false,
     configError: '',
     configSuccess: '',
-    configSections: { discord: true, behavior: false, display: false, restart: false, memory: false, maintenance: false },
+    configSections: { discord: false, behavior: false, display: false, restart: false },
+    toolsSections: { memory: false, rules: true, imageCleanup: false, volumeCleanup: false },
     imageData: null,
     imageLoading: false,
     imagePruning: false,
@@ -2497,6 +2611,13 @@ function app() {
     unusedListExpanded: false,
     cleanupStatus: null,
     imageError: '',
+    volumeData: null,
+    volumeLoading: false,
+    volumePruning: false,
+    volumeRemoving: {},
+    volumeListExpanded: false,
+    volumeInUseExpanded: false,
+    volumeError: '',
 
     // Webhook testing
     webhookTesting: null,
@@ -2658,6 +2779,9 @@ function app() {
       if (prev === 'sequences' && tab !== 'sequences') {
         this.disconnectSeqSSE();
       }
+      if (tab === 'tools' && !this.config) {
+        this.fetchConfig();
+      }
       if (tab === 'config' && !this.config) {
         this.fetchConfig();
       }
@@ -2671,6 +2795,7 @@ function app() {
         events: 'Container lifecycle events — state changes, health transitions, and memory threshold alerts. Updates in real time.',
         sequences: 'Start and stop containers in order with dependency chains. Required steps must be healthy before the next step runs.',
         network: 'Docker network topology — containers grouped by network. Click a container for details.',
+        tools: 'Memory monitoring and image cleanup tools.',
         config: 'Changes take effect after container restart.',
       };
       return descs[this.activeTab] || '';
@@ -3606,6 +3731,17 @@ function app() {
         .filter(e => e.name === name);
     },
 
+    groupedMemoryWatches() {
+      if (!this.config || !this.config.memoryWatch) return [];
+      const groups = {};
+      this.config.memoryWatch.forEach((e, idx) => {
+        const name = e.name || '';
+        if (!groups[name]) groups[name] = { name, rules: [], container: this.getContainerByName(name) };
+        groups[name].rules.push({ ...e, idx });
+      });
+      return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
+    },
+
     parseMemoryLimit(limit) {
       if (!limit) return 0;
       const match = limit.match(/^(\d+(?:\.\d+)?)([mg])$/i);
@@ -4180,6 +4316,14 @@ function app() {
     },
 
     // ---- Image Management ----
+    async fetchCleanupStatus() {
+      try {
+        const resp = await fetch('/api/image-cleanup/status');
+        const data = await resp.json();
+        this.cleanupStatus = data.lastRun;
+      } catch (e) { /* ignore */ }
+    },
+
     async fetchImages() {
       this.imageLoading = true;
       this.imageError = '';
@@ -4219,6 +4363,49 @@ function app() {
         this.imageError = 'Failed to prune images';
       } finally {
         this.imagePruning = false;
+      }
+    },
+
+    // ---- Volume Management ----
+    async fetchVolumes() {
+      this.volumeLoading = true;
+      this.volumeError = '';
+      try {
+        const resp = await fetch('/api/volumes');
+        if (resp.ok) { this.volumeData = await resp.json(); }
+        else { this.volumeError = 'Failed to load volumes'; }
+      } catch (e) {
+        this.volumeError = 'Failed to connect';
+      } finally {
+        this.volumeLoading = false;
+      }
+    },
+
+    async removeVolume(name) {
+      this.volumeRemoving = { ...this.volumeRemoving, [name]: true };
+      this.volumeError = '';
+      try {
+        const resp = await fetch('/api/volumes/' + encodeURIComponent(name), { method: 'DELETE' });
+        if (resp.ok) { await this.fetchVolumes(); }
+        else { const err = await resp.json().catch(() => ({})); this.volumeError = err.error || 'Failed to remove volume'; }
+      } catch (e) {
+        this.volumeError = 'Failed to remove volume';
+      } finally {
+        this.volumeRemoving = { ...this.volumeRemoving, [name]: false };
+      }
+    },
+
+    async pruneVolumes() {
+      this.volumePruning = true;
+      this.volumeError = '';
+      try {
+        const resp = await fetch('/api/volumes/prune', { method: 'POST' });
+        if (resp.ok) { await this.fetchVolumes(); }
+        else { const err = await resp.json().catch(() => ({})); this.volumeError = err.error || 'Failed to prune volumes'; }
+      } catch (e) {
+        this.volumeError = 'Failed to prune volumes';
+      } finally {
+        this.volumePruning = false;
       }
     },
 
