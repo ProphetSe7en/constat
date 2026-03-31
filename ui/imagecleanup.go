@@ -16,13 +16,14 @@ import (
 
 // ImageCleanupResult holds the result of the last scheduled cleanup
 type ImageCleanupResult struct {
-	Time           time.Time `json:"time"`
-	DryRun         bool      `json:"dryRun"`
-	Mode           string    `json:"mode"`
-	ImagesFound    int       `json:"imagesFound"`
-	ImagesDeleted  int       `json:"imagesDeleted"`
-	SpaceReclaimed int64     `json:"spaceReclaimed"`
-	Error          string    `json:"error,omitempty"`
+	Time            time.Time `json:"time"`
+	DryRun          bool      `json:"dryRun"`
+	Mode            string    `json:"mode"`
+	ImagesFound     int       `json:"imagesFound"`
+	ImagesDeleted   int       `json:"imagesDeleted"`
+	VolumesDeleted  int       `json:"volumesDeleted"`
+	SpaceReclaimed  int64     `json:"spaceReclaimed"`
+	Error           string    `json:"error,omitempty"`
 }
 
 // ImageCleaner runs scheduled image cleanup
@@ -98,17 +99,26 @@ func (ic *ImageCleaner) check(ctx context.Context) {
 		ic.lastRunYear = year
 		ic.lastRunDay = dayOfYear
 		dryRun := cfg.ImageCleanupDryRun == "true"
-		mode := cfg.ImageCleanupMode
-		if mode != "dangling" && mode != "all" {
-			mode = "dangling"
+		orphans := cfg.CleanupOrphanImages == "true"
+		unused := cfg.CleanupUnusedImages == "true"
+		volumes := cfg.CleanupVolumes == "true"
+		if !orphans && !unused && !volumes {
+			return // nothing enabled
 		}
-		ic.runCleanup(ctx, mode, dryRun)
+		ic.runCleanup(ctx, orphans, unused, volumes, dryRun)
 	}
 }
 
-func (ic *ImageCleaner) runCleanup(ctx context.Context, mode string, dryRun bool) {
-	cleanupCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+func (ic *ImageCleaner) runCleanup(ctx context.Context, orphans, unused, volumes, dryRun bool) {
+	cleanupCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
+
+	// Build mode string for logging/display
+	var parts []string
+	if orphans { parts = append(parts, "orphans") }
+	if unused { parts = append(parts, "unused") }
+	if volumes { parts = append(parts, "volumes") }
+	mode := strings.Join(parts, "+")
 
 	result := &ImageCleanupResult{
 		Time:   time.Now(),
@@ -117,48 +127,85 @@ func (ic *ImageCleaner) runCleanup(ctx context.Context, mode string, dryRun bool
 	}
 
 	if dryRun {
-		images, err := ic.app.listImages(cleanupCtx)
-		if err != nil {
-			result.Error = err.Error()
-			log.Printf("ImageCleanup [dry-run]: error listing images: %v", err)
-			ic.setLastResult(result)
-			return
-		}
-
-		var count int
-		var totalSize int64
-		for _, img := range images {
-			if mode == "dangling" && img.Status != "dangling" {
-				continue
+		// Dry-run images
+		if orphans || unused {
+			images, err := ic.app.listImages(cleanupCtx)
+			if err != nil {
+				result.Error = err.Error()
+				log.Printf("Cleanup [dry-run]: error listing images: %v", err)
+				ic.setLastResult(result)
+				return
 			}
-			if mode == "all" && img.Status != "dangling" && img.Status != "unused" {
-				continue
+			for _, img := range images {
+				if orphans && img.Status == "dangling" {
+					result.ImagesFound++
+					result.SpaceReclaimed += img.Size
+				} else if unused && img.Status == "unused" {
+					result.ImagesFound++
+					result.SpaceReclaimed += img.Size
+				}
 			}
-			count++
-			totalSize += img.Size
-			log.Printf("ImageCleanup [dry-run]: would remove %s (%v, %s)", img.ID, img.RepoTags, formatBytesGo(img.Size))
 		}
-
-		result.ImagesFound = count
-		result.SpaceReclaimed = totalSize
-		log.Printf("ImageCleanup [dry-run]: %d images would be removed, %s reclaimable", count, formatBytesGo(totalSize))
+		// Dry-run volumes
+		if volumes {
+			vols, err := ic.app.listVolumes(cleanupCtx)
+			if err != nil {
+				result.Error = err.Error()
+				log.Printf("Cleanup [dry-run]: error listing volumes: %v", err)
+				ic.setLastResult(result)
+				return
+			}
+			for _, v := range vols {
+				if v.Status == "unused" {
+					result.VolumesDeleted++
+				}
+			}
+		}
+		log.Printf("Cleanup [dry-run]: %d images, %d volumes would be removed, %s reclaimable (%s)",
+			result.ImagesFound, result.VolumesDeleted, formatBytesGo(result.SpaceReclaimed), mode)
 	} else {
-		pruneFilters := filters.NewArgs()
-		if mode == "dangling" {
+		// Prune orphan images (dangling)
+		if orphans {
+			pruneFilters := filters.NewArgs()
 			pruneFilters.Add("dangling", "true")
+			report, err := ic.docker.ImagesPrune(cleanupCtx, pruneFilters)
+			if err != nil {
+				result.Error = fmt.Sprintf("orphan prune: %v", err)
+				log.Printf("Cleanup: error pruning orphan images: %v", err)
+				ic.setLastResult(result)
+				return
+			}
+			result.ImagesDeleted += len(report.ImagesDeleted)
+			result.SpaceReclaimed += int64(report.SpaceReclaimed)
 		}
-
-		report, err := ic.docker.ImagesPrune(cleanupCtx, pruneFilters)
-		if err != nil {
-			result.Error = err.Error()
-			log.Printf("ImageCleanup: error pruning images: %v", err)
-			ic.setLastResult(result)
-			return
+		// Prune unused images (tagged but unreferenced)
+		if unused {
+			pruneFilters := filters.NewArgs()
+			pruneFilters.Add("dangling", "false")
+			report, err := ic.docker.ImagesPrune(cleanupCtx, pruneFilters)
+			if err != nil {
+				result.Error = fmt.Sprintf("unused prune: %v", err)
+				log.Printf("Cleanup: error pruning unused images: %v", err)
+				ic.setLastResult(result)
+				return
+			}
+			result.ImagesDeleted += len(report.ImagesDeleted)
+			result.SpaceReclaimed += int64(report.SpaceReclaimed)
 		}
-
-		result.ImagesDeleted = len(report.ImagesDeleted)
-		result.SpaceReclaimed = int64(report.SpaceReclaimed)
-		log.Printf("ImageCleanup: pruned %d images, reclaimed %s (mode=%s)", result.ImagesDeleted, formatBytesGo(result.SpaceReclaimed), mode)
+		// Prune unused volumes
+		if volumes {
+			report, err := ic.docker.VolumesPrune(cleanupCtx, filters.NewArgs())
+			if err != nil {
+				result.Error = fmt.Sprintf("volume prune: %v", err)
+				log.Printf("Cleanup: error pruning volumes: %v", err)
+				ic.setLastResult(result)
+				return
+			}
+			result.VolumesDeleted = len(report.VolumesDeleted)
+			result.SpaceReclaimed += int64(report.SpaceReclaimed)
+		}
+		log.Printf("Cleanup: %d images, %d volumes removed, %s reclaimed (%s)",
+			result.ImagesDeleted, result.VolumesDeleted, formatBytesGo(result.SpaceReclaimed), mode)
 	}
 
 	ic.setLastResult(result)

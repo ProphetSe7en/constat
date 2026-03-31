@@ -30,11 +30,14 @@ type ConfigData struct {
 	MemoryPollInterval    string             `json:"memoryPollInterval"`
 	MemoryDefaultDuration string             `json:"memoryDefaultDuration"`
 	MemoryWatch           []MemoryWatchEntry `json:"memoryWatch"`
-	// Image cleanup
-	ImageCleanupEnabled string `json:"imageCleanupEnabled"` // "true" or "false"
-	ImageCleanupTime    string `json:"imageCleanupTime"`    // "HH:MM"
-	ImageCleanupMode    string `json:"imageCleanupMode"`    // "dangling" or "all"
-	ImageCleanupDryRun  string `json:"imageCleanupDryRun"`  // "true" or "false"
+	// Scheduled cleanup
+	ImageCleanupEnabled  string `json:"imageCleanupEnabled"`  // "true" or "false"
+	ImageCleanupTime     string `json:"imageCleanupTime"`     // "HH:MM"
+	ImageCleanupMode     string `json:"imageCleanupMode"`     // legacy: "dangling" or "all" (migrated to individual toggles)
+	ImageCleanupDryRun   string `json:"imageCleanupDryRun"`   // "true" or "false"
+	CleanupOrphanImages  string `json:"cleanupOrphanImages"`  // "true" or "false"
+	CleanupUnusedImages  string `json:"cleanupUnusedImages"`  // "true" or "false"
+	CleanupVolumes       string `json:"cleanupVolumes"`       // "true" or "false"
 	// Display
 	Timezone       string `json:"timezone"`
 	TimeFormat     string `json:"timeFormat"`     // "24h" or "12h"
@@ -88,6 +91,9 @@ var keyToField = map[string]string{
 	"IMAGE_CLEANUP_TIME":      "imageCleanupTime",
 	"IMAGE_CLEANUP_MODE":      "imageCleanupMode",
 	"IMAGE_CLEANUP_DRY_RUN":   "imageCleanupDryRun",
+	"CLEANUP_ORPHAN_IMAGES":   "cleanupOrphanImages",
+	"CLEANUP_UNUSED_IMAGES":   "cleanupUnusedImages",
+	"CLEANUP_VOLUMES":         "cleanupVolumes",
 	"TIMEZONE":                "timezone",
 	"TIME_FORMAT":             "timeFormat",
 	"DATE_FORMAT":             "dateFormat",
@@ -211,6 +217,25 @@ func ReadConfig(path string) (*ConfigData, error) {
 	data.ImageCleanupDryRun = values["IMAGE_CLEANUP_DRY_RUN"]
 	if data.ImageCleanupDryRun == "" {
 		data.ImageCleanupDryRun = "true"
+	}
+	data.CleanupOrphanImages = values["CLEANUP_ORPHAN_IMAGES"]
+	data.CleanupUnusedImages = values["CLEANUP_UNUSED_IMAGES"]
+	data.CleanupVolumes = values["CLEANUP_VOLUMES"]
+	// Migrate from legacy IMAGE_CLEANUP_MODE if new toggles not set
+	if data.CleanupOrphanImages == "" && data.CleanupUnusedImages == "" {
+		if data.ImageCleanupMode == "all" {
+			data.CleanupOrphanImages = "true"
+			data.CleanupUnusedImages = "true"
+		} else if data.ImageCleanupMode == "dangling" {
+			data.CleanupOrphanImages = "true"
+			data.CleanupUnusedImages = "false"
+		} else {
+			data.CleanupOrphanImages = "false"
+			data.CleanupUnusedImages = "false"
+		}
+	}
+	if data.CleanupVolumes == "" {
+		data.CleanupVolumes = "false"
 	}
 	data.Timezone = values["TIMEZONE"]
 	if data.Timezone == "" {
