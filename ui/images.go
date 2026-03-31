@@ -173,8 +173,9 @@ func (app *App) handlePruneImages(w http.ResponseWriter, r *http.Request) {
 	pruneFilters := filters.NewArgs()
 	if mode == "dangling" {
 		pruneFilters.Add("dangling", "true")
+	} else {
+		pruneFilters.Add("dangling", "false")
 	}
-	// mode == "unused": no filter = prune all unused images (dangling=false equivalent)
 
 	report, err := app.docker.ImagesPrune(ctx, pruneFilters)
 	if err != nil {

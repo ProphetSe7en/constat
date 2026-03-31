@@ -1,9 +1,27 @@
 # Changelog
 
-## v0.9.3
+## v0.9.4
+
+### Features
+- **Tools tab** — New tab between Network and Config for operational tools
+- **Volume Cleanup** — List, inspect, and delete unused Docker volumes with mountpoint display and container tracking
+- **Compact memory watch** — Rules grouped by container with inline progress bars, collapsible section, color-coded actions (notify=yellow, restart=red)
+
+### Improvements
+- **Sticky save bar** — Config/Tools save button stays visible at bottom of viewport
+- **Reorganized Config** — Memory Watch and Image Cleanup moved to Tools tab. Config now has 4 pure settings sections (Discord, Behavior, Display, Auto-Restart)
+- **Font readability** — Bumped font sizes across cleanup sections (10-11px → 12-13px), replaced #6e7681 with #8b949e globally
+- **Consistent delete buttons** — Red "Delete" buttons in first column position across all cleanup lists, renamed from "Remove" for consistency with "Delete all"
+- **Section descriptions** — Prominent 13px descriptions for Memory Watch, Image Cleanup, and Volume Cleanup
 
 ### Bug fixes
-- **CPU avg overflow** — Docker occasionally reports bogus CPU deltas, causing avg values in the millions. Now clamped to sane range and corrupted averages auto-reset on load.
+- **Unused image prune** — Fixed "Delete all unused" doing nothing. Docker API needs `dangling=false` filter to prune tagged unused images
+- **Dry run label** — Clarified that dry run only applies to scheduled cleanup, not manual buttons
+- **CPU avg overflow** — Docker occasionally reports bogus CPU deltas, causing avg values in the millions. Now clamped to sane range and corrupted averages auto-reset on load
+
+### Security
+- **Volume name validation** — Regex validation on volume delete endpoint
+- **Nil pointer guard** — Bounds check on container Names slice in volume listing
 
 ## v0.9.2
 
