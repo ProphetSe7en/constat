@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.5
+
+### Improvements
+- **Unified Cleanup section** — Merged Image Cleanup and Volume Cleanup into single "Cleanup" section under Tools
+- **Scheduled volume prune** — Three individual toggles (orphan images, unused images, unused volumes) replace old Mode dropdown — all default off for safe opt-in
+- **Consistent layout** — Images and Volumes subsections use identical card styling, font sizes, and spacing
+- Migration from legacy `IMAGE_CLEANUP_MODE` to new toggles (existing configs auto-migrate)
+
 ## v0.9.4
 
 ### Features

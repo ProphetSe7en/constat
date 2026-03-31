@@ -571,6 +571,19 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if config.CleanupOrphanImages != "" && config.CleanupOrphanImages != "true" && config.CleanupOrphanImages != "false" {
+		writeError(w, 400, "cleanupOrphanImages must be 'true' or 'false'")
+		return
+	}
+	if config.CleanupUnusedImages != "" && config.CleanupUnusedImages != "true" && config.CleanupUnusedImages != "false" {
+		writeError(w, 400, "cleanupUnusedImages must be 'true' or 'false'")
+		return
+	}
+	if config.CleanupVolumes != "" && config.CleanupVolumes != "true" && config.CleanupVolumes != "false" {
+		writeError(w, 400, "cleanupVolumes must be 'true' or 'false'")
+		return
+	}
+
 	// Validate time format
 	if config.TimeFormat != "" && config.TimeFormat != "24h" && config.TimeFormat != "12h" {
 		writeError(w, 400, "timeFormat must be '24h' or '12h'")
