@@ -160,11 +160,11 @@ func (app *App) handleRemoveImage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"status": "removed"})
 }
 
-// handlePruneImages removes all dangling (or optionally unused) images
+// handlePruneImages removes dangling-only or all unused images
 func (app *App) handlePruneImages(w http.ResponseWriter, r *http.Request) {
 	mode := r.URL.Query().Get("mode")
-	if mode != "dangling" && mode != "unused" {
-		mode = "dangling"
+	if mode != "dangling" {
+		mode = "all"
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
@@ -174,6 +174,7 @@ func (app *App) handlePruneImages(w http.ResponseWriter, r *http.Request) {
 	if mode == "dangling" {
 		pruneFilters.Add("dangling", "true")
 	} else {
+		// dangling=false prunes all unused images (orphan + tagged unused)
 		pruneFilters.Add("dangling", "false")
 	}
 
@@ -185,10 +186,14 @@ func (app *App) handlePruneImages(w http.ResponseWriter, r *http.Request) {
 
 	count := len(report.ImagesDeleted)
 	reclaimed := int64(report.SpaceReclaimed)
-	log.Printf("Pruned %d images (mode=%s), reclaimed %d bytes", count, mode, reclaimed)
+	label := "orphan"
+	if mode == "all" {
+		label = "unused"
+	}
+	log.Printf("Pruned %d %s images, reclaimed %d bytes", count, label, reclaimed)
 
 	if count > 0 {
-		go sendDiscordEmbed("Image Cleanup", fmt.Sprintf("Removed %d %s images, reclaimed %s", count, mode, formatBytesGo(reclaimed)), 0x3fb950)
+		go sendDiscordEmbed("Image Cleanup", fmt.Sprintf("Removed %d %s images, reclaimed %s", count, label, formatBytesGo(reclaimed)), 0x3fb950)
 	}
 
 	writeJSON(w, map[string]interface{}{
