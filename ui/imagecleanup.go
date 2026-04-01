@@ -163,52 +163,56 @@ func (ic *ImageCleaner) runCleanup(ctx context.Context, orphans, unused, volumes
 		}
 		log.Printf("Cleanup [dry-run]: %d images, %d volumes would be removed, %s reclaimable (%s)",
 			result.ImagesFound, result.VolumesDeleted, formatBytesGo(result.SpaceReclaimed), mode)
-	} else {
-		// Prune orphan images (dangling)
-		if orphans {
-			pruneFilters := filters.NewArgs()
-			pruneFilters.Add("dangling", "true")
-			report, err := ic.docker.ImagesPrune(cleanupCtx, pruneFilters)
-			if err != nil {
-				result.Error = fmt.Sprintf("orphan prune: %v", err)
-				log.Printf("Cleanup: error pruning orphan images: %v", err)
-				ic.setLastResult(result)
-				return
-			}
-			result.ImagesDeleted += len(report.ImagesDeleted)
-			result.SpaceReclaimed += int64(report.SpaceReclaimed)
-		}
-		// Prune unused images (tagged but unreferenced)
-		if unused {
-			pruneFilters := filters.NewArgs()
-			pruneFilters.Add("dangling", "false")
-			report, err := ic.docker.ImagesPrune(cleanupCtx, pruneFilters)
-			if err != nil {
-				result.Error = fmt.Sprintf("unused prune: %v", err)
-				log.Printf("Cleanup: error pruning unused images: %v", err)
-				ic.setLastResult(result)
-				return
-			}
-			result.ImagesDeleted += len(report.ImagesDeleted)
-			result.SpaceReclaimed += int64(report.SpaceReclaimed)
-		}
-		// Prune unused volumes
-		if volumes {
-			report, err := ic.docker.VolumesPrune(cleanupCtx, filters.NewArgs())
-			if err != nil {
-				result.Error = fmt.Sprintf("volume prune: %v", err)
-				log.Printf("Cleanup: error pruning volumes: %v", err)
-				ic.setLastResult(result)
-				return
-			}
-			result.VolumesDeleted = len(report.VolumesDeleted)
-			result.SpaceReclaimed += int64(report.SpaceReclaimed)
-		}
-		log.Printf("Cleanup: %d images, %d volumes removed, %s reclaimed (%s)",
-			result.ImagesDeleted, result.VolumesDeleted, formatBytesGo(result.SpaceReclaimed), mode)
+		ic.setLastResult(result)
+		ic.sendCleanupDiscord(result)
+		return
 	}
 
+	// Prune orphan images (dangling)
+	if orphans {
+		pruneFilters := filters.NewArgs()
+		pruneFilters.Add("dangling", "true")
+		report, err := ic.docker.ImagesPrune(cleanupCtx, pruneFilters)
+		if err != nil {
+			result.Error = fmt.Sprintf("orphan prune: %v", err)
+			log.Printf("Cleanup: error pruning orphan images: %v", err)
+			ic.setLastResult(result)
+			return
+		}
+		result.ImagesDeleted += len(report.ImagesDeleted)
+		result.SpaceReclaimed += int64(report.SpaceReclaimed)
+	}
+	// Prune unused images (tagged but unreferenced)
+	if unused {
+		pruneFilters := filters.NewArgs()
+		pruneFilters.Add("dangling", "false")
+		report, err := ic.docker.ImagesPrune(cleanupCtx, pruneFilters)
+		if err != nil {
+			result.Error = fmt.Sprintf("unused prune: %v", err)
+			log.Printf("Cleanup: error pruning unused images: %v", err)
+			ic.setLastResult(result)
+			return
+		}
+		result.ImagesDeleted += len(report.ImagesDeleted)
+		result.SpaceReclaimed += int64(report.SpaceReclaimed)
+	}
+	// Prune unused volumes
+	if volumes {
+		report, err := ic.docker.VolumesPrune(cleanupCtx, filters.NewArgs())
+		if err != nil {
+			result.Error = fmt.Sprintf("volume prune: %v", err)
+			log.Printf("Cleanup: error pruning volumes: %v", err)
+			ic.setLastResult(result)
+			return
+		}
+		result.VolumesDeleted = len(report.VolumesDeleted)
+		result.SpaceReclaimed += int64(report.SpaceReclaimed)
+	}
+	log.Printf("Cleanup: %d images, %d volumes removed, %s reclaimed (%s)",
+		result.ImagesDeleted, result.VolumesDeleted, formatBytesGo(result.SpaceReclaimed), mode)
+
 	ic.setLastResult(result)
+	ic.sendCleanupDiscord(result)
 }
 
 var timePattern24 = regexp.MustCompile(`^(\d{1,2}):(\d{2})$`)
@@ -245,6 +249,48 @@ func parseCleanupTime(s string) ([2]int, error) {
 	}
 
 	return [2]int{}, fmt.Errorf("invalid time format: %s (expected HH:MM or HH:MM AM/PM)", s)
+}
+
+func (ic *ImageCleaner) sendCleanupDiscord(result *ImageCleanupResult) {
+	var title, description string
+	var color int
+
+	if result.DryRun {
+		title = "Scheduled Cleanup — Dry Run"
+		color = 0x58a6ff // blue
+		var parts []string
+		if result.ImagesFound > 0 {
+			parts = append(parts, fmt.Sprintf("%d images (%s)", result.ImagesFound, formatBytesGo(result.SpaceReclaimed)))
+		}
+		if result.VolumesDeleted > 0 {
+			parts = append(parts, fmt.Sprintf("%d volumes", result.VolumesDeleted))
+		}
+		if len(parts) == 0 {
+			description = "Nothing to clean up"
+		} else {
+			description = "Would remove: " + strings.Join(parts, ", ")
+		}
+	} else if result.Error != "" {
+		title = "Scheduled Cleanup Failed"
+		color = 0xed4245 // red
+		description = result.Error
+	} else {
+		title = "Scheduled Cleanup"
+		color = 0x3fb950 // green
+		var parts []string
+		if result.ImagesDeleted > 0 {
+			parts = append(parts, fmt.Sprintf("%d images", result.ImagesDeleted))
+		}
+		if result.VolumesDeleted > 0 {
+			parts = append(parts, fmt.Sprintf("%d volumes", result.VolumesDeleted))
+		}
+		if len(parts) == 0 {
+			return // nothing was cleaned, don't notify
+		}
+		description = fmt.Sprintf("Removed %s, reclaimed %s", strings.Join(parts, " + "), formatBytesGo(result.SpaceReclaimed))
+	}
+
+	sendDiscordEmbed(title, description, color)
 }
 
 func formatBytesGo(b int64) string {

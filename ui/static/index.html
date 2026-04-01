@@ -852,7 +852,7 @@
                 <template x-for="mw in getMemoryWatches(c.name)" :key="mw.idx">
                   <div style="margin-bottom:8px">
                     <div style="display:flex;justify-content:space-between;font-size:11px;color:#8b949e;margin-bottom:3px">
-                      <span><span x-text="mw.action"></span> at <span x-text="mw.limit"></span></span>
+                      <span><span x-text="mw.action"></span> at <span x-text="formatLimit(mw.limit)"></span></span>
                       <span x-text="memoryWatchPercentForEntry(c, mw).toFixed(0) + '%'"></span>
                     </div>
                     <div class="mwatch-bar">
@@ -862,7 +862,7 @@
                     </div>
                     <div style="display:flex;justify-content:space-between;font-size:10px;color:#8b949e;margin-top:2px">
                       <span x-text="formatBytes(c.memory)"></span>
-                      <span x-text="mw.limit"></span>
+                      <span x-text="formatLimit(mw.limit)"></span>
                     </div>
                     <div x-show="mwatchElapsedSec(c.name, mw.idx) >= 0"
                       style="font-size:11px;margin-top:3px;font-weight:600"
@@ -1270,7 +1270,7 @@
                               <template x-if="mwatchEditIdx !== mw.idx">
                                 <div>
                                   <div class="mwatch-info" style="margin-bottom:6px">
-                                    <span><span style="color:#8b949e">Limit:</span> <span x-text="mw.limit"></span></span>
+                                    <span><span style="color:#8b949e">Limit:</span> <span x-text="formatLimit(mw.limit)"></span></span>
                                     <span><span style="color:#8b949e">Action:</span> <span x-text="mw.action"></span></span>
                                     <span x-show="mw.duration"><span style="color:#8b949e">Duration:</span> <span x-text="mw.duration + 's'"></span></span>
                                   </div>
@@ -1282,7 +1282,7 @@
                                   <div style="display:flex;justify-content:space-between;font-size:11px;color:#8b949e;margin-top:2px">
                                     <span x-text="formatBytes(c.memory)"></span>
                                     <span x-text="memoryWatchPercentForEntry(c, mw).toFixed(0) + '%'"></span>
-                                    <span x-text="mw.limit"></span>
+                                    <span x-text="formatLimit(mw.limit)"></span>
                                   </div>
                                   <div x-show="mwatchElapsedSec(c.name, mw.idx) >= 0"
                                     style="font-size:11px;margin-top:4px;font-weight:600"
@@ -1758,7 +1758,7 @@
                         <!-- Action + limit label -->
                         <div style="min-width:120px;flex-shrink:0">
                           <span style="font-size:11px;font-weight:600" :style="entry.action === 'restart' ? 'color:#f85149' : 'color:#d29922'" x-text="entry.action"></span>
-                          <span style="font-size:11px;color:#c9d1d9;margin-left:2px">at <span x-text="entry.limit"></span></span>
+                          <span style="font-size:11px;color:#c9d1d9;margin-left:2px">at <span x-text="formatLimit(entry.limit)"></span></span>
                           <span x-show="entry.duration" style="font-size:10px;color:#8b949e;margin-left:4px" x-text="'(' + entry.duration + 's)'"></span>
                         </div>
                         <!-- Progress bar -->
@@ -3739,6 +3739,14 @@ function app() {
       if (!match) return 0;
       const val = parseFloat(match[1]);
       return match[2].toLowerCase() === 'g' ? val * 1073741824 : val * 1048576;
+    },
+
+    formatLimit(limit) {
+      if (!limit) return '';
+      const match = limit.match(/^(\d+(?:\.\d+)?)([mg])$/i);
+      if (!match) return limit;
+      const val = match[1];
+      return match[2].toLowerCase() === 'g' ? val + ' GiB' : val + ' MiB';
     },
 
     memoryWatchPercentForEntry(container, mw) {

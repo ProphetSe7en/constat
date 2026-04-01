@@ -477,6 +477,40 @@ func containerStopOptions(timeoutSeconds int) container.StopOptions {
 	return container.StopOptions{Timeout: &t}
 }
 
+// sendDiscordEmbed sends a Discord embed to the health webhook
+func sendDiscordEmbed(title, description string, color int) {
+	cfg, err := ReadConfig(configPath)
+	if err != nil || cfg.EnableDiscord != "true" || cfg.WebhookHealth == "" {
+		return
+	}
+	botName := cfg.BotName
+	if botName == "" {
+		botName = "Constat"
+	}
+	serverLabel := ""
+	if cfg.ServerLabel != "" {
+		serverLabel = " (" + cfg.ServerLabel + ")"
+	}
+	payload := map[string]any{
+		"username": botName,
+		"embeds": []map[string]any{{
+			"author":      map[string]string{"name": fmt.Sprintf("🧹 %s: %s", botName, title)},
+			"description": description + serverLabel,
+			"color":       color,
+			"footer":      map[string]string{"text": fmt.Sprintf("Constat v%s by ProphetSe7en", constatVersion)},
+			"timestamp":   time.Now().UTC().Format(time.RFC3339),
+		}},
+	}
+	body, _ := json.Marshal(payload)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(cfg.WebhookHealth, "application/json", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("Discord cleanup: send failed: %v", err)
+		return
+	}
+	resp.Body.Close()
+}
+
 const configPath = "/config/constat.conf"
 const configSamplePath = "/config/constat.conf.sample"
 
