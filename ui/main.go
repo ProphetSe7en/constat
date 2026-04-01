@@ -176,6 +176,7 @@ func main() {
 	}
 }
 
+const constatVersion = "0.9.6"
 const restartDisabledPath = "/config/restart_disabled.json"
 
 // App holds shared application state

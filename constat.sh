@@ -23,7 +23,7 @@ ENABLE_DISCORD="${ENABLE_DISCORD:-true}"
 DISCORD_WEBHOOK_STATE="${DISCORD_WEBHOOK_STATE:-}"
 DISCORD_WEBHOOK_HEALTH="${DISCORD_WEBHOOK_HEALTH:-}"
 BOT_NAME="${BOT_NAME:-Constat}"
-CONSTAT_VERSION="0.6.0"
+CONSTAT_VERSION="0.9.6"
 SERVER_LABEL="${SERVER_LABEL:-Unraid}"
 COLOR_STARTED="${COLOR_STARTED:-2ecc71}"
 COLOR_STOPPED="${COLOR_STOPPED:-95a5a6}"
@@ -72,6 +72,7 @@ declare -A MEM_EXCEEDED_SINCE=()
 declare -A MEM_LAST_ACTION=()
 declare -A MEMORY_RESTARTING=()
 LAST_MEM_POLL=0
+MEM_CONFIG_MTIME=""
 TIMER_PID=""
 EVENTS_PID=""
 RUNNING=true
@@ -261,7 +262,67 @@ parse_memory_watch() {
     done
 }
 
+reload_memory_config() {
+    [ ! -f "$CONFIG_FILE" ] && return 0
+    local current_mtime
+    current_mtime=$(stat -c %Y "$CONFIG_FILE" 2>/dev/null) || return 0
+    [ "$current_mtime" = "$MEM_CONFIG_MTIME" ] && return 0
+    MEM_CONFIG_MTIME="$current_mtime"
+
+    # Save old rules for timer preservation
+    local -a OLD_RULE_NAME=("${MEM_RULE_NAME[@]}")
+    local -a OLD_RULE_LIMIT=("${MEM_RULE_LIMIT[@]}")
+    local -a OLD_RULE_ACTION=("${MEM_RULE_ACTION[@]}")
+    local -a OLD_RULE_DURATION=("${MEM_RULE_DURATION[@]}")
+
+    # Re-source config
+    source "$CONFIG_FILE"
+    MEMORY_PAUSED="${MEMORY_PAUSED:-false}"
+    MEMORY_POLL_INTERVAL="${MEMORY_POLL_INTERVAL:-30}"
+    MEMORY_DEFAULT_DURATION="${MEMORY_DEFAULT_DURATION:-300}"
+    if [ -z "${MEMORY_WATCH+x}" ]; then MEMORY_WATCH=(); fi
+
+    # Re-parse rules
+    parse_memory_watch
+
+    # Preserve timers for rules that haven't changed
+    local new_idx
+    for new_idx in "${!MEM_RULE_NAME[@]}"; do
+        local old_idx
+        for old_idx in "${!OLD_RULE_NAME[@]}"; do
+            if [ "${MEM_RULE_NAME[$new_idx]}" = "${OLD_RULE_NAME[$old_idx]}" ] &&
+               [ "${MEM_RULE_LIMIT[$new_idx]}" = "${OLD_RULE_LIMIT[$old_idx]}" ] &&
+               [ "${MEM_RULE_ACTION[$new_idx]}" = "${OLD_RULE_ACTION[$old_idx]}" ] &&
+               [ "${MEM_RULE_DURATION[$new_idx]}" = "${OLD_RULE_DURATION[$old_idx]}" ]; then
+                # Rule unchanged — migrate timers from old index to new index
+                local old_key="rule_${old_idx}" new_key="rule_${new_idx}"
+                if [ -n "${MEM_EXCEEDED_SINCE[$old_key]+x}" ]; then
+                    MEM_EXCEEDED_SINCE[$new_key]="${MEM_EXCEEDED_SINCE[$old_key]}"
+                fi
+                if [ -n "${MEM_LAST_ACTION[$old_key]+x}" ]; then
+                    MEM_LAST_ACTION[$new_key]="${MEM_LAST_ACTION[$old_key]}"
+                fi
+                break
+            fi
+        done
+    done
+
+    # Clean up timers for rules that no longer exist
+    local key
+    for key in "${!MEM_EXCEEDED_SINCE[@]}"; do
+        local idx="${key#rule_}"
+        [ -z "${MEM_RULE_NAME[$idx]+x}" ] && unset "MEM_EXCEEDED_SINCE[$key]"
+    done
+    for key in "${!MEM_LAST_ACTION[@]}"; do
+        local idx="${key#rule_}"
+        [ -z "${MEM_RULE_NAME[$idx]+x}" ] && unset "MEM_LAST_ACTION[$key]"
+    done
+
+    log "MEMORY: Config reloaded — ${#MEM_RULE_NAME[@]} rules, paused=$MEMORY_PAUSED, poll=${MEMORY_POLL_INTERVAL}s"
+}
+
 memory_check() {
+    reload_memory_config
     [ "$MEMORY_PAUSED" = "true" ] && return 0
     [ ${#MEM_RULE_NAME[@]} -eq 0 ] && return 0
 
@@ -587,6 +648,7 @@ log "Batch window: ${BATCH_WINDOW}s | Exclude: ${EXCLUDE_CONTAINERS}"
 log "Restart label: ${RESTART_LABEL} | Cooldown: ${RESTART_COOLDOWN}s | Max: ${MAX_RESTARTS}"
 
 # Parse memory watch config
+MEM_CONFIG_MTIME=$(stat -c %Y "$CONFIG_FILE" 2>/dev/null || echo "")
 parse_memory_watch
 if [ ${#MEM_RULE_NAME[@]} -gt 0 ]; then
     if [ "$MEMORY_PAUSED" = "true" ]; then

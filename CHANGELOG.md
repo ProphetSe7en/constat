@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9.6
+
+### Features
+- **Memory watch hot-reload** — Changing thresholds, actions, or adding/removing rules takes effect immediately without container restart. Timers are preserved for unchanged rules.
+- **Cleanup Discord notifications** — Scheduled cleanup, manual image prune, and manual volume prune now send Discord notifications via the health webhook with summary of what was removed.
+
+### Bug fixes
+- **Version in Discord footer** — Was hardcoded as v0.6.0, now shows correct version in all Discord notifications.
+- **Memory watch unit inconsistency** — Thresholds displayed as "512m"/"1.5g" while actual usage showed "512 MiB"/"1.5 GiB". Both now use consistent MiB/GiB format.
+
 ## v0.9.5
 
 ### Improvements
