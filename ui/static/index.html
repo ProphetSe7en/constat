@@ -329,7 +329,7 @@
   .color-field { display: flex; align-items: center; gap: 8px; }
   .color-preview { width: 20px; height: 20px; border-radius: 4px; border: 1px solid #30363d; flex-shrink: 0; }
   .color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; max-width: 520px; }
-  .save-bar { position: sticky; bottom: 0; padding: 16px 24px; display: flex; gap: 12px; align-items: center; background: #161b22; border-top: 1px solid #30363d; z-index: 10; }
+  .save-bar { position: sticky; bottom: 0; padding: 16px 24px; margin: 0 24px; display: flex; gap: 12px; align-items: center; background: #161b22; border: 1px solid #21262d; border-radius: 8px; z-index: 10; }
   .save-btn { padding: 8px 24px; border-radius: 6px; background: #1f6feb; border: none; color: #fff; font-size: 13px; cursor: pointer; font-weight: 500; }
   .save-btn:hover { background: #388bfd; }
   .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -1833,16 +1833,16 @@
                 <div class="config-toggle" :class="{ on: config.imageCleanupDryRun === 'true' }" @click="config.imageCleanupDryRun = config.imageCleanupDryRun === 'true' ? 'false' : 'true'; configDirty = true"></div>
               </div>
             </div>
-            <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
-              <div style="display:flex;align-items:center;gap:6px">
-                <div class="config-toggle" :class="{ on: config.cleanupOrphanImages === 'true' }" @click="config.cleanupOrphanImages = config.cleanupOrphanImages === 'true' ? 'false' : 'true'; configDirty = true"></div>
+            <div style="display:flex;gap:20px;align-items:center;margin-bottom:6px">
+              <div style="display:flex;align-items:center;gap:8px" :style="'display:flex;align-items:center;gap:8px' + (config.cleanupUnusedImages === 'true' ? ';opacity:0.4;pointer-events:none' : '')">
+                <div class="config-toggle" :class="{ on: config.cleanupOrphanImages === 'true' || config.cleanupUnusedImages === 'true' }" @click="config.cleanupOrphanImages = config.cleanupOrphanImages === 'true' ? 'false' : 'true'; configDirty = true"></div>
                 <span style="font-size:12px;color:#c9d1d9">Orphan images</span>
               </div>
-              <div style="display:flex;align-items:center;gap:6px">
+              <div style="display:flex;align-items:center;gap:8px">
                 <div class="config-toggle" :class="{ on: config.cleanupUnusedImages === 'true' }" @click="config.cleanupUnusedImages = config.cleanupUnusedImages === 'true' ? 'false' : 'true'; configDirty = true"></div>
-                <span style="font-size:12px;color:#c9d1d9">Unused images</span>
+                <span style="font-size:12px;color:#c9d1d9">All unused images <span style="color:#8b949e">(incl. orphans)</span></span>
               </div>
-              <div style="display:flex;align-items:center;gap:6px">
+              <div style="display:flex;align-items:center;gap:8px">
                 <div class="config-toggle" :class="{ on: config.cleanupVolumes === 'true' }" @click="config.cleanupVolumes = config.cleanupVolumes === 'true' ? 'false' : 'true'; configDirty = true"></div>
                 <span style="font-size:12px;color:#c9d1d9">Unused volumes</span>
               </div>
@@ -1894,6 +1894,19 @@
 
                 <div x-show="imageData.dangling === 0 && imageData.unused === 0" style="font-size:12px;color:#3fb950;margin-bottom:12px">No orphan or unused images — nothing to clean up.</div>
 
+                <!-- Delete all buttons -->
+                <div x-show="imageData.dangling > 0 || imageData.unused > 0" style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+                  <button class="mwatch-btn" style="padding:4px 12px;font-size:12px;color:#f85149" x-show="imageData.dangling > 0" @click="pruneImages('dangling')" :disabled="imagePruning">
+                    <span x-show="!imagePruning">Delete orphans</span>
+                    <span x-show="imagePruning">Deleting...</span>
+                  </button>
+                  <button class="mwatch-btn" style="padding:4px 12px;font-size:12px;color:#d29922" @click="pruneImages('all')" :disabled="imagePruning">
+                    <span x-show="!imagePruning">Delete all unused <span style="color:#8b949e">(includes orphans)</span></span>
+                    <span x-show="imagePruning">Deleting...</span>
+                  </button>
+                  <span style="font-size:11px;color:#8b949e" x-show="imageData.reclaimableSize > 0" x-text="formatBytes(imageData.reclaimableSize) + ' reclaimable'"></span>
+                </div>
+
                 <!-- Orphan Images -->
                 <template x-if="imageData.dangling > 0">
                   <div style="margin-bottom:16px">
@@ -1903,16 +1916,12 @@
                         Orphan Images
                         <span style="font-weight:400;color:#8b949e" x-text="'(' + imageData.dangling + ')'"></span>
                       </span>
-                      <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;color:#f85149" @click="pruneImages('dangling')" :disabled="imagePruning">
-                        <span x-show="!imagePruning">Delete all orphans</span>
-                        <span x-show="imagePruning">Deleting...</span>
-                      </button>
                     </div>
                     <div style="font-size:12px;color:#8b949e;margin-bottom:8px">Untagged images from previous builds — always safe to remove.</div>
                     <div x-show="orphanListExpanded" x-transition>
                       <template x-for="img in imageData.images.filter(i => i.status === 'dangling')" :key="img.id">
                         <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#0d1117;border:1px solid #21262d;border-radius:6px;margin-bottom:3px;font-size:13px">
-                          <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;flex-shrink:0;color:#f85149;border-color:#f8514933" @click="removeImage(img.id)" :disabled="imageRemoving[img.id]">
+                          <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;flex-shrink:0;color:#f85149;border-color:#f8514933" @click.stop="removeImage(img.id)" :disabled="!!imageRemoving[img.id]">
                             <span x-show="!imageRemoving[img.id]">Delete</span>
                             <span x-show="imageRemoving[img.id]">...</span>
                           </button>
@@ -1934,16 +1943,12 @@
                         Unused Images
                         <span style="font-weight:400;color:#8b949e" x-text="'(' + imageData.unused + ')'"></span>
                       </span>
-                      <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;color:#d29922" @click="pruneImages('unused')" :disabled="imagePruning">
-                        <span x-show="!imagePruning">Delete all unused</span>
-                        <span x-show="imagePruning">Deleting...</span>
-                      </button>
                     </div>
                     <div style="font-size:12px;color:#8b949e;margin-bottom:8px">Tagged images not used by any container (running or stopped).</div>
                     <div x-show="unusedListExpanded" x-transition>
                       <template x-for="img in imageData.images.filter(i => i.status === 'unused')" :key="img.id">
                         <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#0d1117;border:1px solid #21262d;border-radius:6px;margin-bottom:3px;font-size:13px">
-                          <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;flex-shrink:0;color:#f85149;border-color:#f8514933" @click="removeImage(img.id)" :disabled="imageRemoving[img.id]">
+                          <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;flex-shrink:0;color:#f85149;border-color:#f8514933" @click.stop="removeImage(img.id)" :disabled="!!imageRemoving[img.id]">
                             <span x-show="!imageRemoving[img.id]">Delete</span>
                             <span x-show="imageRemoving[img.id]">...</span>
                           </button>
@@ -1995,7 +2000,7 @@
                     <div x-show="volumeListExpanded" x-transition>
                       <template x-for="vol in volumeData.volumes.filter(v => v.status === 'unused')" :key="vol.name">
                         <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#0d1117;border:1px solid #21262d;border-radius:6px;margin-bottom:3px">
-                          <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;flex-shrink:0;color:#f85149;border-color:#f8514933" @click="removeVolume(vol.name)" :disabled="volumeRemoving[vol.name]">
+                          <button class="mwatch-btn" style="padding:2px 8px;font-size:12px;flex-shrink:0;color:#f85149;border-color:#f8514933" @click.stop="removeVolume(vol.name)" :disabled="!!volumeRemoving[vol.name]">
                             <span x-show="!volumeRemoving[vol.name]">Delete</span>
                             <span x-show="volumeRemoving[vol.name]">...</span>
                           </button>
@@ -2586,7 +2591,7 @@ function app() {
     eventsPage: 0,
 
     // Config tab
-    config: null,
+    config: { memoryWatch: [], memoryPaused: 'false', memoryPollInterval: '30', memoryDefaultDuration: '300', imageCleanupEnabled: 'false', imageCleanupTime: '03:00', imageCleanupDryRun: 'false', cleanupOrphanImages: 'false', cleanupUnusedImages: 'false', cleanupVolumes: 'false', enableDiscord: 'false', webhookState: '', webhookHealth: '', botName: 'Constat', serverLabel: '', batchWindow: '5', excludeContainers: '', summaryInterval: '21600', restartLabel: 'constat.restart', restartCooldown: '300', maxRestarts: '3', timezone: '', timeFormat: '24h', dateFormat: 'YYYY-MM-DD', showStats: 'true', showCharts: 'true', colorStarted: '2ecc71', colorStopped: '95a5a6', colorDied: 'ed4245', colorUnhealthy: 'e74c3c', colorRecovered: '3498db' },
     configLoading: false,
     configSaving: false,
     configDirty: false,
@@ -4355,7 +4360,7 @@ function app() {
       this.imagePruning = true;
       this.imageError = '';
       try {
-        const resp = await fetch('/api/images/prune?mode=' + mode, { method: 'POST' });
+        const resp = await fetch('/api/images/prune?mode=' + (mode || 'all'), { method: 'POST' });
         if (resp.ok) { await this.fetchImages(); }
         else { const err = await resp.json().catch(() => ({})); this.imageError = err.error || 'Failed to prune images'; }
       } catch (e) {
