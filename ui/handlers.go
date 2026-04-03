@@ -477,10 +477,17 @@ func containerStopOptions(timeoutSeconds int) container.StopOptions {
 	return container.StopOptions{Timeout: &t}
 }
 
-// sendDiscordEmbed sends a Discord embed to the health webhook
-func sendDiscordEmbed(title, description string, color int) {
+// sendDiscordMaintenance sends a Discord embed to the maintenance webhook (falls back to health webhook)
+func sendDiscordMaintenance(title, description string, color int) {
 	cfg, err := ReadConfig(configPath)
-	if err != nil || cfg.EnableDiscord != "true" || cfg.WebhookHealth == "" {
+	if err != nil || cfg.EnableDiscord != "true" {
+		return
+	}
+	webhook := cfg.WebhookMaintenance
+	if webhook == "" {
+		webhook = cfg.WebhookHealth // fallback for backwards compatibility
+	}
+	if webhook == "" {
 		return
 	}
 	botName := cfg.BotName
@@ -503,9 +510,9 @@ func sendDiscordEmbed(title, description string, color int) {
 	}
 	body, _ := json.Marshal(payload)
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(cfg.WebhookHealth, "application/json", bytes.NewReader(body))
+	resp, err := client.Post(webhook, "application/json", bytes.NewReader(body))
 	if err != nil {
-		log.Printf("Discord cleanup: send failed: %v", err)
+		log.Printf("Discord maintenance: send failed: %v", err)
 		return
 	}
 	resp.Body.Close()
@@ -548,7 +555,12 @@ func (app *App) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "Failed to read config")
 		return
 	}
-	writeJSON(w, config)
+	// Attach version to response (read-only, not saved to config file)
+	resp := struct {
+		ConfigData
+		Version string `json:"version"`
+	}{*config, constatVersion}
+	writeJSON(w, resp)
 }
 
 func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
@@ -560,7 +572,7 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate webhook URLs
-	for _, url := range []string{config.WebhookState, config.WebhookHealth} {
+	for _, url := range []string{config.WebhookState, config.WebhookHealth, config.WebhookMaintenance} {
 		if url != "" && !validWebhookURL.MatchString(url) {
 			writeError(w, 400, "Invalid webhook URL: must start with https://discord.com/api/webhooks/ or https://discordapp.com/api/webhooks/")
 			return

@@ -135,6 +135,12 @@ func main() {
 	mux.HandleFunc("POST /api/images/prune", app.handlePruneImages)
 	mux.HandleFunc("GET /api/image-cleanup/status", app.handleImageCleanupStatus)
 
+	// Categories
+	cats := newCategoryStore()
+	app.categories = cats
+	mux.HandleFunc("GET /api/categories", cats.handleListCategories)
+	mux.HandleFunc("PUT /api/categories", cats.handleUpdateCategories)
+
 	// Volume management
 	mux.HandleFunc("GET /api/volumes", app.handleListVolumes)
 	mux.HandleFunc("DELETE /api/volumes/{name}", app.handleRemoveVolume)
@@ -176,7 +182,7 @@ func main() {
 	}
 }
 
-const constatVersion = "0.9.6"
+const constatVersion = "0.9.7"
 const restartDisabledPath = "/config/restart_disabled.json"
 
 // App holds shared application state
@@ -187,6 +193,7 @@ type App struct {
 	stats           *StatsCollector
 	sequences       *SequenceExecutor
 	imageCleaner    *ImageCleaner
+	categories      *categoryStore
 	restartDisabled map[string]bool
 	restartMu       sync.RWMutex
 }

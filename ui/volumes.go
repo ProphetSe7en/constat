@@ -162,7 +162,7 @@ func (app *App) handlePruneVolumes(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Pruned %d volumes, reclaimed %d bytes", count, reclaimed)
 
 	if count > 0 {
-		go sendDiscordEmbed("Volume Cleanup", fmt.Sprintf("Removed %d volumes, reclaimed %s", count, formatBytesGo(reclaimed)), 0x3fb950)
+		go sendDiscordMaintenance("Volume Cleanup", fmt.Sprintf("Removed %d volumes, reclaimed %s", count, formatBytesGo(reclaimed)), 0x3fb950)
 	}
 
 	writeJSON(w, map[string]interface{}{

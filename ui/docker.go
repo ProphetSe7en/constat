@@ -35,7 +35,8 @@ type Container struct {
 	RestartPolicy   string      `json:"restartPolicy"`
 	HealthcheckCmd  string      `json:"healthcheckCmd"`
 	Icon            string      `json:"icon,omitempty"`
-	InternalPorts   []uint16    `json:"-"` // internal container ports, used for healthcheck suggestions
+	NetParent       string      `json:"netParent,omitempty"` // parent container name when using container:X network mode
+	InternalPorts   []uint16    `json:"-"`                   // internal container ports, used for healthcheck suggestions
 }
 
 // ListContainers returns all containers with their current state and resource usage
@@ -131,6 +132,7 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 			sort.Strings(networks)
 		}
 		// Containers using another container's network (e.g. container:vpn-gateway)
+		netParent := ""
 		if len(networks) == 0 && inspect.HostConfig != nil {
 			mode := string(inspect.HostConfig.NetworkMode)
 			if strings.HasPrefix(mode, "container:") {
@@ -138,6 +140,7 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 				if resolved, ok := idToName[ref]; ok {
 					ref = resolved
 				}
+				netParent = ref
 				networks = []string{"→ " + ref}
 			} else if mode == "host" {
 				networks = []string{"host"}
@@ -158,6 +161,7 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 			RestartPolicy:   restartPolicy,
 			HealthcheckCmd:  healthcheckCmd,
 			Icon:            icon,
+			NetParent:       netParent,
 			InternalPorts:   internalPorts,
 			Networks:        networks,
 		}

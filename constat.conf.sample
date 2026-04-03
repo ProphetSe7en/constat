@@ -13,8 +13,11 @@ ENABLE_DISCORD="true"
 # State changes (start, stop, restart, die)
 DISCORD_WEBHOOK_STATE=""
 
-# Health issues (unhealthy, recovered)
+# Health issues (unhealthy, recovered, memory watch)
 DISCORD_WEBHOOK_HEALTH=""
+
+# Maintenance (image cleanup, volume cleanup — falls back to Health if empty)
+DISCORD_WEBHOOK_MAINTENANCE=""
 
 #=== IDENTITY ================================================================#
 # How Constat identifies itself in Discord messages
