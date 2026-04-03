@@ -16,8 +16,9 @@ const categoriesPath = "/config/categories.json"
 type Category struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
-	Containers  []string `json:"containers"` // container names
-	Order       int      `json:"order"`      // display order (lower = first)
+	Color       string   `json:"color,omitempty"`  // border color hex (e.g. "#58a6ff")
+	Containers  []string `json:"containers"`       // container names
+	Order       int      `json:"order"`             // display order (lower = first)
 }
 
 type categoryStore struct {

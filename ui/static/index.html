@@ -102,6 +102,16 @@
   .badge-stopped { background: #1c1c1c; color: #636e7b; border: 1px solid #30363d; }
   .badge-paused { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
 
+  /* Health suggestion tooltip */
+  .hc-tip-wrap { position: relative; display: inline-flex; }
+  .hc-tip { display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #1c2128; border: 1px solid #30363d; border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #c9d1d9; white-space: normal; max-width: 400px; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.4); line-height: 1.5; font-weight: 400; word-break: break-all; cursor: text; user-select: text; }
+  .hc-tip-wrap:hover .hc-tip { display: block; }
+
+  /* Update badge */
+  .badge-uptodate { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
+  .badge-update { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
+  .badge-unchecked { background: #1c1c1c; color: #636e7b; border: 1px solid #30363d; }
+
   /* Restart label */
   .label-yes { color: #3fb950; }
   .label-no { color: #484f58; }
@@ -711,7 +721,7 @@
       <div class="stat"><span class="dot dot-green"></span> <span class="stat-num" x-text="summary.running"></span> running</div>
       <div class="stat"><span class="dot dot-green"></span> <span class="stat-num" x-text="summary.healthy"></span> healthy</div>
       <div class="stat"><span class="dot dot-red"></span> <span class="stat-num" x-text="summary.unhealthy"></span> unhealthy</div>
-      <div class="stat"><span class="dot dot-yellow"></span> <span class="stat-num" x-text="summary.noCheck"></span> no check</div>
+      <div class="stat"><span class="dot dot-yellow"></span> <span class="stat-num" x-text="summary.noCheck"></span> no health</div>
       <div class="stat"><span class="dot dot-grey"></span> <span class="stat-num" x-text="summary.stopped"></span> stopped</div>
       <div class="header-live" x-show="statsSSEConnected">
         <span class="live-dot-sm"></span> Live
@@ -836,7 +846,7 @@
             <span class="mobile-card-state" :class="'csi-' + c.state" x-text="c.state"></span>
           </div>
           <div class="mobile-card-metrics">
-            <span class="badge" :class="healthBadgeClass(c)" x-text="healthLabel(c)"></span>
+            <span x-show="healthLabel(c)" class="badge" :class="healthBadgeClass(c)" x-text="healthLabel(c)"></span>
             <template x-if="c.state === 'running' && config && config.showStats === 'true'">
               <span class="mobile-card-metric"><span style="color:#58a6ff">CPU</span> <span class="mobile-card-metric-val" x-text="c.cpu.toFixed(1) + '%'"></span></span>
             </template>
@@ -986,15 +996,20 @@
           <span class="pill-num" x-text="summary.unhealthy"></span>
           <span>Unhealthy</span>
         </div>
-        <div class="filter-pill" :class="{ active: activeFilter === 'No Check' }" @click="activeFilter = 'No Check'">
+        <div class="filter-pill" :class="{ active: activeFilter === 'No Health' }" @click="activeFilter = 'No Health'">
           <span class="pill-dot dot-yellow"></span>
           <span class="pill-num" x-text="summary.noCheck"></span>
-          <span>No Check</span>
+          <span>No Health</span>
         </div>
         <div class="filter-pill" :class="{ active: activeFilter === 'Stopped' }" @click="activeFilter = 'Stopped'">
           <span class="pill-dot dot-grey"></span>
           <span class="pill-num" x-text="summary.stopped"></span>
           <span>Stopped</span>
+        </div>
+        <div class="filter-pill" x-show="config && config.updateCheckEnabled === 'true' && updateCheckSummary.updates > 0" :class="{ active: activeFilter === 'Updates' }" @click="activeFilter = activeFilter === 'Updates' ? 'All' : 'Updates'">
+          <span class="pill-dot" style="background:#d29922"></span>
+          <span class="pill-num" x-text="updateCheckSummary.updates"></span>
+          <span>Updates</span>
         </div>
       </div>
       <div class="filter-pill" :class="{ active: activeFilter === 'Groups' }" @click="activeFilter = activeFilter === 'Groups' ? 'All' : 'Groups'">
@@ -1023,7 +1038,9 @@
         <div class="table-wrap">
           <table :class="config && config.showStats === 'true' ? 'has-stats' : 'no-stats'">
             <colgroup>
-              <col class="col-name"><col class="col-health"><col class="col-restart">
+              <col class="col-name"><col class="col-health">
+              <template x-if="config && config.updateCheckEnabled === 'true'"><col style="width:7%"></template>
+              <col class="col-restart">
               <template x-if="config && config.showStats === 'true'"><col class="col-cpu"></template>
               <template x-if="config && config.showStats === 'true'"><col class="col-ram"></template>
               <col class="col-networks">
@@ -1031,19 +1048,26 @@
               <col class="col-uptime">
             </colgroup>
             <thead><tr>
-              <th>Container</th><th>Health</th><th>Restart</th>
-              <template x-if="config && config.showStats === 'true'"><th>CPU</th></template>
-              <template x-if="config && config.showStats === 'true'"><th>RAM</th></template>
+              <th class="sortable" @click="toggleSort('name')">Container <span class="sort-arrow" x-show="sortColumn === 'name'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
+              <th class="sortable" @click="toggleSort('health')">Health <span class="sort-arrow" x-show="sortColumn === 'health'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
+              <template x-if="config && config.updateCheckEnabled === 'true'"><th class="sortable" @click="toggleSort('update')">Update <span class="sort-arrow" x-show="sortColumn === 'update'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
+              <th class="sortable" @click="toggleSort('restart')">Restart <span class="sort-arrow" x-show="sortColumn === 'restart'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
+              <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('cpu')">CPU <span class="sort-arrow" x-show="sortColumn === 'cpu'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
+              <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('ram')">RAM <span class="sort-arrow" x-show="sortColumn === 'ram'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
               <th>Networks</th>
-              <template x-if="config && config.showStats === 'true'"><th>Network I/O</th></template>
-              <th>Uptime</th>
+              <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('net')">Network I/O <span class="sort-arrow" x-show="sortColumn === 'net'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
+              <th class="sortable" @click="toggleSort('uptime')">Uptime <span class="sort-arrow" x-show="sortColumn === 'uptime'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
             </tr></thead>
             <template x-for="row in groupRows" :key="row._key">
               <tbody>
+                <!-- Group spacer -->
+                <template x-if="row._type === 'spacer'">
+                  <tr><td :colspan="99" style="padding:0;border:none;height:16px;background:#0f1117;border-bottom:1px solid #30363d"></td></tr>
+                </template>
                 <!-- Group header row -->
                 <template x-if="row._type === 'header'">
                   <tr style="cursor:pointer;background:#0d1117" @click="toggleGroupDetail(row.group.name)">
-                    <td style="font-weight:600">
+                    <td style="font-weight:600" :style="groupExpanded['grp_' + row.group.name] && row.group.color ? 'border-left:3px solid ' + row.group.color : ''">
                       <div style="display:flex;align-items:center;gap:8px">
                         <span style="color:#484f58;font-size:10px;transition:transform 0.15s;display:inline-block" :style="groupExpanded['grp_' + row.group.name] ? 'transform:rotate(90deg)' : ''">▸</span>
                         <div>
@@ -1056,6 +1080,10 @@
                       <span style="font-size:11px"><span :style="row.group._running > 0 ? 'color:#3fb950' : 'color:#8b949e'" x-text="row.group._running"></span><span style="color:#8b949e" x-text="'/' + row.group._total + ' running'"></span></span>
                       <span x-show="row.group._unhealthy > 0" style="font-size:10px;padding:1px 6px;border-radius:3px;background:#3d1f1f;color:#f85149;margin-left:4px" x-text="row.group._unhealthy + ' unhealthy'"></span>
                     </td>
+                    <template x-if="config && config.updateCheckEnabled === 'true'"><td>
+                      <span x-show="row.group.containers.filter(c => updateResults[c.name]?.hasUpdate).length > 0" class="badge badge-update" x-text="row.group.containers.filter(c => updateResults[c.name]?.hasUpdate).length + ' update' + (row.group.containers.filter(c => updateResults[c.name]?.hasUpdate).length !== 1 ? 's' : '')"></span>
+                      <span x-show="Object.keys(updateResults).length > 0 && row.group.containers.filter(c => updateResults[c.name]?.hasUpdate).length === 0" class="badge badge-uptodate">Up to date</span>
+                    </td></template>
                     <td></td>
                     <template x-if="config && config.showStats === 'true'"><td>
                       <div class="sparkline-wrap">
@@ -1079,7 +1107,11 @@
                         </span>
                       </div>
                     </td></template>
-                    <td></td>
+                    <td>
+                      <div style="font-size:11px;line-height:1.6">
+                        <template x-for="n in [...new Set(row.group.containers.flatMap(c => c.networks || []))].sort()" :key="'gn_'+n"><span :class="netBadgeClass(n)" x-text="n"></span></template>
+                      </div>
+                    </td>
                     <template x-if="config && config.showStats === 'true'"><td>
                       <div style="white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums">
                         <span style="color:#3fb950">&#8593;</span> <span x-text="row.group._netTx"></span>
@@ -1092,7 +1124,7 @@
                 <!-- Group expanded detail panel -->
                 <template x-if="row._type === 'detail'">
                   <tr x-transition>
-                    <td :colspan="config && config.showStats === 'true' ? 8 : 5" style="padding:0;border:none">
+                    <td :colspan="(config && config.showStats === 'true' ? 8 : 5) + (config && config.updateCheckEnabled === 'true' ? 1 : 0)" style="padding:0;border:none" :style="row.group.color ? 'border-left:3px solid ' + row.group.color : ''">
                       <div class="detail-panel">
                         <!-- Group info pills -->
                         <div class="compact-info">
@@ -1100,7 +1132,7 @@
                           <span><span class="il">Running</span> <span class="pill-val"><span style="color:#3fb950" x-text="row.group._running"></span><span style="color:#8b949e" x-text="'/' + row.group._total"></span></span></span>
                           <span x-show="row.group.containers.filter(c => c.health === 'healthy').length > 0"><span class="il">Healthy</span> <span class="pill-val state-healthy" x-text="row.group.containers.filter(c => c.health === 'healthy').length"></span></span>
                           <span x-show="row.group._unhealthy > 0"><span class="il">Unhealthy</span> <span class="pill-val state-unhealthy" x-text="row.group._unhealthy"></span></span>
-                          <span x-show="row.group.containers.filter(c => c.health === 'none' && c.state === 'running').length > 0"><span class="il">No Check</span> <span class="pill-val" x-text="row.group.containers.filter(c => c.health === 'none' && c.state === 'running').length"></span></span>
+                          <span x-show="row.group.containers.filter(c => c.health === 'none' && c.state === 'running').length > 0"><span class="il">No Health</span> <span class="pill-val" x-text="row.group.containers.filter(c => c.health === 'none' && c.state === 'running').length"></span></span>
                           <span x-show="row.group._total - row.group._running > 0"><span class="il">Stopped</span> <span class="pill-val" style="color:#8b949e" x-text="row.group._total - row.group._running"></span></span>
                           <span><span class="il">CPU</span> <span class="pill-val" x-text="row.group._cpuTotal"></span></span>
                           <span><span class="il">RAM</span> <span class="pill-val" x-text="row.group._ramTotal"></span></span>
@@ -1109,23 +1141,23 @@
                         <!-- Chart section -->
                         <div style="border-top:1px solid #21262d;margin-top:10px;padding-top:10px">
                           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-                            <button class="metric-toggle" :class="{ 'active-cpu': groupChartShowCpu }" @click.stop="toggleGroupChart('cpu')">
+                            <button class="metric-toggle" :class="{ 'active-cpu': groupDetailName === row.group.name && groupChartShowCpu }" @click.stop="groupDetailName = row.group.name; toggleGroupChart('cpu')">
                               <span class="toggle-dot cpu-dot"></span> CPU
                             </button>
-                            <button class="metric-toggle" :class="{ 'active-ram': groupChartShowRam }" @click.stop="toggleGroupChart('ram')">
+                            <button class="metric-toggle" :class="{ 'active-ram': groupDetailName === row.group.name && groupChartShowRam }" @click.stop="groupDetailName = row.group.name; toggleGroupChart('ram')">
                               <span class="toggle-dot ram-dot"></span> RAM
                             </button>
-                            <div class="chart-range-btns" style="margin-bottom:0;margin-left:4px" x-show="groupAnyChartActive()">
+                            <div class="chart-range-btns" style="margin-bottom:0;margin-left:4px" x-show="groupDetailName === row.group.name && groupAnyChartActive()">
                               <template x-for="r in ['1h','6h','24h','3d','7d']" :key="'gr_'+r">
                                 <button class="chart-range-btn" :class="{ active: groupChartRange === r }" @click.stop="groupChartRange = r; fetchGroupChartData(groupDetailName, r)" x-text="r"></button>
                               </template>
                             </div>
                             <div style="flex:1"></div>
-                            <span class="toggle-stat" x-show="groupChartShowCpu && groupChartData && groupChartData.length > 1" x-text="'CPU avg ' + groupChartAvg('c').toFixed(1) + '% \u00b7 peak ' + groupChartPeak('c').toFixed(1) + '%'" style="color:#c9d1d9"></span>
-                            <span class="toggle-stat" x-show="groupChartShowRam && groupChartData && groupChartData.length > 1" x-text="'RAM avg ' + formatBytes(groupChartAvg('m')) + ' \u00b7 peak ' + formatBytes(groupChartPeak('m'))" style="color:#c9d1d9"></span>
+                            <span class="toggle-stat" x-show="groupDetailName === row.group.name && groupChartShowCpu && groupChartData && groupChartData.length > 1" x-text="'CPU avg ' + groupChartAvg('c').toFixed(1) + '% \u00b7 peak ' + groupChartPeak('c').toFixed(1) + '%'" style="color:#c9d1d9"></span>
+                            <span class="toggle-stat" x-show="groupDetailName === row.group.name && groupChartShowRam && groupChartData && groupChartData.length > 1" x-text="'RAM avg ' + formatBytes(groupChartAvg('m')) + ' \u00b7 peak ' + formatBytes(groupChartPeak('m'))" style="color:#c9d1d9"></span>
                           </div>
                           <!-- Chart area -->
-                          <template x-if="groupAnyChartActive()">
+                          <template x-if="groupDetailName === row.group.name && groupAnyChartActive()">
                             <div class="chart-container" @mouseleave="groupChartHoverIdx = -1">
                               <div x-show="groupChartLoading" style="text-align:center;padding:20px;color:#484f58;font-size:12px">Loading chart data...</div>
                               <div x-show="!groupChartLoading && (!groupChartData || groupChartData.length === 0)" style="text-align:center;padding:20px;color:#484f58;font-size:12px">No data yet</div>
@@ -1219,7 +1251,7 @@
                             </div>
                           </template>
                           <!-- Member toggles -->
-                          <div class="compare-bar" x-show="groupAnyChartActive()" style="margin-top:8px">
+                          <div class="compare-bar" x-show="groupDetailName === row.group.name && groupAnyChartActive()" style="margin-top:8px">
                             <span style="font-size:11px;color:#8b949e">Members:</span>
                             <template x-for="(name, idx) in Object.keys(groupMemberCharts)" :key="'gmt_'+name">
                               <span class="compare-pill" style="cursor:pointer" :style="groupMemberEnabled[name] ? 'border-color:' + groupMemberColor(idx) : 'opacity:0.5'" @click.stop="toggleGroupMember(name)">
@@ -1250,7 +1282,7 @@
                 <!-- Container row (no expand — use group detail for charts) -->
                 <template x-if="row._type === 'container'">
                   <tr style="cursor:default">
-                    <td style="padding-left:36px">
+                    <td style="padding-left:36px" :style="row.group.color ? 'border-left:3px solid ' + row.group.color : ''">
                       <div style="display:flex;align-items:center;gap:8px">
                         <img x-show="row.container.icon" :src="row.container.icon" style="width:18px;height:18px;border-radius:3px" loading="lazy">
                         <div>
@@ -1266,9 +1298,14 @@
                     <td>
                       <span x-show="row.container.state === 'running' && row.container.health === 'healthy'" class="badge badge-healthy">Healthy</span>
                       <span x-show="row.container.state === 'running' && row.container.health === 'unhealthy'" class="badge badge-unhealthy">Unhealthy</span>
-                      <span x-show="row.container.state === 'running' && row.container.health === 'none'" class="badge badge-nocheck">No Check</span>
-                      <span x-show="row.container.state !== 'running'" class="badge badge-stopped">Stopped</span>
+                      <template x-if="row.container.state === 'running' && row.container.health === 'none'">
+                        <span class="hc-tip-wrap">
+                          <span class="badge badge-nocheck" style="cursor:help">No HC</span>
+                          <span class="hc-tip" x-text="healthTooltip(row.container)"></span>
+                        </span>
+                      </template>
                     </td>
+                    <template x-if="config && config.updateCheckEnabled === 'true'"><td><span class="badge" :class="updateBadgeClass(row.container)" x-text="updateLabel(row.container)" :title="updateTooltip(row.container)"></span></td></template>
                     <td>
                       <span x-show="row.container.state === 'running' && row.container.hasRestartLabel" class="label-yes">Yes</span>
                       <span x-show="row.container.state === 'running' && !row.container.hasRestartLabel" class="label-no">No</span>
@@ -1313,7 +1350,7 @@
                       <template x-if="row.container.state !== 'running'"><div style="color:#484f58">&mdash;</div></template>
                     </td></template>
                     <td>
-                      <span x-show="row.container.state === 'running'" style="font-size:12px;color:#8b949e;white-space:nowrap" x-text="formatUptime(row.container.startedAt)"></span>
+                      <span x-show="row.container.state === 'running'" style="font-size:12px;color:#8b949e;white-space:nowrap" x-text="row.container.uptime"></span>
                       <span x-show="row.container.state !== 'running'" style="color:#484f58">&mdash;</span>
                     </td>
                   </tr>
@@ -1330,7 +1367,9 @@
       <div class="loading" x-show="loading">Loading containers...</div>
       <table x-show="!loading && config" :class="config && config.showStats === 'true' ? 'has-stats' : 'no-stats'">
         <colgroup>
-          <col class="col-name"><col class="col-health"><col class="col-restart">
+          <col class="col-name"><col class="col-health">
+          <template x-if="config && config.updateCheckEnabled === 'true'"><col style="width:7%"></template>
+          <col class="col-restart">
           <template x-if="config && config.showStats === 'true'"><col class="col-cpu"></template>
           <template x-if="config && config.showStats === 'true'"><col class="col-ram"></template>
           <col class="col-networks">
@@ -1341,6 +1380,7 @@
           <tr>
             <th class="sortable" @click="toggleSort('name')">Container <span class="sort-arrow" x-show="sortColumn === 'name'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
             <th class="sortable" @click="toggleSort('health')">Health <span class="sort-arrow" x-show="sortColumn === 'health'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
+            <template x-if="config && config.updateCheckEnabled === 'true'"><th class="sortable" @click="toggleSort('update')">Update <span class="sort-arrow" x-show="sortColumn === 'update'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
             <th class="sortable" @click="toggleSort('restart')">Restart <span class="sort-arrow" x-show="sortColumn === 'restart'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
             <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('cpu')">CPU <span class="sort-arrow" x-show="sortColumn === 'cpu'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
             <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('ram')">RAM <span class="sort-arrow" x-show="sortColumn === 'ram'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
@@ -1368,7 +1408,14 @@
                     <span class="container-image" x-text="c.image"></span>
                   </div>
                 </td>
-                <td><span class="badge" :class="healthBadgeClass(c)" x-text="healthLabel(c)"></span></td>
+                <td>
+                  <span x-show="healthLabel(c) && !healthTooltip(c)" class="badge" :class="healthBadgeClass(c)" x-text="healthLabel(c)"></span>
+                  <span x-show="healthLabel(c) && healthTooltip(c)" class="hc-tip-wrap">
+                    <span class="badge" :class="healthBadgeClass(c)" x-text="healthLabel(c)" style="cursor:help"></span>
+                    <span class="hc-tip" x-text="healthTooltip(c)"></span>
+                  </span>
+                </td>
+                <template x-if="config && config.updateCheckEnabled === 'true'"><td><span class="badge" :class="updateBadgeClass(c)" x-text="updateLabel(c)" :title="updateTooltip(c)"></span></td></template>
                 <td>
                   <span x-show="c.state === 'running' && c.hasLabel" :class="c.hasRestartLabel ? 'label-yes label-clickable' : 'label-override label-clickable'" x-text="c.hasRestartLabel ? 'Yes' : 'No'" :title="c.hasRestartLabel ? 'Click to disable auto-restart' : 'Click to enable auto-restart'" @click.stop="toggleRestart(c)"></span>
                   <span x-show="c.state === 'running' && !c.hasLabel" class="label-no" title="Add Docker label constat.restart=true to enable">No</span>
@@ -1438,7 +1485,7 @@
 
               <!-- Expanded detail panel -->
               <tr x-show="expandedId === c.id" x-transition>
-                <td :colspan="config && config.showStats === 'true' ? 8 : 5" style="padding: 0; border: none;">
+                <td :colspan="(config && config.showStats === 'true' ? 8 : 5) + (config && config.updateCheckEnabled === 'true' ? 1 : 0)" style="padding: 0; border: none;">
                   <div class="detail-panel">
                     <!-- Container info (compact pills, always full width) -->
                     <div class="compact-info">
@@ -2375,6 +2422,83 @@
         </div>
       </div>
 
+      <!-- Update Checker Section -->
+      <div class="config-section">
+      <div class="config-section-header" @click="toolsSections.updates = !toolsSections.updates; if(toolsSections.updates) fetchUpdates()">
+        Update Checker
+        <span class="arrow" x-text="toolsSections.updates ? '&#9660;' : '&#9654;'"></span>
+      </div>
+      <div class="config-section-body" x-show="toolsSections.updates" x-transition>
+        <div style="font-size:13px;color:#c9d1d9;margin-bottom:10px">Check for available image updates on container registries using digest comparison. No images are pulled — only manifests are checked.</div>
+        <!-- Enable toggle -->
+        <div class="config-field" style="margin-bottom:12px">
+          <span class="config-label">Enable update checking</span>
+          <div class="config-toggle" :class="{ on: config.updateCheckEnabled === 'true' }" @click="config.updateCheckEnabled = config.updateCheckEnabled === 'true' ? 'false' : 'true'; configDirty = true"></div>
+        </div>
+        <template x-if="config.updateCheckEnabled === 'true'">
+          <div>
+            <div class="config-field" style="margin-bottom:8px">
+              <span class="config-label">Check interval</span>
+              <select class="config-input" style="max-width:120px" x-model="config.updateCheckInterval" @change="configDirty = true">
+                <option value="6h">6 hours</option>
+                <option value="12h">12 hours</option>
+                <option value="24h">24 hours</option>
+              </select>
+            </div>
+            <div class="config-field" style="margin-bottom:12px">
+              <span class="config-label">Exclude containers</span>
+              <input type="text" class="config-input" x-model="config.updateExclude" @input="configDirty = true" placeholder="container1, container2, ...">
+            </div>
+            <div class="config-hint" style="margin-bottom:12px">Comma-separated container names to skip during update checks</div>
+            <!-- Check Now + Status -->
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+              <button class="mwatch-btn" style="padding:6px 16px" @click="triggerUpdateCheck()" :disabled="updateChecking">
+                <span x-show="!updateChecking">Check Now</span>
+                <span x-show="updateChecking">Checking...</span>
+              </button>
+              <span x-show="updateLastCheck && updateLastCheck !== '0001-01-01T00:00:00Z'" style="font-size:11px;color:#8b949e" x-text="'Last check: ' + formatEventTime(updateLastCheck)"></span>
+            </div>
+            <!-- Summary -->
+            <div x-show="updateCheckSummary.total > 0" style="display:flex;gap:16px;margin-bottom:12px;font-size:12px">
+              <span style="color:#3fb950" x-text="updateCheckSummary.upToDate + ' up to date'"></span>
+              <span :style="updateCheckSummary.updates > 0 ? 'color:#d29922;font-weight:600' : 'color:#8b949e'" x-text="updateCheckSummary.updates + ' updates'"></span>
+              <span :style="updateCheckSummary.errors > 0 ? 'color:#f85149' : 'color:#8b949e'" x-text="updateCheckSummary.errors + ' errors'"></span>
+            </div>
+            <!-- Updates available list -->
+            <template x-if="updateCheckSummary.updates > 0">
+              <div style="margin-bottom:12px">
+                <div style="font-size:12px;font-weight:600;color:#d29922;margin-bottom:6px">Updates Available</div>
+                <div style="border:1px solid #21262d;border-radius:6px;background:#0d1117;overflow:hidden">
+                  <template x-for="u in Object.values(updateResults).filter(u => u.hasUpdate)" :key="u.containerName">
+                    <div style="padding:6px 12px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px;font-size:12px">
+                      <span style="color:#d29922;font-size:10px">&#9679;</span>
+                      <span style="color:#e1e4e8;font-weight:500" x-text="u.containerName"></span>
+                      <span style="color:#484f58;font-size:11px" x-text="u.image"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+            <!-- Errors list -->
+            <template x-if="updateCheckSummary.errors > 0">
+              <div>
+                <div style="font-size:12px;font-weight:600;color:#f85149;margin-bottom:6px">Errors</div>
+                <div style="border:1px solid #21262d;border-radius:6px;background:#0d1117;overflow:hidden">
+                  <template x-for="u in updateCheckSummary.errorContainers" :key="u.containerName">
+                    <div style="padding:6px 12px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px;font-size:12px">
+                      <span style="color:#484f58;font-size:10px">&#9679;</span>
+                      <span style="color:#8b949e" x-text="u.containerName"></span>
+                      <span style="color:#484f58;font-size:11px" x-text="u.error"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+      </div>
+
       <!-- Save bar (for scheduled cleanup settings) -->
       <div class="save-bar">
         <button class="save-btn" @click="saveConfig()" :disabled="configSaving || !configDirty">
@@ -2899,7 +3023,10 @@
         <div>
           <template x-for="(cat, idx) in categories" :key="idx">
             <div class="seq-step-row" style="cursor:pointer;align-items:center" @click="startCategoryEdit(idx)">
-              <span class="seq-step-num" x-text="idx + 1"></span>
+              <div style="display:flex;flex-direction:column;gap:0;margin-right:4px" @click.stop>
+                <span x-show="idx > 0" style="cursor:pointer;color:#484f58;font-size:11px;line-height:1;padding:1px 3px" @click="moveCategoryUp(idx)" @mouseenter="$el.style.color='#e1e4e8'" @mouseleave="$el.style.color='#484f58'" title="Move up">&#9650;</span>
+                <span x-show="idx < categories.length - 1" style="cursor:pointer;color:#484f58;font-size:11px;line-height:1;padding:1px 3px" @click="moveCategoryDown(idx)" @mouseenter="$el.style.color='#e1e4e8'" @mouseleave="$el.style.color='#484f58'" title="Move down">&#9660;</span>
+              </div>
               <span style="flex:1;font-size:13px;font-weight:500;color:#e1e4e8" x-text="cat.name"></span>
               <span style="font-size:11px;color:#8b949e;margin-right:8px" x-text="cat.containers.length + ' containers'"></span>
               <span @click.stop="categoryConfirmDelete = idx" style="color:#f85149;font-size:15px;padding:2px 6px;border-radius:4px;cursor:pointer;line-height:1;opacity:0.6" title="Delete group" @mouseenter="$el.style.opacity='1'" @mouseleave="$el.style.opacity='0.6'">&times;</span>
@@ -2916,11 +3043,11 @@
         <div>
           <div class="seq-form-field"><label>Name *</label><input type="text" x-model="categoryEditName" placeholder="e.g. Media Stack"></div>
           <div class="seq-form-field"><label>Description</label><input type="text" x-model="categoryEditDesc" placeholder="Optional description"></div>
-          <div class="seq-form-field" x-show="sequenceList?.length > 0">
+          <div class="seq-form-field" x-show="sequences?.length > 0">
             <label>Import from sequence</label>
             <select @change="if($event.target.value){importSequenceToCategory($event.target.value);$event.target.value='';}" style="padding:6px 10px;background:#0d1117;border:1px solid #21262d;border-radius:6px;color:#8b949e;font-size:13px;width:100%">
               <option value="">Select sequence...</option>
-              <template x-for="seq in (sequenceList || [])" :key="seq.id"><option :value="seq.id" x-text="seq.name + ' (' + seq.steps.length + ' containers)'"></option></template>
+              <template x-for="seq in (sequences || [])" :key="seq.id"><option :value="seq.id" x-text="seq.name + ' (' + seq.steps.length + ' containers)'"></option></template>
             </select>
           </div>
           <div style="font-size:13px;font-weight:600;color:#8b949e;margin:16px 0 8px;text-transform:uppercase;letter-spacing:0.5px">
@@ -2986,7 +3113,7 @@ function app() {
     loading: true,
     searchQuery: '',
     activeFilter: 'All',
-    filters: ['All', 'Running', 'Healthy', 'Unhealthy', 'No Check', 'Stopped'],
+    filters: ['All', 'Running', 'Healthy', 'Unhealthy', 'No Health', 'Stopped'],
     expandedId: null,
     actionInProgress: false,
     configOpenId: null,
@@ -3038,7 +3165,7 @@ function app() {
     groupMemberEnabled: {},
     groupChartRefreshInterval: null,
     groupActionConfirm: null,
-    toolsSections: { memory: false, rules: true, cleanup: false },
+    toolsSections: { memory: false, rules: true, cleanup: false, updates: false },
     imageData: null,
     imageLoading: false,
     imagePruning: false,
@@ -3054,6 +3181,11 @@ function app() {
     volumeListExpanded: false,
     volumeInUseExpanded: false,
     volumeError: '',
+
+    // Update checker
+    updateResults: {},
+    updateChecking: false,
+    updateLastCheck: null,
 
     // Webhook testing
     webhookTesting: null,
@@ -3174,6 +3306,7 @@ function app() {
       this.fetchConfig();
       this.fetchCategories();
       this.fetchSequences();
+      this.fetchUpdates();
       this.loading = false;
       // Auto-refresh every 30s (lifecycle changes only — stats come via SSE)
       this.refreshInterval = setInterval(() => this.fetchContainers(), 30000);
@@ -3284,7 +3417,7 @@ function app() {
         this.sortAsc = !this.sortAsc;
       } else {
         this.sortColumn = col;
-        // Default direction: asc for name/health/restart/uptime, desc for cpu/ram/net
+        // Default direction: asc for name/health/restart/update/uptime, desc for cpu/ram/net
         this.sortAsc = !['cpu', 'ram', 'net'].includes(col);
       }
     },
@@ -3333,7 +3466,8 @@ function app() {
         case 'Running': list = list.filter(c => c.state === 'running'); break;
         case 'Healthy': list = list.filter(c => c.health === 'healthy'); break;
         case 'Unhealthy': list = list.filter(c => c.health === 'unhealthy'); break;
-        case 'No Check': list = list.filter(c => c.state === 'running' && c.health === 'none'); break;
+        case 'No Health': list = list.filter(c => c.state === 'running' && c.health === 'none'); break;
+        case 'Updates': list = list.filter(c => this.updateResults[c.name]?.hasUpdate); break;
         case 'Stopped': list = list.filter(c => c.state !== 'running'); break;
       }
 
@@ -3345,51 +3479,7 @@ function app() {
         });
       }
 
-      const col = this.sortColumn;
-      const asc = this.sortAsc;
-      return [...list].sort((a, b) => {
-        let cmp = 0;
-        switch (col) {
-          case 'name':
-            cmp = a.name.localeCompare(b.name);
-            break;
-          case 'health': {
-            const order = { unhealthy: 0, none: 1, healthy: 2, stopped: 3 };
-            const ah = a.state !== 'running' ? 'stopped' : a.health;
-            const bh = b.state !== 'running' ? 'stopped' : b.health;
-            cmp = (order[ah] ?? 1) - (order[bh] ?? 1);
-            if (cmp === 0) cmp = a.name.localeCompare(b.name);
-            break;
-          }
-          case 'restart': {
-            const ar = a.state === 'running' && a.hasRestartLabel ? 0 : 1;
-            const br = b.state === 'running' && b.hasRestartLabel ? 0 : 1;
-            cmp = ar - br;
-            if (cmp === 0) cmp = a.name.localeCompare(b.name);
-            break;
-          }
-          case 'cpu':
-            cmp = (a.cpu || 0) - (b.cpu || 0);
-            break;
-          case 'ram':
-            cmp = (a.memory || 0) - (b.memory || 0);
-            break;
-          case 'network':
-            cmp = ((a.networks || [])[0] || '').localeCompare((b.networks || [])[0] || '');
-            if (cmp === 0) cmp = a.name.localeCompare(b.name);
-            break;
-          case 'net':
-            cmp = ((a.netRxRate || 0) + (a.netTxRate || 0)) - ((b.netRxRate || 0) + (b.netTxRate || 0));
-            break;
-          case 'uptime': {
-            const at = a.startedAt ? new Date(a.startedAt).getTime() : 0;
-            const bt = b.startedAt ? new Date(b.startedAt).getTime() : 0;
-            cmp = at - bt;
-            break;
-          }
-        }
-        return asc ? cmp : -cmp;
-      });
+      return [...list].sort((a, b) => this._sortContainers(a, b));
     },
 
     toggleExpand(id) {
@@ -3524,10 +3614,17 @@ function app() {
 
     healthLabel(c) {
       if (c.state === 'paused') return 'Paused';
-      if (c.state !== 'running') return 'Stopped';
+      if (c.state !== 'running') return '';
       if (c.health === 'healthy') return 'Healthy';
       if (c.health === 'unhealthy') return 'Unhealthy';
-      return 'No Check';
+      return 'No HC';
+    },
+    healthTooltip(c) {
+      if (c.state === 'running' && c.health === 'none') {
+        const s = this.getSuggestion(c.name);
+        return s ? 'No healthcheck — suggested: ' + s.suggestion : 'No healthcheck configured';
+      }
+      return '';
     },
 
     stateDescription(c) {
@@ -4629,6 +4726,12 @@ function app() {
       return Math.floor(diff / 86400) + 'd ago';
     },
 
+    _parseMemBytes(s) {
+      const m = s.trim().match(/^([\d.]+)\s*(GiB|MiB|KiB|B)/i);
+      if (!m) return 0;
+      const v = parseFloat(m[1]);
+      switch (m[2].toLowerCase()) { case 'gib': return v * 1073741824; case 'mib': return v * 1048576; case 'kib': return v * 1024; default: return v; }
+    },
     formatMemoryDetail(action, detail) {
       if (!detail) return '';
       // Parse "CURRENT / LIMIT — DURATION" or "CURRENT / LIMIT — after DURATION"
@@ -4636,7 +4739,9 @@ function app() {
       if (!match) return detail;
       const [, current, limit, afterPrefix, duration] = match;
       if (action === 'notify' || action === 'restart') {
-        return `exceeded limit for ${duration} (${current} / ${limit})`;
+        const diffBytes = this._parseMemBytes(current) - this._parseMemBytes(limit);
+        const diffStr = diffBytes > 0 ? this.formatBytes(diffBytes) : '';
+        return diffStr ? `exceeded limit by ${diffStr} for ${duration} (${current} / ${limit})` : `exceeded limit for ${duration} (${current} / ${limit})`;
       }
       if (action === 'recovered') {
         return `dropped below limit after ${duration} (${current} / ${limit})`;
@@ -4740,6 +4845,24 @@ function app() {
       this.categoryEditIdx = -2;
       this.saveCategories();
     },
+    moveCategoryUp(idx) {
+      if (idx <= 0) return;
+      const temp = this.categories[idx];
+      this.categories[idx] = this.categories[idx - 1];
+      this.categories[idx - 1] = temp;
+      this.categories[idx].order = idx;
+      this.categories[idx - 1].order = idx - 1;
+      this.saveCategories();
+    },
+    moveCategoryDown(idx) {
+      if (idx >= this.categories.length - 1) return;
+      const temp = this.categories[idx];
+      this.categories[idx] = this.categories[idx + 1];
+      this.categories[idx + 1] = temp;
+      this.categories[idx].order = idx;
+      this.categories[idx + 1].order = idx + 1;
+      this.saveCategories();
+    },
     deleteCategory(idx) {
       this.categories.splice(idx, 1);
       this.categoryEditIdx = -2;
@@ -4747,27 +4870,23 @@ function app() {
     },
     // ---- Group Detail (expanded chart view) ----
     toggleGroupDetail(groupName) {
-      if (this.groupDetailName === groupName) {
-        // Already open — close everything
-        this.closeGroupDetail();
+      const isExpanded = this.groupExpanded['grp_' + groupName];
+      if (isExpanded) {
+        // Collapse — close chart if this group had it
+        if (this.groupDetailName === groupName) this.closeGroupDetail();
         this.groupExpanded = { ...this.groupExpanded, ['grp_' + groupName]: false };
         return;
       }
-      // Open new group detail with RAM as default
-      if (this.groupDetailName) this.closeGroupDetail();
+      // Expand — show containers but NOT chart (chart activated via CPU/RAM toggle)
+      this.groupExpanded = { ...this.groupExpanded, ['grp_' + groupName]: true };
+      // Set this as the active detail group (for info pills, actions) but don't start chart
       this.groupDetailName = groupName;
       this.groupChartShowCpu = false;
-      this.groupChartShowRam = true;
+      this.groupChartShowRam = false;
       this.groupChartData = null;
       this.groupMemberCharts = {};
       this.groupMemberEnabled = {};
       this.groupChartHoverIdx = -1;
-      this.groupExpanded = { ...this.groupExpanded, ['grp_' + groupName]: true };
-      this.fetchGroupChartData(groupName, this.groupChartRange);
-      if (this.groupChartRefreshInterval) clearInterval(this.groupChartRefreshInterval);
-      this.groupChartRefreshInterval = setInterval(() => {
-        if (this.groupDetailName) this.fetchGroupChartData(this.groupDetailName, this.groupChartRange);
-      }, 300000);
     },
     closeGroupDetail() {
       this.groupDetailName = null;
@@ -4784,6 +4903,14 @@ function app() {
       else if (metric === 'ram') this.groupChartShowRam = !this.groupChartShowRam;
       if (this.groupAnyChartActive() && !this.groupChartData && this.groupDetailName) {
         this.fetchGroupChartData(this.groupDetailName, this.groupChartRange);
+        if (this.groupChartRefreshInterval) clearInterval(this.groupChartRefreshInterval);
+        this.groupChartRefreshInterval = setInterval(() => {
+          if (this.groupDetailName && this.groupAnyChartActive()) this.fetchGroupChartData(this.groupDetailName, this.groupChartRange);
+        }, 300000);
+      }
+      if (!this.groupAnyChartActive() && this.groupChartRefreshInterval) {
+        clearInterval(this.groupChartRefreshInterval);
+        this.groupChartRefreshInterval = null;
       }
     },
     groupAnyChartActive() { return this.groupChartShowCpu || this.groupChartShowRam; },
@@ -4829,6 +4956,7 @@ function app() {
     toggleGroupMember(name) {
       this.groupMemberEnabled = { ...this.groupMemberEnabled, [name]: !this.groupMemberEnabled[name] };
     },
+    groupAutoColors: ['#58a6ff','#3fb950','#d29922','#f78166','#bc8cff','#f85149','#79c0ff','#db61a2'],
     groupMemberColors: ['#f78166','#7ee787','#d2a8ff','#ffa657','#79c0ff','#56d364','#e3b341','#db61a2'],
     groupMemberColor(idx) { return this.groupMemberColors[idx % this.groupMemberColors.length]; },
     get enabledGroupMembers() {
@@ -5002,7 +5130,7 @@ function app() {
       else this.categoryEditContainers.push(name);
     },
     importSequenceToCategory(seqId) {
-      const seq = (this.sequenceList || []).find(s => s.id === seqId);
+      const seq = (this.sequences || []).find(s => s.id === seqId);
       if (!seq) return;
       for (const step of seq.steps) {
         if (step.container && !this.categoryEditContainers.includes(step.container)) this.categoryEditContainers.push(step.container);
@@ -5021,7 +5149,9 @@ function app() {
     get groupedContainers() {
       if (this.activeFilter !== 'Groups' || !this.categories.length) return null;
       const groups = [];
-      for (const cat of [...this.categories].sort((a, b) => a.order - b.order)) {
+      const sortedCats = [...this.categories].sort((a, b) => a.order - b.order);
+      for (let ci = 0; ci < sortedCats.length; ci++) {
+        const cat = sortedCats[ci];
         const containers = this.filteredContainers.filter(c => cat.containers.includes(c.name));
         const running = containers.filter(c => c.state === 'running').length;
         const unhealthy = containers.filter(c => c.health === 'unhealthy').length;
@@ -5043,7 +5173,8 @@ function app() {
           }
           groupStats = Object.values(byTime).sort((a, b) => a.t - b.t);
         }
-        groups.push({ name: cat.name, description: cat.description, containers,
+        const groupColor = cat.color || this.groupAutoColors[ci % this.groupAutoColors.length];
+        groups.push({ name: cat.name, description: cat.description, color: groupColor, containers,
           _running: running, _total: containers.length, _unhealthy: unhealthy,
           _cpuTotal: cpuTotal.toFixed(1) + '%', _ramTotal: this.formatBytes(ramTotal),
           _avgCpu: avgCpu, _avgMem: avgMem, _maxMem: maxMem, _stats: groupStats,
@@ -5056,18 +5187,67 @@ function app() {
       const groups = this.groupedContainers;
       if (!groups) return [];
       const rows = [];
-      for (const g of groups) {
+      for (let gi = 0; gi < groups.length; gi++) {
+        const g = groups[gi];
+        if (gi > 0) rows.push({ _type: 'spacer', _key: 'spc_' + g.name });
         rows.push({ _type: 'header', _key: 'hdr_' + g.name, group: g });
-        if (this.groupDetailName === g.name) {
-          rows.push({ _type: 'detail', _key: 'det_' + g.name, group: g });
-        }
         if (this.groupExpanded['grp_' + g.name]) {
-          for (const c of g.containers) {
+          const sorted = this.sortColumn ? [...g.containers].sort((a, b) => this._sortContainers(a, b)) : g.containers;
+          for (const c of sorted) {
             rows.push({ _type: 'container', _key: 'cnt_' + c.id, container: c, group: g });
           }
+          rows.push({ _type: 'detail', _key: 'det_' + g.name, group: g });
         }
       }
       return rows;
+    },
+    _sortContainers(a, b) {
+      let cmp = 0;
+      switch (this.sortColumn) {
+        case 'name': cmp = a.name.localeCompare(b.name); break;
+        case 'health': {
+          const order = { healthy: 0, unhealthy: 1, none: 2, stopped: 3 };
+          const ah = a.state !== 'running' ? 'stopped' : a.health;
+          const bh = b.state !== 'running' ? 'stopped' : b.health;
+          cmp = (order[ah] ?? 3) - (order[bh] ?? 3);
+          if (cmp === 0) cmp = a.name.localeCompare(b.name);
+          break;
+        }
+        case 'update': {
+          const ua = this.updateResults[a.name];
+          const ub = this.updateResults[b.name];
+          const av = ua ? (ua.hasUpdate ? 0 : ua.error ? 2 : 1) : 3;
+          const bv = ub ? (ub.hasUpdate ? 0 : ub.error ? 2 : 1) : 3;
+          cmp = av - bv;
+          if (cmp === 0) cmp = a.name.localeCompare(b.name);
+          break;
+        }
+        case 'restart': {
+          const ar = a.state === 'running' && a.hasRestartLabel ? 0 : 1;
+          const br = b.state === 'running' && b.hasRestartLabel ? 0 : 1;
+          cmp = ar - br;
+          if (cmp === 0) cmp = a.name.localeCompare(b.name);
+          break;
+        }
+        case 'cpu': cmp = (a.cpu || 0) - (b.cpu || 0); break;
+        case 'ram': cmp = (a.memory || 0) - (b.memory || 0); break;
+        case 'network': {
+          cmp = ((a.networks || [])[0] || '').localeCompare((b.networks || [])[0] || '');
+          if (cmp === 0) cmp = a.name.localeCompare(b.name);
+          break;
+        }
+        case 'net': cmp = ((a.netRxRate || 0) + (a.netTxRate || 0)) - ((b.netRxRate || 0) + (b.netTxRate || 0)); break;
+        case 'uptime': {
+          const aHas = a.state === 'running' && a.startedAt;
+          const bHas = b.state === 'running' && b.startedAt;
+          if (aHas && !bHas) { cmp = -1; break; }
+          if (!aHas && bHas) { cmp = 1; break; }
+          if (!aHas && !bHas) { cmp = 0; break; }
+          cmp = new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime();
+          break;
+        }
+      }
+      return this.sortAsc ? cmp : -cmp;
     },
 
     // ---- Config ----
@@ -5188,6 +5368,63 @@ function app() {
       } finally {
         this.imagePruning = false;
       }
+    },
+
+    // ---- Update Checker ----
+    async fetchUpdates() {
+      try {
+        const resp = await fetch('/api/updates');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        this.updateResults = data.results || {};
+        this.updateChecking = data.checking;
+        this.updateLastCheck = data.lastCheck;
+      } catch (e) { console.error('Failed to fetch updates:', e); }
+    },
+    updateBadgeClass(c) {
+      const u = this.updateResults[c.name];
+      if (!u) return 'badge-unchecked';
+      if (u.error === 'local image, no registry digest') return 'badge-unchecked';
+      if (u.error) return 'badge-unchecked';
+      return u.hasUpdate ? 'badge-update' : 'badge-uptodate';
+    },
+    updateLabel(c) {
+      const u = this.updateResults[c.name];
+      if (!u) return '\u2014';
+      if (u.error === 'local image, no registry digest') return 'Local';
+      if (u.error) return '\u2014';
+      return u.hasUpdate ? 'Update' : 'Up to date';
+    },
+    updateTooltip(c) {
+      const u = this.updateResults[c.name];
+      if (!u) return 'Not checked yet';
+      if (u.error === 'local image, no registry digest') return 'Locally built image — no registry to check';
+      if (u.error === 'pinned image') return 'Image pinned to specific digest';
+      if (u.error) return u.error;
+      if (u.hasUpdate) return u.image + ' — new image available';
+      return u.image + ' — checked ' + this.formatEventTime(u.checkedAt);
+    },
+    get updateCheckSummary() {
+      const r = Object.values(this.updateResults || {});
+      return {
+        total: r.length,
+        upToDate: r.filter(u => !u.hasUpdate && !u.error).length,
+        updates: r.filter(u => u.hasUpdate).length,
+        errors: r.filter(u => u.error).length,
+        updatedContainers: r.filter(u => u.hasUpdate).map(u => u.containerName),
+        errorContainers: r.filter(u => u.error),
+      };
+    },
+    async triggerUpdateCheck() {
+      this.updateChecking = true;
+      await fetch('/api/updates/check', { method: 'POST' });
+      // Poll for completion
+      const poll = setInterval(async () => {
+        await this.fetchUpdates();
+        if (!this.updateChecking) clearInterval(poll);
+      }, 5000);
+      // Safety: stop polling after 10 minutes
+      setTimeout(() => clearInterval(poll), 600000);
     },
 
     // ---- Volume Management ----

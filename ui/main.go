@@ -85,6 +85,11 @@ func main() {
 	app.imageCleaner = imageCleaner
 	go imageCleaner.Run(ctx)
 
+	// Start update checker
+	updateChecker := NewUpdateChecker(cli)
+	app.updateChecker = updateChecker
+	go updateChecker.Run(ctx)
+
 	// Set up HTTP routes
 	mux := http.NewServeMux()
 
@@ -135,6 +140,10 @@ func main() {
 	mux.HandleFunc("POST /api/images/prune", app.handlePruneImages)
 	mux.HandleFunc("GET /api/image-cleanup/status", app.handleImageCleanupStatus)
 
+	// Update checking
+	mux.HandleFunc("GET /api/updates", app.handleGetUpdates)
+	mux.HandleFunc("POST /api/updates/check", app.handleTriggerUpdateCheck)
+
 	// Categories
 	cats := newCategoryStore()
 	app.categories = cats
@@ -182,7 +191,7 @@ func main() {
 	}
 }
 
-const constatVersion = "0.9.7"
+const constatVersion = "0.9.8"
 const restartDisabledPath = "/config/restart_disabled.json"
 
 // App holds shared application state
@@ -193,6 +202,7 @@ type App struct {
 	stats           *StatsCollector
 	sequences       *SequenceExecutor
 	imageCleaner    *ImageCleaner
+	updateChecker   *UpdateChecker
 	categories      *categoryStore
 	restartDisabled map[string]bool
 	restartMu       sync.RWMutex
