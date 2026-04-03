@@ -36,6 +36,7 @@ type UpdateChecker struct {
 	results       map[string]*UpdateStatus
 	lastFullRun   time.Time
 	checking      bool
+	wasEnabled    bool
 	manualTrigger chan struct{}
 }
 
@@ -54,7 +55,7 @@ func NewUpdateChecker(docker *client.Client) *UpdateChecker {
 func (uc *UpdateChecker) Run(ctx context.Context) {
 	// Check if regctl is available
 	if _, err := exec.LookPath("regctl"); err != nil {
-		log.Println("UpdateChecker: regctl not found, update checking disabled")
+		log.Println("Updates: regctl not found, update checking disabled")
 		return
 	}
 
@@ -84,7 +85,13 @@ func (uc *UpdateChecker) Run(ctx context.Context) {
 func (uc *UpdateChecker) shouldRun() bool {
 	cfg, err := ReadConfig(configPath)
 	if err != nil || cfg.UpdateCheckEnabled != "true" {
+		uc.wasEnabled = false
 		return false
+	}
+	// Run immediately when first enabled (or re-enabled)
+	if !uc.wasEnabled {
+		uc.wasEnabled = true
+		return true
 	}
 	interval := parseInterval(cfg.UpdateCheckInterval)
 	return time.Since(uc.lastFullRun) >= interval
@@ -106,6 +113,8 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 	uc.checking = true
 	uc.mu.Unlock()
 
+	log.Println("Updates: starting update check...")
+
 	defer func() {
 		uc.mu.Lock()
 		uc.checking = false
@@ -116,7 +125,7 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 
 	cfg, err := ReadConfig(configPath)
 	if err != nil {
-		log.Printf("UpdateChecker: failed to read config: %v", err)
+		log.Printf("Updates: failed to read config: %v", err)
 		return
 	}
 
@@ -132,7 +141,7 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 	// List all containers
 	containers, err := uc.docker.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
-		log.Printf("UpdateChecker: failed to list containers: %v", err)
+		log.Printf("Updates: failed to list containers: %v", err)
 		return
 	}
 
@@ -179,6 +188,7 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 		}
 
 		if excludeSet[strings.ToLower(name)] {
+			log.Printf("Updates: skipping %s (excluded)", name)
 			continue
 		}
 
@@ -191,6 +201,7 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 
 		// Skip digest-pinned images
 		if strings.Contains(imageRef, "@sha256:") {
+			log.Printf("Updates: skipping %s (pinned image)", name)
 			status.Error = "pinned image"
 			uc.setResult(name, status)
 			continue
@@ -199,12 +210,14 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 		// Get local RepoDigests
 		imageInspect, _, err := uc.docker.ImageInspectWithRaw(ctx, c.ImageID)
 		if err != nil {
+			log.Printf("Updates: %s — inspect failed: %v", name, err)
 			status.Error = fmt.Sprintf("inspect failed: %v", err)
 			uc.setResult(name, status)
 			continue
 		}
 
 		if len(imageInspect.RepoDigests) == 0 {
+			log.Printf("Updates: skipping %s (local image)", name)
 			status.Error = "local image, no registry digest"
 			uc.setResult(name, status)
 			continue
@@ -216,9 +229,10 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 			imageRef += ":latest"
 		}
 
-		// Get remote digest via regctl (platform-specific, not manifest list)
+		// Get remote digest via regctl
 		remoteDigest, err := uc.getRemoteDigest(ctx, imageRef)
 		if err != nil {
+			log.Printf("Updates: %s — registry error: %s", name, err)
 			status.Error = err.Error()
 			uc.setResult(name, status)
 			time.Sleep(1 * time.Second)
@@ -230,8 +244,13 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 		localDigests := strings.Join(imageInspect.RepoDigests, " ")
 		status.HasUpdate = !strings.Contains(localDigests, remoteDigest)
 
-		if status.HasUpdate && !previousUpdates[name] {
-			newUpdateNames = append(newUpdateNames, name)
+		if status.HasUpdate {
+			log.Printf("Updates: %s — UPDATE AVAILABLE (%s)", name, imageRef)
+			if !previousUpdates[name] {
+				newUpdateNames = append(newUpdateNames, name)
+			}
+		} else {
+			log.Printf("Updates: %s — up to date", name)
 		}
 
 		uc.setResult(name, status)
@@ -248,11 +267,19 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 	}
 	uc.mu.RUnlock()
 
-	log.Printf("UpdateChecker: checked %d containers, %d updates available", len(containers), totalUpdates)
+	log.Printf("Updates: complete — %d checked, %d up to date, %d updates, %d new", len(containers), len(containers)-totalUpdates, totalUpdates, len(newUpdateNames))
 
 	// Discord notification only for NEW updates
 	if len(newUpdateNames) > 0 {
-		description := fmt.Sprintf("%d new update(s) found:\n%s", len(newUpdateNames), strings.Join(newUpdateNames, ", "))
+		var lines []string
+		uc.mu.RLock()
+		for _, name := range newUpdateNames {
+			if r, ok := uc.results[name]; ok {
+				lines = append(lines, fmt.Sprintf("• **%s** — `%s`", name, r.Image))
+			}
+		}
+		uc.mu.RUnlock()
+		description := fmt.Sprintf("%d new update(s) available:\n%s", len(newUpdateNames), strings.Join(lines, "\n"))
 		go sendDiscordMaintenance("Image Updates Available", description, 0xd29922)
 	}
 }
@@ -261,7 +288,7 @@ func (uc *UpdateChecker) getRemoteDigest(ctx context.Context, imageRef string) (
 	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(checkCtx, "regctl", "image", "digest", "--platform", "local", imageRef)
+	cmd := exec.CommandContext(checkCtx, "regctl", "image", "digest", "--list", imageRef)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -335,11 +362,11 @@ func (uc *UpdateChecker) saveToDisk() {
 
 	raw, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		log.Printf("UpdateChecker: failed to marshal: %v", err)
+		log.Printf("Updates: failed to marshal: %v", err)
 		return
 	}
 	if err := os.WriteFile(updatesPersistPath, raw, 0664); err != nil {
-		log.Printf("UpdateChecker: failed to save: %v", err)
+		log.Printf("Updates: failed to save: %v", err)
 		return
 	}
 	_ = os.Chown(updatesPersistPath, 99, 100)
@@ -355,7 +382,7 @@ func (uc *UpdateChecker) loadFromDisk() {
 		LastFullRun time.Time                `json:"lastFullRun"`
 	}
 	if err := json.Unmarshal(raw, &data); err != nil {
-		log.Printf("UpdateChecker: failed to parse saved data: %v", err)
+		log.Printf("Updates: failed to parse saved data: %v", err)
 		return
 	}
 	if data.Results != nil {

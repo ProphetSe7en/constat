@@ -28,7 +28,7 @@ CONSTAT_PID=$!
 
 # Start web UI (if enabled)
 if [ "${UI_ENABLED:-true}" = "true" ]; then
-    /constat-ui &
+    /constat-ui 2>&1 &
     UI_PID=$!
 fi
 
