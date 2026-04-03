@@ -8,6 +8,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <style>
   [x-cloak] { display: none !important; }
+  .category-modal-overlay { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; background: rgba(0,0,0,0.6); z-index: 9999; display: flex; align-items: center; justify-content: center; transform: none !important; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e1e4e8; min-height: 100vh; }
 
@@ -265,7 +266,7 @@
   .event-row:hover { background: #161b22; }
   .event-time { color: #8b949e; font-size: 12px; min-width: 80px; cursor: default; }
   .event-container { font-weight: 500; min-width: 140px; }
-  .event-badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+  .event-badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; display: inline-block; min-width: 68px; text-align: center; }
   .event-badge-started { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
   .event-badge-stopped { background: #1c1c1c; color: #636e7b; border: 1px solid #30363d; }
   .event-badge-died { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
@@ -279,6 +280,7 @@
   .event-badge-blocked { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
   .event-badge-recovered { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
   .event-detail { font-size: 11px; color: #8b949e; }
+  .event-detail-inline { font-size: 11px; color: #6e7681; margin-left: 2px; }
   .event-exit { color: #f85149; }
   .event-exit-has-detail { border-bottom: 1px dotted #f85149; cursor: help; }
   .event-auto { color: #d29922; }
@@ -597,7 +599,7 @@
 
   /* Compare (inline in expanded chart) */
   .compare-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-  .compare-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; border: 1px solid #30363d; background: #21262d; color: #c9d1d9; }
+  .compare-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; border: 1px solid #30363d; background: #21262d; color: #c9d1d9; user-select: none; }
   .compare-pill .cpill-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
   .compare-pill .cpill-remove { cursor: pointer; color: #8b949e; font-size: 13px; line-height: 1; margin-left: 1px; }
   .compare-pill .cpill-remove:hover { color: #f85149; }
@@ -680,7 +682,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
       </svg>
-      <h1>Constat</h1>
+      <div>
+        <h1 style="line-height:1">Constat</h1>
+        <div style="font-size:10px;color:#484f58;font-weight:400;margin-top:1px"><span x-text="config?.version ? 'v' + config.version : ''"></span> <span x-show="config?.version">&middot;</span> Built by <a href="https://github.com/ProphetSe7en" target="_blank" rel="noopener" style="color:#484f58;text-decoration:none" onmouseover="this.style.color='#58a6ff'" onmouseout="this.style.color='#484f58'">ProphetSe7en</a></div>
+      </div>
       <!-- Mobile view toggle -->
       <button class="mobile-toggle-btn" :class="{ active: mobileView }" @click="toggleMobileView()" :title="mobileView ? 'Switch to desktop view' : 'Switch to mobile view'">
         <svg x-show="!mobileView" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>
@@ -992,14 +997,336 @@
           <span>Stopped</span>
         </div>
       </div>
+      <div class="filter-pill" :class="{ active: activeFilter === 'Groups' }" @click="activeFilter = activeFilter === 'Groups' ? 'All' : 'Groups'">
+        <span class="pill-dot" style="background:#a371f7"></span>
+        <span class="pill-num" x-text="categories.length"></span>
+        <span>Groups</span>
+      </div>
       <div class="search-wrap">
         <input type="text" class="search" placeholder="Search... (space = OR)" x-model="searchQuery">
         <button class="search-clear" x-show="searchQuery" @click="searchQuery = ''" title="Clear search">&times;</button>
       </div>
     </div>
 
+    <!-- Group View (desktop only) -->
+    <div x-show="!mobileView && activeFilter === 'Groups'" style="padding:0 16px 16px">
+      <div style="margin-bottom:8px">
+        <div class="filter-pill" @click="showCategoryModal = true" style="cursor:pointer;display:inline-flex">
+          <span style="color:#3fb950">+</span>
+          <span>Manage Groups</span>
+        </div>
+      </div>
+      <template x-if="categories.length === 0">
+        <div style="text-align:center;padding:40px;color:#484f58;font-size:13px">No groups created yet. Click Manage Groups to create your first group.</div>
+      </template>
+      <template x-if="groupedContainers && groupedContainers.length > 0">
+        <div class="table-wrap">
+          <table :class="config && config.showStats === 'true' ? 'has-stats' : 'no-stats'">
+            <colgroup>
+              <col class="col-name"><col class="col-health"><col class="col-restart">
+              <template x-if="config && config.showStats === 'true'"><col class="col-cpu"></template>
+              <template x-if="config && config.showStats === 'true'"><col class="col-ram"></template>
+              <col class="col-networks">
+              <template x-if="config && config.showStats === 'true'"><col class="col-net"></template>
+              <col class="col-uptime">
+            </colgroup>
+            <thead><tr>
+              <th>Container</th><th>Health</th><th>Restart</th>
+              <template x-if="config && config.showStats === 'true'"><th>CPU</th></template>
+              <template x-if="config && config.showStats === 'true'"><th>RAM</th></template>
+              <th>Networks</th>
+              <template x-if="config && config.showStats === 'true'"><th>Network I/O</th></template>
+              <th>Uptime</th>
+            </tr></thead>
+            <template x-for="row in groupRows" :key="row._key">
+              <tbody>
+                <!-- Group header row -->
+                <template x-if="row._type === 'header'">
+                  <tr style="cursor:pointer;background:#0d1117" @click="toggleGroupDetail(row.group.name)">
+                    <td style="font-weight:600">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <span style="color:#484f58;font-size:10px;transition:transform 0.15s;display:inline-block" :style="groupExpanded['grp_' + row.group.name] ? 'transform:rotate(90deg)' : ''">▸</span>
+                        <div>
+                          <div style="color:#e1e4e8;font-size:13px" x-text="row.group.name"></div>
+                          <div x-show="row.group.description" style="font-size:10px;color:#8b949e;font-weight:400" x-text="row.group.description"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span style="font-size:11px"><span :style="row.group._running > 0 ? 'color:#3fb950' : 'color:#8b949e'" x-text="row.group._running"></span><span style="color:#8b949e" x-text="'/' + row.group._total + ' running'"></span></span>
+                      <span x-show="row.group._unhealthy > 0" style="font-size:10px;padding:1px 6px;border-radius:3px;background:#3d1f1f;color:#f85149;margin-left:4px" x-text="row.group._unhealthy + ' unhealthy'"></span>
+                    </td>
+                    <td></td>
+                    <template x-if="config && config.showStats === 'true'"><td>
+                      <div class="sparkline-wrap">
+                        <div>
+                          <div class="metric" x-text="row.group._cpuTotal"></div>
+                          <div class="metric-avg" x-show="row.group._avgCpu > 0" x-text="'avg ' + row.group._avgCpu.toFixed(1) + '%'"></div>
+                        </div>
+                        <span x-show="row.group._stats && row.group._stats.length > 1">
+                          <svg width="60" height="16" viewBox="0 0 60 16" style="flex-shrink:0"><polyline :points="sparklinePoints(row.group._stats, 'c', 0, Math.max(100, ...row.group._stats.map(p => p.c || 0)))" fill="none" stroke="#58a6ff" stroke-width="1.2"/></svg>
+                        </span>
+                      </div>
+                    </td></template>
+                    <template x-if="config && config.showStats === 'true'"><td>
+                      <div class="sparkline-wrap">
+                        <div>
+                          <div class="metric" x-text="row.group._ramTotal"></div>
+                          <div class="metric-avg" x-show="row.group._avgMem > 0" x-text="'avg ' + formatBytes(row.group._avgMem)"></div>
+                        </div>
+                        <span x-show="row.group._stats && row.group._stats.length > 1">
+                          <svg width="60" height="16" viewBox="0 0 60 16" style="flex-shrink:0"><polyline :points="sparklinePoints(row.group._stats, 'm', 0, row.group._maxMem)" fill="none" stroke="#bc8cff" stroke-width="1.2"/></svg>
+                        </span>
+                      </div>
+                    </td></template>
+                    <td></td>
+                    <template x-if="config && config.showStats === 'true'"><td>
+                      <div style="white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums">
+                        <span style="color:#3fb950">&#8593;</span> <span x-text="row.group._netTx"></span>
+                        <span style="color:#d29922;margin-left:4px">&#8595;</span> <span x-text="row.group._netRx"></span>
+                      </div>
+                    </td></template>
+                    <td></td>
+                  </tr>
+                </template>
+                <!-- Group expanded detail panel -->
+                <template x-if="row._type === 'detail'">
+                  <tr x-transition>
+                    <td :colspan="config && config.showStats === 'true' ? 8 : 5" style="padding:0;border:none">
+                      <div class="detail-panel">
+                        <!-- Group info pills -->
+                        <div class="compact-info">
+                          <span><span class="il">Group</span> <span class="pill-val" x-text="row.group.name"></span></span>
+                          <span><span class="il">Running</span> <span class="pill-val"><span style="color:#3fb950" x-text="row.group._running"></span><span style="color:#8b949e" x-text="'/' + row.group._total"></span></span></span>
+                          <span x-show="row.group.containers.filter(c => c.health === 'healthy').length > 0"><span class="il">Healthy</span> <span class="pill-val state-healthy" x-text="row.group.containers.filter(c => c.health === 'healthy').length"></span></span>
+                          <span x-show="row.group._unhealthy > 0"><span class="il">Unhealthy</span> <span class="pill-val state-unhealthy" x-text="row.group._unhealthy"></span></span>
+                          <span x-show="row.group.containers.filter(c => c.health === 'none' && c.state === 'running').length > 0"><span class="il">No Check</span> <span class="pill-val" x-text="row.group.containers.filter(c => c.health === 'none' && c.state === 'running').length"></span></span>
+                          <span x-show="row.group._total - row.group._running > 0"><span class="il">Stopped</span> <span class="pill-val" style="color:#8b949e" x-text="row.group._total - row.group._running"></span></span>
+                          <span><span class="il">CPU</span> <span class="pill-val" x-text="row.group._cpuTotal"></span></span>
+                          <span><span class="il">RAM</span> <span class="pill-val" x-text="row.group._ramTotal"></span></span>
+                          <span><span class="il">Net</span> <span class="pill-val"><span style="color:#3fb950">&#8593;</span> <span x-text="row.group._netTx"></span> <span style="color:#d29922">&#8595;</span> <span x-text="row.group._netRx"></span></span></span>
+                        </div>
+                        <!-- Chart section -->
+                        <div style="border-top:1px solid #21262d;margin-top:10px;padding-top:10px">
+                          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+                            <button class="metric-toggle" :class="{ 'active-cpu': groupChartShowCpu }" @click.stop="toggleGroupChart('cpu')">
+                              <span class="toggle-dot cpu-dot"></span> CPU
+                            </button>
+                            <button class="metric-toggle" :class="{ 'active-ram': groupChartShowRam }" @click.stop="toggleGroupChart('ram')">
+                              <span class="toggle-dot ram-dot"></span> RAM
+                            </button>
+                            <div class="chart-range-btns" style="margin-bottom:0;margin-left:4px" x-show="groupAnyChartActive()">
+                              <template x-for="r in ['1h','6h','24h','3d','7d']" :key="'gr_'+r">
+                                <button class="chart-range-btn" :class="{ active: groupChartRange === r }" @click.stop="groupChartRange = r; fetchGroupChartData(groupDetailName, r)" x-text="r"></button>
+                              </template>
+                            </div>
+                            <div style="flex:1"></div>
+                            <span class="toggle-stat" x-show="groupChartShowCpu && groupChartData && groupChartData.length > 1" x-text="'CPU avg ' + groupChartAvg('c').toFixed(1) + '% \u00b7 peak ' + groupChartPeak('c').toFixed(1) + '%'" style="color:#c9d1d9"></span>
+                            <span class="toggle-stat" x-show="groupChartShowRam && groupChartData && groupChartData.length > 1" x-text="'RAM avg ' + formatBytes(groupChartAvg('m')) + ' \u00b7 peak ' + formatBytes(groupChartPeak('m'))" style="color:#c9d1d9"></span>
+                          </div>
+                          <!-- Chart area -->
+                          <template x-if="groupAnyChartActive()">
+                            <div class="chart-container" @mouseleave="groupChartHoverIdx = -1">
+                              <div x-show="groupChartLoading" style="text-align:center;padding:20px;color:#484f58;font-size:12px">Loading chart data...</div>
+                              <div x-show="!groupChartLoading && (!groupChartData || groupChartData.length === 0)" style="text-align:center;padding:20px;color:#484f58;font-size:12px">No data yet</div>
+                              <template x-if="!groupChartLoading && groupChartData && groupChartData.length > 1">
+                                <div>
+                                  <div style="display:flex;align-items:stretch;height:160px">
+                                    <!-- CPU Y-axis -->
+                                    <div x-show="groupChartShowCpu" style="width:44px;flex-shrink:0;position:relative">
+                                      <template x-for="tick in groupChartScaleFor('cpu').ticks" :key="'gcpuY-'+tick.label">
+                                        <span class="y-label" style="color:#58a6ff" :style="'top:' + chartTickTop(tick.fraction) + '%'" x-text="tick.label"></span>
+                                      </template>
+                                    </div>
+                                    <!-- SVG chart -->
+                                    <div style="flex:1;min-width:0">
+                                      <svg width="100%" height="100%" viewBox="0 0 300 140" preserveAspectRatio="none" style="display:block;cursor:crosshair"
+                                        @mousemove.prevent="groupChartHandleHover($event)"
+                                        @touchmove.prevent="groupChartHandleHover($event)">
+                                        <path :d="groupChartGridLinesFor(groupChartShowCpu ? 'cpu' : 'ram')" stroke="#21262d" stroke-width="0.5" fill="none" vector-effect="non-scaling-stroke"/>
+                                        <!-- Aggregated CPU (white — distinct from member colors) -->
+                                        <path x-show="groupChartShowCpu" :d="groupChartSmoothAreaPathFor('c', 300, 140)" fill="rgba(201,209,217,0.06)" stroke="none"/>
+                                        <path x-show="groupChartShowCpu" :d="groupChartSmoothPathFor('c', 300, 140)" fill="none" stroke="#c9d1d9" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+                                        <!-- Aggregated RAM (white — distinct from member colors) -->
+                                        <path x-show="groupChartShowRam" :d="groupChartSmoothAreaPathFor('m', 300, 140)" fill="rgba(201,209,217,0.06)" stroke="none"/>
+                                        <path x-show="groupChartShowRam" :d="groupChartSmoothPathFor('m', 300, 140)" fill="none" stroke="#c9d1d9" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+                                        <!-- Individual member overlays (fixed slots, colors match pills) -->
+                                        <path x-show="groupChartShowCpu && enabledGroupMembers[0]" :d="enabledGroupMembers[0] ? groupMemberPathFor('c', enabledGroupMembers[0].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[0]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowRam && enabledGroupMembers[0]" :d="enabledGroupMembers[0] ? groupMemberPathFor('m', enabledGroupMembers[0].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[0]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowCpu && enabledGroupMembers[1]" :d="enabledGroupMembers[1] ? groupMemberPathFor('c', enabledGroupMembers[1].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[1]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowRam && enabledGroupMembers[1]" :d="enabledGroupMembers[1] ? groupMemberPathFor('m', enabledGroupMembers[1].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[1]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowCpu && enabledGroupMembers[2]" :d="enabledGroupMembers[2] ? groupMemberPathFor('c', enabledGroupMembers[2].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[2]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowRam && enabledGroupMembers[2]" :d="enabledGroupMembers[2] ? groupMemberPathFor('m', enabledGroupMembers[2].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[2]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowCpu && enabledGroupMembers[3]" :d="enabledGroupMembers[3] ? groupMemberPathFor('c', enabledGroupMembers[3].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[3]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowRam && enabledGroupMembers[3]" :d="enabledGroupMembers[3] ? groupMemberPathFor('m', enabledGroupMembers[3].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[3]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowCpu && enabledGroupMembers[4]" :d="enabledGroupMembers[4] ? groupMemberPathFor('c', enabledGroupMembers[4].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[4]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowRam && enabledGroupMembers[4]" :d="enabledGroupMembers[4] ? groupMemberPathFor('m', enabledGroupMembers[4].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[4]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowCpu && enabledGroupMembers[5]" :d="enabledGroupMembers[5] ? groupMemberPathFor('c', enabledGroupMembers[5].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[5]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowRam && enabledGroupMembers[5]" :d="enabledGroupMembers[5] ? groupMemberPathFor('m', enabledGroupMembers[5].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[5]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowCpu && enabledGroupMembers[6]" :d="enabledGroupMembers[6] ? groupMemberPathFor('c', enabledGroupMembers[6].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[6]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowRam && enabledGroupMembers[6]" :d="enabledGroupMembers[6] ? groupMemberPathFor('m', enabledGroupMembers[6].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[6]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowCpu && enabledGroupMembers[7]" :d="enabledGroupMembers[7] ? groupMemberPathFor('c', enabledGroupMembers[7].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[7]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowRam && enabledGroupMembers[7]" :d="enabledGroupMembers[7] ? groupMemberPathFor('m', enabledGroupMembers[7].name, 300, 140) : ''" fill="none" :stroke="enabledGroupMembers[7]?.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                        <!-- Hover crosshair -->
+                                        <line x-show="groupChartHoverIdx >= 0" :x1="groupChartHoverX" :x2="groupChartHoverX" y1="0" y2="140" stroke="#484f58" stroke-width="0.5" stroke-dasharray="2,2" vector-effect="non-scaling-stroke"/>
+                                      </svg>
+                                    </div>
+                                    <!-- RAM Y-axis -->
+                                    <div x-show="groupChartShowRam" style="width:52px;flex-shrink:0;position:relative">
+                                      <template x-for="tick in groupChartScaleFor('ram').ticks" :key="'gramY-'+tick.label">
+                                        <span class="y-label-right" style="color:#bc8cff" :style="'top:' + chartTickTop(tick.fraction) + '%'" x-text="tick.label"></span>
+                                      </template>
+                                    </div>
+                                  </div>
+                                  <!-- Time labels -->
+                                  <div style="display:flex;justify-content:space-between;font-size:10px;color:#484f58;margin-top:4px" :style="{ marginLeft: groupChartShowCpu ? '44px' : '0', marginRight: groupChartShowRam ? '52px' : '0' }">
+                                    <template x-for="idx in groupChartTimeLabelIndices()" :key="'gtl-'+idx">
+                                      <span x-text="chartTimeLabel(groupChartData[idx])"></span>
+                                    </template>
+                                  </div>
+                                </div>
+                              </template>
+                              <!-- Hover tooltip -->
+                              <template x-if="groupChartHoverIdx >= 0 && groupChartData && groupChartData[groupChartHoverIdx]">
+                                <div class="chart-tooltip" :style="'top: 8px; left: ' + (groupChartHoverPixelX > groupChartHoverContainerWidth - 250 ? (groupChartHoverPixelX - 240) : (groupChartHoverPixelX + 15)) + 'px'">
+                                  <div class="chart-tooltip-time" x-text="chartTimeLabelFull(groupChartData[groupChartHoverIdx])"></div>
+                                  <div class="chart-tooltip-row" x-show="groupChartShowCpu">
+                                    <span class="chart-tooltip-dot" style="background:#c9d1d9"></span>
+                                    <span>Group CPU:</span>
+                                    <span style="font-weight:600" x-text="(groupChartData[groupChartHoverIdx].c || 0).toFixed(1) + '%'"></span>
+                                  </div>
+                                  <div class="chart-tooltip-row" x-show="groupChartShowRam">
+                                    <span class="chart-tooltip-dot" style="background:#c9d1d9"></span>
+                                    <span>Group RAM:</span>
+                                    <span style="font-weight:600" x-text="formatBytes(groupChartData[groupChartHoverIdx].m || 0)"></span>
+                                  </div>
+                                  <template x-for="mem in enabledGroupMembers" :key="'tip-gm-'+mem.name">
+                                    <div>
+                                      <div class="chart-tooltip-row" x-show="groupChartShowCpu">
+                                        <span class="chart-tooltip-dot" :style="'background:' + mem.color"></span>
+                                        <span x-text="mem.name + ' CPU:'"></span>
+                                        <span style="font-weight:600" x-text="groupMemberHoverVal(mem.name, 'c')"></span>
+                                      </div>
+                                      <div class="chart-tooltip-row" x-show="groupChartShowRam">
+                                        <span class="chart-tooltip-dot" :style="'background:' + mem.color"></span>
+                                        <span x-text="mem.name + ' RAM:'"></span>
+                                        <span style="font-weight:600" x-text="groupMemberHoverVal(mem.name, 'm')"></span>
+                                      </div>
+                                    </div>
+                                  </template>
+                                </div>
+                              </template>
+                            </div>
+                          </template>
+                          <!-- Member toggles -->
+                          <div class="compare-bar" x-show="groupAnyChartActive()" style="margin-top:8px">
+                            <span style="font-size:11px;color:#8b949e">Members:</span>
+                            <template x-for="(name, idx) in Object.keys(groupMemberCharts)" :key="'gmt_'+name">
+                              <span class="compare-pill" style="cursor:pointer" :style="groupMemberEnabled[name] ? 'border-color:' + groupMemberColor(idx) : 'opacity:0.5'" @click.stop="toggleGroupMember(name)">
+                                <span class="cpill-dot" :style="'background:' + groupMemberColor(idx)"></span>
+                                <span x-text="name"></span>
+                              </span>
+                            </template>
+                          </div>
+                        </div>
+                        <!-- Group actions -->
+                        <div class="detail-controls" style="margin-top:12px">
+                          <div style="display:flex;gap:8px">
+                            <button x-show="row.group._running > 0" class="detail-btn btn-stop" @click.stop="groupActionConfirm = { action: 'stop', group: row.group }">
+                              <span class="icon-stop"></span> Stop All
+                            </button>
+                            <button x-show="row.group._running > 0" class="detail-btn btn-restart" @click.stop="groupActionConfirm = { action: 'restart', group: row.group }">
+                              &#8635; Restart All
+                            </button>
+                            <button x-show="row.group._running < row.group._total" class="detail-btn btn-start" @click.stop="groupActionConfirm = { action: 'start', group: row.group }">
+                              &#9654; Start All
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+                <!-- Container row (no expand — use group detail for charts) -->
+                <template x-if="row._type === 'container'">
+                  <tr style="cursor:default">
+                    <td style="padding-left:36px">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <img x-show="row.container.icon" :src="row.container.icon" style="width:18px;height:18px;border-radius:3px" loading="lazy">
+                        <div>
+                          <div class="container-name" x-text="row.container.name"></div>
+                          <div class="container-meta">
+                            <span x-show="row.container.state === 'running'" class="label-running">&#9654; running</span>
+                            <span x-show="row.container.state !== 'running'" class="label-stopped">&#9632; <span x-text="row.container.state"></span></span>
+                            <span x-text="row.container.image" style="color:#484f58"></span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span x-show="row.container.state === 'running' && row.container.health === 'healthy'" class="badge badge-healthy">Healthy</span>
+                      <span x-show="row.container.state === 'running' && row.container.health === 'unhealthy'" class="badge badge-unhealthy">Unhealthy</span>
+                      <span x-show="row.container.state === 'running' && row.container.health === 'none'" class="badge badge-nocheck">No Check</span>
+                      <span x-show="row.container.state !== 'running'" class="badge badge-stopped">Stopped</span>
+                    </td>
+                    <td>
+                      <span x-show="row.container.state === 'running' && row.container.hasRestartLabel" class="label-yes">Yes</span>
+                      <span x-show="row.container.state === 'running' && !row.container.hasRestartLabel" class="label-no">No</span>
+                      <span x-show="row.container.state !== 'running'" class="label-no">&mdash;</span>
+                    </td>
+                    <template x-if="config && config.showStats === 'true'"><td>
+                      <template x-if="row.container.state === 'running'">
+                        <div class="sparkline-wrap">
+                          <div><div class="metric" x-text="row.container.cpu.toFixed(1) + '%'"></div><div class="metric-avg" x-show="row.container.avgCpu > 0" x-text="'avg ' + row.container.avgCpu.toFixed(1) + '%'"></div></div>
+                          <span x-show="row.container.recentStats && row.container.recentStats.length > 1">
+                            <svg width="60" height="16" viewBox="0 0 60 16" style="flex-shrink:0"><polyline :points="sparklinePoints(row.container.recentStats, 'c', 0, 100)" fill="none" stroke="#58a6ff" stroke-width="1.2"/></svg>
+                          </span>
+                        </div>
+                      </template>
+                      <template x-if="row.container.state !== 'running'"><div class="metric" style="color:#484f58">&mdash;</div></template>
+                    </td></template>
+                    <template x-if="config && config.showStats === 'true'"><td>
+                      <template x-if="row.container.state === 'running'">
+                        <div class="sparkline-wrap">
+                          <div><div class="metric" x-text="formatBytes(row.container.memory)"></div><div class="metric-avg" x-show="row.container.avgMemory > 0" x-text="'avg ' + formatBytes(row.container.avgMemory)"></div></div>
+                          <span x-show="row.container.recentStats && row.container.recentStats.length > 1">
+                            <svg width="60" height="16" viewBox="0 0 60 16" style="flex-shrink:0"><polyline :points="sparklinePoints(row.container.recentStats, 'm', 0, row.container.memoryLimit)" fill="none" stroke="#bc8cff" stroke-width="1.2"/></svg>
+                          </span>
+                        </div>
+                      </template>
+                      <template x-if="row.container.state !== 'running'"><div class="metric" style="color:#484f58">&mdash;</div></template>
+                    </td></template>
+                    <td>
+                      <div style="font-size:11px;line-height:1.6">
+                        <template x-for="n in (row.container.networks || [])" :key="n"><span :class="netBadgeClass(n)" x-text="n"></span></template>
+                        <span x-show="!row.container.networks || row.container.networks.length === 0" style="color:#484f58">&mdash;</span>
+                      </div>
+                    </td>
+                    <template x-if="config && config.showStats === 'true'"><td>
+                      <template x-if="row.container.state === 'running'">
+                        <div style="white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums">
+                          <span style="color:#3fb950">&#8593;</span> <span x-text="formatRate(row.container.netTxRate)"></span>
+                          <span style="color:#d29922;margin-left:4px">&#8595;</span> <span x-text="formatRate(row.container.netRxRate)"></span>
+                          <span x-show="row.container.netParent" style="font-size:9px;color:#484f58;margin-left:3px">(shared)</span>
+                        </div>
+                      </template>
+                      <template x-if="row.container.state !== 'running'"><div style="color:#484f58">&mdash;</div></template>
+                    </td></template>
+                    <td>
+                      <span x-show="row.container.state === 'running'" style="font-size:12px;color:#8b949e;white-space:nowrap" x-text="formatUptime(row.container.startedAt)"></span>
+                      <span x-show="row.container.state !== 'running'" style="color:#484f58">&mdash;</span>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </template>
+          </table>
+        </div>
+      </template>
+    </div>
+
     <!-- Container Table (desktop only) -->
-    <div class="table-wrap" x-show="!mobileView">
+    <div class="table-wrap" x-show="!mobileView && activeFilter !== 'Groups'">
       <div class="loading" x-show="loading">Loading containers...</div>
       <table x-show="!loading && config" :class="config && config.showStats === 'true' ? 'has-stats' : 'no-stats'">
         <colgroup>
@@ -1096,6 +1423,7 @@
                     <div style="white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums">
                       <span style="color:#3fb950">&#8593;</span> <span x-text="formatRate(c.netTxRate)"></span>
                       <span style="color:#d29922;margin-left:6px">&#8595;</span> <span x-text="formatRate(c.netRxRate)"></span>
+                      <span x-show="c.netParent" style="font-size:9px;color:#484f58;margin-left:3px">(shared)</span>
                     </div>
                   </template>
                   <template x-if="c.state !== 'running'">
@@ -1587,6 +1915,7 @@
                   <span class="mobile-event-time" x-text="formatEventTime(g.events[0].timestamp)"></span>
                   <span class="event-badge" :class="'event-badge-' + g.events[0].action" x-text="g.events[0].action" style="font-size:10px;padding:1px 6px"></span>
                   <span x-show="g.events[0].exitCode" class="event-exit" style="font-size:11px" x-text="'exit ' + g.events[0].exitCode"></span>
+                  <span x-show="g.events[0].detail && !g.events[0].exitCode && !g.events[0].detail.includes('\n')" class="event-detail-inline" style="font-size:10px" x-text="formatMemoryDetail(g.events[0].action, g.events[0].detail)"></span>
                 </div>
                 <div class="mobile-event-bottom">
                   <span class="dot" :class="'dot-' + (g.events[0].action === 'started' || g.events[0].action === 'healthy' ? 'green' : g.events[0].action === 'died' || g.events[0].action === 'unhealthy' ? 'red' : 'yellow')" style="width:6px;height:6px"></span>
@@ -1613,6 +1942,7 @@
                       <span style="color:#484f58" x-text="formatEventTime(e.timestamp)"></span>
                       <span class="event-badge" :class="'event-badge-' + e.action" x-text="e.action" style="font-size:10px;padding:1px 6px"></span>
                       <span x-show="e.exitCode" class="event-exit" style="font-size:10px" x-text="'exit ' + e.exitCode"></span>
+                      <span x-show="e.detail && !e.exitCode && !e.detail.includes('\n')" class="event-detail-inline" style="font-size:10px" x-text="formatMemoryDetail(e.action, e.detail)"></span>
                     </div>
                   </template>
                 </div>
@@ -1659,6 +1989,8 @@
               <span class="event-detail">
                 <span x-show="g.events[0].exitCode" class="event-exit" :class="{ 'event-exit-has-detail': g.events[0].detail }" :title="g.events[0].detail || ''" x-text="'exit ' + g.events[0].exitCode"></span>
                 <span x-show="g.events[0].autoRestart" class="event-auto">auto-restart</span>
+                <span x-show="g.events[0].detail && !g.events[0].exitCode && !g.events[0].detail.includes('\n')" class="event-detail-inline" x-text="formatMemoryDetail(g.events[0].action, g.events[0].detail)"></span>
+                <span x-show="g.events[0].detail && !g.events[0].exitCode && g.events[0].detail.includes('\n')" class="event-exit-has-detail" style="color:#6e7681;cursor:help;border-bottom:1px dotted #6e7681" :title="g.events[0].detail" x-text="'details\u2026'"></span>
               </span>
             </div>
           </template>
@@ -1686,6 +2018,8 @@
                     <span class="event-detail">
                       <span x-show="e.exitCode" class="event-exit" :class="{ 'event-exit-has-detail': e.detail }" :title="e.detail || ''" x-text="'exit ' + e.exitCode"></span>
                       <span x-show="e.autoRestart" class="event-auto">auto-restart</span>
+                      <span x-show="e.detail && !e.exitCode && !e.detail.includes('\n')" class="event-detail-inline" x-text="formatMemoryDetail(e.action, e.detail)"></span>
+                      <span x-show="e.detail && !e.exitCode && e.detail.includes('\n')" class="event-exit-has-detail" style="color:#6e7681;cursor:help;border-bottom:1px dotted #6e7681" :title="e.detail" x-text="'details\u2026'"></span>
                     </span>
                   </div>
                 </template>
@@ -2076,7 +2410,8 @@
 
               <template x-for="[label, field, hint] in [
                 ['State webhook', 'webhookState', 'Start, stop, restart, die events'],
-                ['Health webhook', 'webhookHealth', 'Unhealthy, recovered, memory events']
+                ['Health webhook', 'webhookHealth', 'Unhealthy, recovered, memory events'],
+                ['Maintenance webhook', 'webhookMaintenance', 'Image cleanup, volume cleanup (falls back to Health if empty)']
               ]" :key="field">
                 <div>
                   <div class="config-field">
@@ -2556,6 +2891,88 @@
     </div>
   </div>
 
+  <!-- Category Manager Modal -->
+  <div x-show="showCategoryModal" x-cloak @click.self="showCategoryModal = false" class="category-modal-overlay">
+    <div class="seq-editor" @click.stop style="width:600px;max-width:90vw;max-height:80vh;overflow-y:auto">
+      <h2 x-text="categoryEditIdx >= 0 ? 'Edit Group' : categoryEditIdx === -1 ? 'New Group' : 'Container Groups'"></h2>
+      <template x-if="categoryEditIdx === -2">
+        <div>
+          <template x-for="(cat, idx) in categories" :key="idx">
+            <div class="seq-step-row" style="cursor:pointer;align-items:center" @click="startCategoryEdit(idx)">
+              <span class="seq-step-num" x-text="idx + 1"></span>
+              <span style="flex:1;font-size:13px;font-weight:500;color:#e1e4e8" x-text="cat.name"></span>
+              <span style="font-size:11px;color:#8b949e;margin-right:8px" x-text="cat.containers.length + ' containers'"></span>
+              <span @click.stop="categoryConfirmDelete = idx" style="color:#f85149;font-size:15px;padding:2px 6px;border-radius:4px;cursor:pointer;line-height:1;opacity:0.6" title="Delete group" @mouseenter="$el.style.opacity='1'" @mouseleave="$el.style.opacity='0.6'">&times;</span>
+            </div>
+          </template>
+          <template x-if="categories.length === 0">
+            <div style="text-align:center;padding:20px;color:#484f58;font-size:12px">No groups yet.</div>
+          </template>
+          <button class="seq-add-step" style="color:#3fb950;border-color:#238636" @click="startCategoryEdit(-1)">+ New Group</button>
+          <div class="seq-editor-footer"><button class="seq-cancel-btn" @click="showCategoryModal = false">Close</button></div>
+        </div>
+      </template>
+      <template x-if="categoryEditIdx >= -1">
+        <div>
+          <div class="seq-form-field"><label>Name *</label><input type="text" x-model="categoryEditName" placeholder="e.g. Media Stack"></div>
+          <div class="seq-form-field"><label>Description</label><input type="text" x-model="categoryEditDesc" placeholder="Optional description"></div>
+          <div class="seq-form-field" x-show="sequenceList?.length > 0">
+            <label>Import from sequence</label>
+            <select @change="if($event.target.value){importSequenceToCategory($event.target.value);$event.target.value='';}" style="padding:6px 10px;background:#0d1117;border:1px solid #21262d;border-radius:6px;color:#8b949e;font-size:13px;width:100%">
+              <option value="">Select sequence...</option>
+              <template x-for="seq in (sequenceList || [])" :key="seq.id"><option :value="seq.id" x-text="seq.name + ' (' + seq.steps.length + ' containers)'"></option></template>
+            </select>
+          </div>
+          <div style="font-size:13px;font-weight:600;color:#8b949e;margin:16px 0 8px;text-transform:uppercase;letter-spacing:0.5px">
+            Containers <span style="text-transform:none;letter-spacing:0;font-weight:400;color:#58a6ff;margin-left:8px" x-text="categoryEditContainers.length + ' selected'"></span>
+          </div>
+          <div class="seq-form-field" style="margin-bottom:8px">
+            <div style="position:relative">
+              <input type="text" x-model="categorySearch" placeholder="Search containers..." style="width:100%">
+              <span x-show="categorySearch" @click="categorySearch=''" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:#f85149;font-size:14px">&times;</span>
+            </div>
+          </div>
+          <div style="max-height:280px;overflow-y:auto;border:1px solid #21262d;border-radius:6px;background:#0d1117">
+            <template x-for="c in sortedCategoryContainers" :key="c.name">
+              <div class="seq-step-row" style="cursor:pointer;padding:5px 12px" @click="toggleCategoryContainer(c.name)">
+                <input type="checkbox" :checked="categoryEditContainers.includes(c.name)" style="margin:0;accent-color:#58a6ff;cursor:pointer" @click.stop="toggleCategoryContainer(c.name)">
+                <span style="flex:1;font-size:12px" :style="categoryEditContainers.includes(c.name)?'color:#e1e4e8;font-weight:500':'color:#6e7681'" x-text="c.name"></span>
+                <span style="width:6px;height:6px;border-radius:50%;flex-shrink:0" :style="c.state==='running'?'background:#3fb950':'background:#484f58'"></span>
+              </div>
+            </template>
+          </div>
+          <div class="seq-editor-footer">
+            <button class="seq-cancel-btn" @click="categoryEditIdx = -2">Back</button>
+            <button x-show="categoryEditIdx >= 0" class="seq-cancel-btn" style="color:#f85149;border-color:#f85149" @click="categoryConfirmDelete = categoryEditIdx">Delete</button>
+            <button class="seq-save-btn" @click="saveCategoryEdit()" :disabled="!categoryEditName.trim()" x-text="categoryEditIdx >= 0 ? 'Update Group' : 'Create Group'"></button>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+  <!-- Delete group confirm dialog (shared by list and edit views) -->
+  <div x-show="categoryConfirmDelete !== null" x-transition class="confirm-overlay" style="z-index:10000" @click.self="categoryConfirmDelete = null">
+    <div class="confirm-dialog">
+      <h3>Delete Group</h3>
+      <p>Are you sure you want to delete "<span x-text="categoryConfirmDelete !== null ? categories[categoryConfirmDelete]?.name : ''"></span>"? The containers will not be affected.</p>
+      <div class="confirm-actions">
+        <button class="btn-cancel" @click="categoryConfirmDelete = null">Cancel</button>
+        <button class="btn-confirm" @click="deleteCategory(categoryConfirmDelete); categoryConfirmDelete = null">Delete</button>
+      </div>
+    </div>
+  </div>
+  <!-- Group action confirm dialog -->
+  <div x-show="groupActionConfirm" x-transition class="confirm-overlay" style="z-index:10000" @click.self="groupActionConfirm = null">
+    <div class="confirm-dialog">
+      <h3 x-text="groupActionConfirm ? (groupActionConfirm.action === 'stop' ? 'Stop All' : groupActionConfirm.action === 'restart' ? 'Restart All' : 'Start All') : ''"></h3>
+      <p><span x-text="groupActionConfirm ? groupActionConfirm.action.charAt(0).toUpperCase() + groupActionConfirm.action.slice(1) : ''"></span> all containers in "<span x-text="groupActionConfirm?.group?.name || ''"></span>"?</p>
+      <div class="confirm-actions">
+        <button class="btn-cancel" @click="groupActionConfirm = null">Cancel</button>
+        <button :class="groupActionConfirm?.action === 'start' ? 'btn-confirm-start' : 'btn-confirm'" @click="groupAction(groupActionConfirm.action, groupActionConfirm.group); groupActionConfirm = null" x-text="groupActionConfirm ? (groupActionConfirm.action === 'stop' ? 'Stop All' : groupActionConfirm.action === 'restart' ? 'Restart All' : 'Start All') : ''"></button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -2598,6 +3015,29 @@ function app() {
     configError: '',
     configSuccess: '',
     configSections: { discord: false, behavior: false, display: false, restart: false },
+    categories: [],
+    showCategoryModal: false,
+    categoryEditIdx: -2,
+    categoryEditName: '',
+    categoryEditDesc: '',
+    categoryEditContainers: [],
+    categorySearch: '',
+    categoryConfirmDelete: null,
+    groupExpanded: {},
+    groupDetailName: null,
+    groupChartData: null,
+    groupChartLoading: false,
+    groupChartShowCpu: false,
+    groupChartShowRam: false,
+    groupChartRange: '1h',
+    groupChartHoverIdx: -1,
+    groupChartHoverX: 0,
+    groupChartHoverPixelX: 0,
+    groupChartHoverContainerWidth: 0,
+    groupMemberCharts: {},
+    groupMemberEnabled: {},
+    groupChartRefreshInterval: null,
+    groupActionConfirm: null,
     toolsSections: { memory: false, rules: true, cleanup: false },
     imageData: null,
     imageLoading: false,
@@ -2732,6 +3172,7 @@ function app() {
       await this.fetchContainers();
       this.fetchSuggestions();
       this.fetchConfig();
+      this.fetchCategories();
       this.fetchSequences();
       this.loading = false;
       // Auto-refresh every 30s (lifecycle changes only — stats come via SSE)
@@ -3937,15 +4378,13 @@ function app() {
           if (batch.containers) {
             const sharedNet = new Set();
             for (const c of this.containers) {
-              if (c.networks && c.networks.some(n => n.startsWith('→ '))) {
-                sharedNet.add(c.name);
-              }
+              if (c.netParent) sharedNet.add(c.name);
             }
             let txSum = 0, rxSum = 0;
-            for (const id in batch.containers) {
-              if (sharedNet.has(id)) continue;
-              txSum += batch.containers[id].netTxRate || 0;
-              rxSum += batch.containers[id].netRxRate || 0;
+            for (const name in batch.containers) {
+              if (sharedNet.has(name)) continue;
+              txSum += batch.containers[name].netTxRate || 0;
+              rxSum += batch.containers[name].netRxRate || 0;
             }
             this.totalNetTx = txSum;
             this.totalNetRx = rxSum;
@@ -4190,6 +4629,24 @@ function app() {
       return Math.floor(diff / 86400) + 'd ago';
     },
 
+    formatMemoryDetail(action, detail) {
+      if (!detail) return '';
+      // Parse "CURRENT / LIMIT — DURATION" or "CURRENT / LIMIT — after DURATION"
+      const match = detail.match(/^([\d.]+\s*\S+)\s*\/\s*([\d.]+\s*\S+)\s*[—–-]\s*(after\s+)?(.*)/);
+      if (!match) return detail;
+      const [, current, limit, afterPrefix, duration] = match;
+      if (action === 'notify' || action === 'restart') {
+        return `exceeded limit for ${duration} (${current} / ${limit})`;
+      }
+      if (action === 'recovered') {
+        return `dropped below limit after ${duration} (${current} / ${limit})`;
+      }
+      if (action === 'blocked') {
+        return `restart blocked (${current} / ${limit} — ${duration})`;
+      }
+      return detail;
+    },
+
     // ---- Event Grouping ----
     get groupedEvents() {
       const groups = [];
@@ -4248,6 +4705,369 @@ function app() {
         badges.push(newest);
       }
       return badges;
+    },
+
+    // ---- Categories ----
+    async fetchCategories() {
+      try { const r = await fetch('/api/categories'); if (r.ok) this.categories = await r.json(); } catch(e) {}
+    },
+    async saveCategories() {
+      try {
+        const r = await fetch('/api/categories', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(this.categories) });
+        if (r.ok) this.categories = await r.json();
+      } catch(e) { alert('Failed to save: ' + e.message); }
+    },
+    startCategoryEdit(idx) {
+      if (idx >= 0) {
+        const cat = this.categories[idx];
+        this.categoryEditIdx = idx;
+        this.categoryEditName = cat.name;
+        this.categoryEditDesc = cat.description || '';
+        this.categoryEditContainers = [...cat.containers];
+      } else {
+        this.categoryEditIdx = -1;
+        this.categoryEditName = '';
+        this.categoryEditDesc = '';
+        this.categoryEditContainers = [];
+      }
+      this.categorySearch = '';
+    },
+    saveCategoryEdit() {
+      if (!this.categoryEditName.trim()) return;
+      const cat = { name: this.categoryEditName.trim(), description: this.categoryEditDesc.trim(), containers: this.categoryEditContainers, order: this.categoryEditIdx >= 0 ? this.categories[this.categoryEditIdx].order : this.categories.length };
+      if (this.categoryEditIdx >= 0) this.categories[this.categoryEditIdx] = cat;
+      else this.categories.push(cat);
+      this.categoryEditIdx = -2;
+      this.saveCategories();
+    },
+    deleteCategory(idx) {
+      this.categories.splice(idx, 1);
+      this.categoryEditIdx = -2;
+      this.saveCategories();
+    },
+    // ---- Group Detail (expanded chart view) ----
+    toggleGroupDetail(groupName) {
+      if (this.groupDetailName === groupName) {
+        // Already open — close everything
+        this.closeGroupDetail();
+        this.groupExpanded = { ...this.groupExpanded, ['grp_' + groupName]: false };
+        return;
+      }
+      // Open new group detail with RAM as default
+      if (this.groupDetailName) this.closeGroupDetail();
+      this.groupDetailName = groupName;
+      this.groupChartShowCpu = false;
+      this.groupChartShowRam = true;
+      this.groupChartData = null;
+      this.groupMemberCharts = {};
+      this.groupMemberEnabled = {};
+      this.groupChartHoverIdx = -1;
+      this.groupExpanded = { ...this.groupExpanded, ['grp_' + groupName]: true };
+      this.fetchGroupChartData(groupName, this.groupChartRange);
+      if (this.groupChartRefreshInterval) clearInterval(this.groupChartRefreshInterval);
+      this.groupChartRefreshInterval = setInterval(() => {
+        if (this.groupDetailName) this.fetchGroupChartData(this.groupDetailName, this.groupChartRange);
+      }, 300000);
+    },
+    closeGroupDetail() {
+      this.groupDetailName = null;
+      this.groupChartData = null;
+      this.groupMemberCharts = {};
+      this.groupMemberEnabled = {};
+      this.groupChartShowCpu = false;
+      this.groupChartShowRam = false;
+      this.groupChartHoverIdx = -1;
+      if (this.groupChartRefreshInterval) { clearInterval(this.groupChartRefreshInterval); this.groupChartRefreshInterval = null; }
+    },
+    toggleGroupChart(metric) {
+      if (metric === 'cpu') this.groupChartShowCpu = !this.groupChartShowCpu;
+      else if (metric === 'ram') this.groupChartShowRam = !this.groupChartShowRam;
+      if (this.groupAnyChartActive() && !this.groupChartData && this.groupDetailName) {
+        this.fetchGroupChartData(this.groupDetailName, this.groupChartRange);
+      }
+    },
+    groupAnyChartActive() { return this.groupChartShowCpu || this.groupChartShowRam; },
+    getGroupByName(name) {
+      return (this.groupedContainers || []).find(g => g.name === name);
+    },
+    async fetchGroupChartData(groupName, timeRange) {
+      this.groupChartLoading = true;
+      const group = this.getGroupByName(groupName);
+      if (!group) { this.groupChartLoading = false; return; }
+      const ranges = { '1h': 3600, '6h': 21600, '24h': 86400, '3d': 259200, '7d': 604800 };
+      const since = Math.floor(Date.now() / 1000) - (ranges[timeRange] || 3600);
+      try {
+        const running = group.containers.filter(c => c.state === 'running');
+        const histories = await Promise.all(running.map(async c => {
+          const resp = await fetch(`/api/containers/${c.id}/history?since=${since}`);
+          if (!resp.ok) return { id: c.id, name: c.name, data: [] };
+          const raw = await resp.json();
+          return { id: c.id, name: c.name, data: this._downsample(raw, 150) };
+        }));
+        // Store individual member data
+        const memberCharts = {};
+        for (const h of histories) { memberCharts[h.name] = h.data; }
+        this.groupMemberCharts = memberCharts;
+        // Aggregate into group chart
+        const byTime = {};
+        for (const h of histories) {
+          for (const pt of h.data) {
+            const t = pt.t;
+            if (!byTime[t]) byTime[t] = { t, c: 0, m: 0 };
+            byTime[t].c += pt.c || 0;
+            byTime[t].m += pt.m || 0;
+          }
+        }
+        this.groupChartData = Object.values(byTime).sort((a, b) => a.t - b.t);
+      } catch (e) {
+        console.error('Failed to fetch group chart data:', e);
+        this.groupChartData = [];
+      } finally {
+        this.groupChartLoading = false;
+      }
+    },
+    toggleGroupMember(name) {
+      this.groupMemberEnabled = { ...this.groupMemberEnabled, [name]: !this.groupMemberEnabled[name] };
+    },
+    groupMemberColors: ['#f78166','#7ee787','#d2a8ff','#ffa657','#79c0ff','#56d364','#e3b341','#db61a2'],
+    groupMemberColor(idx) { return this.groupMemberColors[idx % this.groupMemberColors.length]; },
+    get enabledGroupMembers() {
+      const allNames = Object.keys(this.groupMemberCharts);
+      return allNames.filter(n => this.groupMemberEnabled[n]).map(n => ({
+        name: n,
+        color: this.groupMemberColors[allNames.indexOf(n) % this.groupMemberColors.length]
+      }));
+    },
+    groupMemberPathFor(field, name, w, h) {
+      const data = this.groupMemberCharts[name];
+      if (!data || data.length < 2) return '';
+      const scale = this.groupChartScaleFor(field === 'c' ? 'cpu' : 'ram');
+      return this._smoothPathFromData(data, field, w, h, scale.max);
+    },
+    _smoothPathFromData(data, field, w, h, explicitMax) {
+      if (!data || data.length < 2) return '';
+      let maxVal = explicitMax || 0;
+      if (!maxVal) {
+        if (field === 'c') { maxVal = 100; }
+        else {
+          for (const pt of data) { if ((pt[field] || 0) > maxVal) maxVal = pt[field]; }
+          if (maxVal === 0) maxVal = 1;
+          maxVal *= 1.1;
+        }
+      }
+      const pad = 4;
+      const tMin = data[0].t, tRange = (data[data.length - 1].t - tMin) || 1;
+      const pts = data.map((pt) => ({
+        x: data.length === 1 ? w / 2 : ((pt.t - tMin) / tRange) * w,
+        y: h - pad - ((pt[field] || 0) / maxVal) * (h - 2 * pad)
+      }));
+      if (pts.length < 2) return '';
+      // Monotone cubic Hermite (Fritsch-Carlson)
+      const n = pts.length;
+      const dx = [], dy = [], m = [];
+      for (let i = 0; i < n - 1; i++) { dx.push(pts[i+1].x - pts[i].x); dy.push(pts[i+1].y - pts[i].y); m.push(dy[i] / dx[i]); }
+      const tangents = [m[0]];
+      for (let i = 1; i < n - 1; i++) {
+        if (m[i-1] * m[i] <= 0) tangents.push(0);
+        else { const avg = (m[i-1] + m[i]) / 2; tangents.push(avg); }
+      }
+      tangents.push(m[n-2]);
+      for (let i = 0; i < n - 1; i++) {
+        if (Math.abs(m[i]) < 1e-6) { tangents[i] = 0; tangents[i+1] = 0; continue; }
+        const a = tangents[i] / m[i], b = tangents[i+1] / m[i];
+        const s = a * a + b * b;
+        if (s > 9) { const t = 3 / Math.sqrt(s); tangents[i] = t * a * m[i]; tangents[i+1] = t * b * m[i]; }
+      }
+      let path = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+      for (let i = 0; i < n - 1; i++) {
+        const d = dx[i] / 3;
+        const cp1x = pts[i].x + d, cp1y = pts[i].y + tangents[i] * d;
+        const cp2x = pts[i+1].x - d, cp2y = pts[i+1].y - tangents[i+1] * d;
+        path += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${pts[i+1].x.toFixed(1)},${pts[i+1].y.toFixed(1)}`;
+      }
+      return path;
+    },
+    groupChartSmoothPathFor(field, w, h) {
+      const scale = this.groupChartScaleFor(field === 'c' ? 'cpu' : 'ram');
+      return this._smoothPathFromData(this.groupChartData, field, w, h, scale.max);
+    },
+    groupChartSmoothAreaPathFor(field, w, h) {
+      const path = this.groupChartSmoothPathFor(field, w, h);
+      if (!path) return '';
+      const data = this.groupChartData;
+      const lastX = data.length === 1 ? w / 2 : w;
+      return path + ` L${lastX.toFixed(1)},${h} L0,${h} Z`;
+    },
+    groupChartScaleFor(metric) {
+      const data = this.groupChartData;
+      if (!data || data.length === 0)
+        return metric === 'ram'
+          ? { max: 1, ticks: [{ label: '0', fraction: 0 }] }
+          : { max: 100, ticks: [{ label: '100%', fraction: 1 }, { label: '0', fraction: 0 }] };
+      if (metric === 'ram') {
+        let maxMem = Math.max(...data.map(p => p.m || 0)) || 1;
+        // Include enabled members in scale
+        for (const [name, enabled] of Object.entries(this.groupMemberEnabled)) {
+          if (!enabled) continue;
+          const pts = this.groupMemberCharts[name];
+          if (pts) for (const p of pts) { if ((p.m || 0) > maxMem) maxMem = p.m; }
+        }
+        let unit, div;
+        if (maxMem >= 1073741824) { unit = 'GiB'; div = 1073741824; }
+        else if (maxMem >= 1048576) { unit = 'MiB'; div = 1048576; }
+        else if (maxMem >= 1024) { unit = 'KiB'; div = 1024; }
+        else { unit = 'B'; div = 1; }
+        const ns = this._niceScale(maxMem / div);
+        const ticks = [];
+        const numSteps = Math.round(ns.max / ns.step);
+        for (let i = numSteps; i >= 0; i--) {
+          const v = +(i * ns.step).toFixed(10);
+          ticks.push({ label: v === 0 ? '0' : (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + ' ' + unit, fraction: v / ns.max });
+        }
+        return { max: ns.max * div, ticks };
+      }
+      let maxCpu = Math.max(...data.map(p => p.c || 0), 1);
+      for (const [name, enabled] of Object.entries(this.groupMemberEnabled)) {
+        if (!enabled) continue;
+        const pts = this.groupMemberCharts[name];
+        if (pts) for (const p of pts) { if ((p.c || 0) > maxCpu) maxCpu = p.c; }
+      }
+      const ns = this._niceScale(maxCpu);
+      const ticks = [];
+      const numSteps = Math.round(ns.max / ns.step);
+      for (let i = numSteps; i >= 0; i--) {
+        const v = +(i * ns.step).toFixed(10);
+        ticks.push({ label: v === 0 ? '0' : (v < 1 ? v.toFixed(1) : v.toFixed(0)) + '%', fraction: v / ns.max });
+      }
+      return { max: ns.max, ticks };
+    },
+    groupChartGridLinesFor(metric) {
+      const scale = this.groupChartScaleFor(metric);
+      return scale.ticks.map(t => {
+        const y = (1 - t.fraction) * 140;
+        return `M0,${y.toFixed(1)}L300,${y.toFixed(1)}`;
+      }).join(' ');
+    },
+    groupChartAvg(field) {
+      if (!this.groupChartData || this.groupChartData.length === 0) return 0;
+      return this.groupChartData.reduce((s, pt) => s + (pt[field] || 0), 0) / this.groupChartData.length;
+    },
+    groupChartPeak(field) {
+      if (!this.groupChartData || this.groupChartData.length === 0) return 0;
+      return Math.max(...this.groupChartData.map(pt => pt[field] || 0));
+    },
+    groupChartHandleHover(e) {
+      const svg = e.currentTarget || e.target.closest('svg');
+      if (!svg || !this.groupChartData || this.groupChartData.length < 2) return;
+      const rect = svg.getBoundingClientRect();
+      const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      const fraction = x / rect.width;
+      const idx = Math.round(fraction * (this.groupChartData.length - 1));
+      this.groupChartHoverIdx = Math.max(0, Math.min(idx, this.groupChartData.length - 1));
+      this.groupChartHoverX = (this.groupChartHoverIdx / (this.groupChartData.length - 1)) * 300;
+      this.groupChartHoverPixelX = x;
+      this.groupChartHoverContainerWidth = rect.width;
+    },
+    groupMemberHoverVal(name, field) {
+      if (this.groupChartHoverIdx < 0 || !this.groupChartData) return '';
+      const data = this.groupMemberCharts[name];
+      if (!data || data.length === 0) return '';
+      // Find closest point by timestamp
+      const t = this.groupChartData[this.groupChartHoverIdx].t;
+      let closest = data[0], minDiff = Math.abs(data[0].t - t);
+      for (const pt of data) {
+        const diff = Math.abs(pt.t - t);
+        if (diff < minDiff) { minDiff = diff; closest = pt; }
+      }
+      if (minDiff > 30) return '—'; // too far apart
+      if (field === 'c') return (closest.c || 0).toFixed(1) + '%';
+      return this.formatBytes(closest.m || 0);
+    },
+    groupChartTimeLabelIndices() {
+      if (!this.groupChartData || this.groupChartData.length < 2) return [];
+      const n = this.groupChartData.length;
+      const count = Math.min(5, n);
+      return Array.from({ length: count }, (_, i) => Math.round(i * (n - 1) / (count - 1)));
+    },
+    async groupAction(action, group) {
+      const targets = group.containers.filter(c => action === 'start' ? c.state !== 'running' : c.state === 'running');
+      if (targets.length === 0) return;
+      for (const c of targets) {
+        try { await fetch(`/api/containers/${c.id}/${action}`, { method: 'POST' }); } catch (e) { console.error(`Failed to ${action} ${c.name}:`, e); }
+      }
+    },
+    toggleCategoryContainer(name) {
+      const idx = this.categoryEditContainers.indexOf(name);
+      if (idx >= 0) this.categoryEditContainers.splice(idx, 1);
+      else this.categoryEditContainers.push(name);
+    },
+    importSequenceToCategory(seqId) {
+      const seq = (this.sequenceList || []).find(s => s.id === seqId);
+      if (!seq) return;
+      for (const step of seq.steps) {
+        if (step.container && !this.categoryEditContainers.includes(step.container)) this.categoryEditContainers.push(step.container);
+      }
+    },
+    get sortedCategoryContainers() {
+      const list = [...this.containers].sort((a, b) => a.name.localeCompare(b.name));
+      const q = this.categorySearch?.toLowerCase();
+      const filtered = q ? list.filter(c => c.name.toLowerCase().includes(q)) : list;
+      return [...filtered].sort((a, b) => {
+        const aIn = this.categoryEditContainers.includes(a.name) ? 0 : 1;
+        const bIn = this.categoryEditContainers.includes(b.name) ? 0 : 1;
+        return aIn - bIn || a.name.localeCompare(b.name);
+      });
+    },
+    get groupedContainers() {
+      if (this.activeFilter !== 'Groups' || !this.categories.length) return null;
+      const groups = [];
+      for (const cat of [...this.categories].sort((a, b) => a.order - b.order)) {
+        const containers = this.filteredContainers.filter(c => cat.containers.includes(c.name));
+        const running = containers.filter(c => c.state === 'running').length;
+        const unhealthy = containers.filter(c => c.health === 'unhealthy').length;
+        const runningCs = containers.filter(c => c.state === 'running' && c.recentStats?.length > 1);
+        const cpuTotal = containers.reduce((s, c) => s + (c.cpu || 0), 0);
+        const ramTotal = containers.reduce((s, c) => s + (c.memory || 0), 0);
+        const avgCpu = runningCs.reduce((s, c) => s + (c.avgCpu || 0), 0);
+        const avgMem = runningCs.reduce((s, c) => s + (c.avgMemory || 0), 0);
+        const maxMem = runningCs.reduce((s, c) => s + (c.memoryLimit || 0), 0);
+        const netTxRate = containers.reduce((s, c) => s + (c.netParent ? 0 : (c.netTxRate || 0)), 0);
+        const netRxRate = containers.reduce((s, c) => s + (c.netParent ? 0 : (c.netRxRate || 0)), 0);
+        // Aggregate sparkline
+        let groupStats = [];
+        if (runningCs.length > 0) {
+          const byTime = {};
+          for (const c of runningCs) for (const pt of c.recentStats) {
+            if (!byTime[pt.t]) byTime[pt.t] = { t: pt.t, c: 0, m: 0 };
+            byTime[pt.t].c += pt.c; byTime[pt.t].m += pt.m;
+          }
+          groupStats = Object.values(byTime).sort((a, b) => a.t - b.t);
+        }
+        groups.push({ name: cat.name, description: cat.description, containers,
+          _running: running, _total: containers.length, _unhealthy: unhealthy,
+          _cpuTotal: cpuTotal.toFixed(1) + '%', _ramTotal: this.formatBytes(ramTotal),
+          _avgCpu: avgCpu, _avgMem: avgMem, _maxMem: maxMem, _stats: groupStats,
+          _netTx: this.formatRate(netTxRate), _netRx: this.formatRate(netRxRate),
+          _cpuRaw: cpuTotal, _ramRaw: ramTotal });
+      }
+      return groups;
+    },
+    get groupRows() {
+      const groups = this.groupedContainers;
+      if (!groups) return [];
+      const rows = [];
+      for (const g of groups) {
+        rows.push({ _type: 'header', _key: 'hdr_' + g.name, group: g });
+        if (this.groupDetailName === g.name) {
+          rows.push({ _type: 'detail', _key: 'det_' + g.name, group: g });
+        }
+        if (this.groupExpanded['grp_' + g.name]) {
+          for (const c of g.containers) {
+            rows.push({ _type: 'container', _key: 'cnt_' + c.id, container: c, group: g });
+          }
+        }
+      }
+      return rows;
     },
 
     // ---- Config ----

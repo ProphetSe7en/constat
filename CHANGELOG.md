@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.9.7
+
+### Features
+- **Container groups** — Create user-defined groups (e.g. "Media Stack", "Network") via Manage Groups modal. Groups display aggregated CPU, RAM, and network stats with sparklines. Containers can belong to multiple groups.
+- **Group expanded view** — Click a group header to expand members and open an aggregated chart. Toggle individual container overlays with color-coded pills (up to 8 members). Same chart controls as container view (CPU/RAM toggle, 1h/6h/24h/3d/7d range, hover tooltip with per-member values).
+- **Group actions** — Stop All, Restart All, Start All buttons with custom confirm dialogs. Buttons shown contextually based on group state.
+- **Maintenance webhook** — New `DISCORD_WEBHOOK_MAINTENANCE` for cleanup notifications (image/volume prune). Falls back to health webhook if empty. Separates maintenance from health concerns.
+- **Event detail inline** — Memory watch events (notify, recovered, blocked) now show context inline: "exceeded limit for 31s (11.88 GiB / 10.00 GiB)". Multi-line details (crash logs) shown as hover tooltip.
+- **Version display** — Version number and "Built by ProphetSe7en" shown in header, dynamically fetched from backend.
+
+### Improvements
+- **Shared network detection** — Containers using `container:X` network mode show "(shared)" label on network I/O stats. Group and header totals exclude shared containers to prevent double-counting.
+- **Consistent network colors** — Upload (green) and download (orange) arrow colors unified across all views.
+- **Group header info** — Running count in green, healthy/unhealthy/no check/stopped counts in expanded view pills.
+- **Delete group UX** — Delete button (x) directly in group list view, custom confirm dialog instead of browser prompt.
+- **Badge alignment** — Fixed-width event badges for consistent column alignment in event log.
+
+### Bug fixes
+- **Group sparkline CPU scaling** — Dynamic max for groups where total CPU exceeds 100%.
+- **Chart X-axis** — Timestamp-based spacing in group charts (consistent with container charts).
+- **File permissions** — Categories config uses 0664 (consistent with other config files).
+
 ## v0.9.6
 
 ### Features

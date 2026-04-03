@@ -11,9 +11,10 @@ import (
 // ConfigData represents the parsed constat.conf
 type ConfigData struct {
 	// Discord
-	EnableDiscord string `json:"enableDiscord"`
-	WebhookState  string `json:"webhookState"`
-	WebhookHealth string `json:"webhookHealth"`
+	EnableDiscord      string `json:"enableDiscord"`
+	WebhookState       string `json:"webhookState"`
+	WebhookHealth      string `json:"webhookHealth"`
+	WebhookMaintenance string `json:"webhookMaintenance"`
 	// Identity
 	BotName     string `json:"botName"`
 	ServerLabel string `json:"serverLabel"`
@@ -65,10 +66,11 @@ type MemoryWatchEntry struct {
 
 // keyToField maps bash variable names to ConfigData JSON field names
 var keyToField = map[string]string{
-	"ENABLE_DISCORD":          "enableDiscord",
-	"DISCORD_WEBHOOK_STATE":   "webhookState",
-	"DISCORD_WEBHOOK_HEALTH":  "webhookHealth",
-	"BOT_NAME":                "botName",
+	"ENABLE_DISCORD":              "enableDiscord",
+	"DISCORD_WEBHOOK_STATE":       "webhookState",
+	"DISCORD_WEBHOOK_HEALTH":      "webhookHealth",
+	"DISCORD_WEBHOOK_MAINTENANCE": "webhookMaintenance",
+	"BOT_NAME":                    "botName",
 	"SERVER_LABEL":            "serverLabel",
 	"BATCH_WINDOW":            "batchWindow",
 	"EXCLUDE_CONTAINERS":      "excludeContainers",
@@ -180,6 +182,7 @@ func ReadConfig(path string) (*ConfigData, error) {
 	data.EnableDiscord = values["ENABLE_DISCORD"]
 	data.WebhookState = values["DISCORD_WEBHOOK_STATE"]
 	data.WebhookHealth = values["DISCORD_WEBHOOK_HEALTH"]
+	data.WebhookMaintenance = values["DISCORD_WEBHOOK_MAINTENANCE"]
 	data.BotName = values["BOT_NAME"]
 	data.ServerLabel = values["SERVER_LABEL"]
 	data.BatchWindow = values["BATCH_WINDOW"]
@@ -269,11 +272,12 @@ func ReadConfig(path string) (*ConfigData, error) {
 func WriteConfig(path string, data *ConfigData) error {
 	// Build a map of KEY -> new value from the struct
 	newValues := map[string]string{
-		"ENABLE_DISCORD":          data.EnableDiscord,
-		"DISCORD_WEBHOOK_STATE":   data.WebhookState,
-		"DISCORD_WEBHOOK_HEALTH":  data.WebhookHealth,
-		"BOT_NAME":                data.BotName,
-		"SERVER_LABEL":            data.ServerLabel,
+		"ENABLE_DISCORD":              data.EnableDiscord,
+		"DISCORD_WEBHOOK_STATE":       data.WebhookState,
+		"DISCORD_WEBHOOK_HEALTH":      data.WebhookHealth,
+		"DISCORD_WEBHOOK_MAINTENANCE": data.WebhookMaintenance,
+		"BOT_NAME":                    data.BotName,
+		"SERVER_LABEL":                data.ServerLabel,
 		"BATCH_WINDOW":            data.BatchWindow,
 		"EXCLUDE_CONTAINERS":      data.ExcludeContainers,
 		"SUMMARY_INTERVAL":        data.SummaryInterval,

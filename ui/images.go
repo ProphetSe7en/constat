@@ -193,7 +193,7 @@ func (app *App) handlePruneImages(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Pruned %d %s images, reclaimed %d bytes", count, label, reclaimed)
 
 	if count > 0 {
-		go sendDiscordEmbed("Image Cleanup", fmt.Sprintf("Removed %d %s images, reclaimed %s", count, label, formatBytesGo(reclaimed)), 0x3fb950)
+		go sendDiscordMaintenance("Image Cleanup", fmt.Sprintf("Removed %d %s images, reclaimed %s", count, label, formatBytesGo(reclaimed)), 0x3fb950)
 	}
 
 	writeJSON(w, map[string]interface{}{

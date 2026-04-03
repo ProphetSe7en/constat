@@ -290,7 +290,7 @@ func (ic *ImageCleaner) sendCleanupDiscord(result *ImageCleanupResult) {
 		description = fmt.Sprintf("Removed %s, reclaimed %s", strings.Join(parts, " + "), formatBytesGo(result.SpaceReclaimed))
 	}
 
-	sendDiscordEmbed(title, description, color)
+	sendDiscordMaintenance(title, description, color)
 }
 
 func formatBytesGo(b int64) string {
