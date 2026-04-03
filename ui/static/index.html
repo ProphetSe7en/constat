@@ -2422,17 +2422,17 @@
         </div>
       </div>
 
-      <!-- Update Checker Section -->
+      <!-- Image Updates Section -->
       <div class="config-section">
       <div class="config-section-header" @click="toolsSections.updates = !toolsSections.updates; if(toolsSections.updates) fetchUpdates()">
-        Update Checker
+        Image Updates
         <span class="arrow" x-text="toolsSections.updates ? '&#9660;' : '&#9654;'"></span>
       </div>
       <div class="config-section-body" x-show="toolsSections.updates" x-transition>
         <div style="font-size:13px;color:#c9d1d9;margin-bottom:10px">Check for available image updates on container registries using digest comparison. No images are pulled — only manifests are checked.</div>
         <!-- Enable toggle -->
         <div class="config-field" style="margin-bottom:12px">
-          <span class="config-label">Enable update checking</span>
+          <span class="config-label">Scheduled update checks</span>
           <div class="config-toggle" :class="{ on: config.updateCheckEnabled === 'true' }" @click="config.updateCheckEnabled = config.updateCheckEnabled === 'true' ? 'false' : 'true'; configDirty = true"></div>
         </div>
         <template x-if="config.updateCheckEnabled === 'true'">
@@ -5370,7 +5370,7 @@ function app() {
       }
     },
 
-    // ---- Update Checker ----
+    // ---- Image Updates ----
     async fetchUpdates() {
       try {
         const resp = await fetch('/api/updates');
