@@ -39,6 +39,10 @@ type ConfigData struct {
 	CleanupOrphanImages  string `json:"cleanupOrphanImages"`  // "true" or "false"
 	CleanupUnusedImages  string `json:"cleanupUnusedImages"`  // "true" or "false"
 	CleanupVolumes       string `json:"cleanupVolumes"`       // "true" or "false"
+	// Update checking
+	UpdateCheckEnabled  string `json:"updateCheckEnabled"`  // "true" or "false"
+	UpdateCheckInterval string `json:"updateCheckInterval"` // e.g. "12h", "6h", "24h"
+	UpdateExclude       string `json:"updateExclude"`       // comma-separated container names to skip
 	// Display
 	Timezone       string `json:"timezone"`
 	TimeFormat     string `json:"timeFormat"`     // "24h" or "12h"
@@ -96,6 +100,9 @@ var keyToField = map[string]string{
 	"CLEANUP_ORPHAN_IMAGES":   "cleanupOrphanImages",
 	"CLEANUP_UNUSED_IMAGES":   "cleanupUnusedImages",
 	"CLEANUP_VOLUMES":         "cleanupVolumes",
+	"UPDATE_CHECK_ENABLED":    "updateCheckEnabled",
+	"UPDATE_CHECK_INTERVAL":   "updateCheckInterval",
+	"UPDATE_EXCLUDE":          "updateExclude",
 	"TIMEZONE":                "timezone",
 	"TIME_FORMAT":             "timeFormat",
 	"DATE_FORMAT":             "dateFormat",
@@ -240,6 +247,15 @@ func ReadConfig(path string) (*ConfigData, error) {
 	if data.CleanupVolumes == "" {
 		data.CleanupVolumes = "false"
 	}
+	data.UpdateCheckEnabled = values["UPDATE_CHECK_ENABLED"]
+	if data.UpdateCheckEnabled == "" {
+		data.UpdateCheckEnabled = "false"
+	}
+	data.UpdateCheckInterval = values["UPDATE_CHECK_INTERVAL"]
+	if data.UpdateCheckInterval == "" {
+		data.UpdateCheckInterval = "12h"
+	}
+	data.UpdateExclude = values["UPDATE_EXCLUDE"]
 	data.Timezone = values["TIMEZONE"]
 	if data.Timezone == "" {
 		data.Timezone = os.Getenv("TZ")
@@ -304,6 +320,9 @@ func WriteConfig(path string, data *ConfigData) error {
 		"DATE_FORMAT":             data.DateFormat,
 		"SHOW_STATS":              data.ShowStats,
 		"SHOW_CHARTS":             data.ShowCharts,
+		"UPDATE_CHECK_ENABLED":    data.UpdateCheckEnabled,
+		"UPDATE_CHECK_INTERVAL":   data.UpdateCheckInterval,
+		"UPDATE_EXCLUDE":          data.UpdateExclude,
 	}
 
 	// Read existing file

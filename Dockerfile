@@ -18,6 +18,11 @@ RUN apk add --no-cache \
     docker-cli \
     tzdata
 
+ARG REGCTL_VERSION=0.8.3
+RUN wget -qO /usr/local/bin/regctl \
+    "https://github.com/regclient/regclient/releases/download/v${REGCTL_VERSION}/regctl-linux-amd64" && \
+    chmod +x /usr/local/bin/regctl
+
 ENV TZ=Europe/Oslo
 
 COPY constat.sh /constat.sh

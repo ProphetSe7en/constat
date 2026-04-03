@@ -518,6 +518,27 @@ func sendDiscordMaintenance(title, description string, color int) {
 	resp.Body.Close()
 }
 
+func (app *App) handleGetUpdates(w http.ResponseWriter, r *http.Request) {
+	if app.updateChecker == nil {
+		writeJSON(w, map[string]any{"results": map[string]any{}, "checking": false})
+		return
+	}
+	writeJSON(w, map[string]any{
+		"results":   app.updateChecker.GetResults(),
+		"checking":  app.updateChecker.IsChecking(),
+		"lastCheck": app.updateChecker.LastCheck(),
+	})
+}
+
+func (app *App) handleTriggerUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	if app.updateChecker == nil {
+		writeError(w, 400, "Update checker not initialized")
+		return
+	}
+	app.updateChecker.TriggerCheck()
+	writeJSON(w, map[string]string{"status": "check triggered"})
+}
+
 const configPath = "/config/constat.conf"
 const configSamplePath = "/config/constat.conf.sample"
 

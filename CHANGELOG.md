@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.9.8
+
+### Features
+- **Image update checker** — Detect available Docker image updates via registry digest comparison using regctl. Periodic checks (configurable: 6h/12h/24h), manual "Check Now" button, per-container exclude list. No images are pulled — only manifests are checked.
+- **Update badges** — New "Update" column in container table showing Up to date (green), Update (orange), Local, or Pinned status with informative tooltips.
+- **Updates filter** — Orange filter badge showing count of containers with available updates. Click to filter the container list.
+- **Update notifications** — Discord notifications via maintenance webhook for newly discovered updates (no duplicate alerts).
+
+### Improvements
+- **Health badges** — "No Check" renamed to "No Health" in filters, "No HC" in table with hoverable tooltip showing suggested healthcheck command. Stopped containers show empty health cell.
+- **Group visual separation** — Spacer rows between groups, colored left border per group (auto-assigned), containers listed before detail panel for clearer visual hierarchy.
+- **Group sorting** — Column headers in group view are now sortable, sorting containers within each group independently.
+- **Group reordering** — Move groups up/down in Manage Groups modal with arrow buttons.
+- **Event detail** — Memory watch "exceeded limit by X" now correctly calculates difference across mixed units (MiB/GiB).
+- **Uptime sorting** — Stopped containers sort last regardless of sort direction.
+- **Sortable Update column** — Click to sort by update status (updates first).
+
+### Bug fixes
+- **Alpine expression errors** — Fixed `sequenceList` → `sequences` rename, `formatUptime` → `c.uptime` in group view.
+- **updateSummary collision** — Renamed to `updateCheckSummary` to avoid conflict with existing method.
+- **Missing closing tag** — Fixed broken `<td>` in group detail panel.
+- **Update checker** — Stale results cleaned up for removed containers, digest-pinned images skipped, platform-specific digest comparison (not manifest list), context cancellation in check loop, Discord notifications only for new updates.
+
 ## v0.9.7
 
 ### Features
