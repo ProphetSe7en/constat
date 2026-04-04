@@ -36,6 +36,7 @@ type Container struct {
 	HealthcheckCmd  string      `json:"healthcheckCmd"`
 	Icon            string      `json:"icon,omitempty"`
 	NetParent       string      `json:"netParent,omitempty"` // parent container name when using container:X network mode
+	Status          string      `json:"status,omitempty"`    // transient status: stopped-health, stopped-mem
 	InternalPorts   []uint16    `json:"-"`                   // internal container ports, used for healthcheck suggestions
 }
 
@@ -147,6 +148,12 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 			}
 		}
 
+		// Get transient status (stopped-health, stopped-mem) if available
+		containerStatus := ""
+		if app.stats != nil {
+			containerStatus = app.stats.GetContainerStatus(name)
+		}
+
 		containers[i] = Container{
 			ID:              c.ID[:12],
 			Name:            name,
@@ -162,6 +169,7 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 			HealthcheckCmd:  healthcheckCmd,
 			Icon:            icon,
 			NetParent:       netParent,
+			Status:          containerStatus,
 			InternalPorts:   internalPorts,
 			Networks:        networks,
 		}

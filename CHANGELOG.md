@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.9.9
+
+### Features
+- **Memory rule escalation** — Restart rules can now optionally stop a container after X restarts within a configurable time window (e.g. "stop after 3 restarts in 24h"). Configured per rule with `maxTriggers` and `maxWindow` fields.
+- **Mem Watch column** — New sortable column in container table showing memory usage as percentage of rule limit with color coding: green (<75%), orange (75-90%), red (>90%). Shows countdown timer and trigger count during active restarts.
+- **Real-time health, state, and uptime** — Health status, container state, and uptime now update via SSE every 3-10 seconds without page refresh. Powered by Docker inspect in syncStreams.
+- **Health column badges** — New "Checking" badge (yellow) when health check is pending. "Stopped: health" and "Stopped: mem" badges (red) when container was stopped by escalation. Badges persist across UI refresh and Constat restarts.
+- **Memory event badges** — Events tab shows "mem restart" (red) and "mem warn" (orange) badges that are distinct from manual restarts. Memory detail visible on group header without expanding.
+- **Unhealthy recheck** — Periodic recheck of unhealthy containers that missed their restart due to cooldown. Ensures restart eventually happens when cooldown expires.
+- **Memory trigger counter** — Live display of restart count vs max (e.g. "1/3 restarts") in both expanded memory watch view and Mem Watch column.
+
+### Improvements
+- **Rename notify → warn** — Memory watch action "notify" renamed to "warn" throughout config, UI, logs, and Discord. Legacy "notify" auto-normalizes to "warn" for backward compatibility.
+- **Health auto-restart redesign** — Cooldown is now minimum time between restarts (not a batch window). After max restarts without sustained recovery, container is stopped with Discord notification. Recovery requires staying healthy for at least the cooldown period.
+- **Event ordering** — Expanded events sorted chronologically with logical tiebreaker (memory trigger → restarted → healthy). Redundant "started" event filtered when "restarted" exists.
+- **Config hints** — Auto-restart settings (cooldown, max restarts, restart label) now have explanatory text in Config tab.
+- **Update badge** — "Update" renamed to "Outdated" for clarity.
+- **Update check refresh** — Tools → Updates "last check" time now auto-refreshes every 60s without page reload.
+- **Group border** — Expanded event group left border brightened for better visibility.
+- **No HC tooltip** — Shortened to "expand container for suggestion" instead of showing full healthcheck command in tooltip.
+- **Memory watch forms** — Labeled fields (Limit, Action, Duration, Max restarts, Period), contextual descriptions that change when switching warn/restart, auto-formatting of inputs (duration in seconds, period in hours).
+
+### Bug fixes
+- **Health restart counter** — Fixed: counter no longer resets on every container start event (was breaking cooldown and max restarts). Counter only resets on sustained healthy recovery or escalation stop.
+- **Separate memory cooldown** — Memory restarts use independent counters from health auto-restart. Memory restarts have no artificial limit — the duration threshold provides natural rate-limiting.
+- **Docker state suppression removed** — Memory-triggered restarts no longer suppress Docker state events. All events logged normally; UI grouping and badges handle presentation.
+- **Status persistence** — Container escalation status (stopped-health, stopped-mem) persisted to /config/container_status.json, survives Constat restarts and UI refreshes.
+
 ## v0.9.8
 
 ### Features

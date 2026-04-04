@@ -374,6 +374,16 @@ func (app *App) handlePostEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	app.events.Add(event)
 	log.Printf("External event: %s %s %s", req.Type, req.Action, req.Container)
+
+	// Track escalation stops for health column badge
+	if app.stats != nil {
+		if req.Type == "health" && req.Action == "stopped" {
+			app.stats.SetContainerStatus(req.Container, "stopped-health")
+		} else if req.Type == "memory" && req.Action == "stopped" {
+			app.stats.SetContainerStatus(req.Container, "stopped-mem")
+		}
+	}
+
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, map[string]string{"status": "ok"})
 }
@@ -711,7 +721,7 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate memory watch entries
-	for _, entry := range config.MemoryWatch {
+	for i, entry := range config.MemoryWatch {
 		if strings.TrimSpace(entry.Name) == "" {
 			writeError(w, 400, "Memory watch entry name cannot be empty")
 			return
@@ -724,14 +734,32 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, fmt.Sprintf("Invalid memory limit '%s': must match format like 512m, 1.5g, 20g", entry.Limit))
 			return
 		}
-		if entry.Action != "notify" && entry.Action != "restart" {
-			writeError(w, 400, fmt.Sprintf("Invalid memory watch action '%s': must be 'notify' or 'restart'", entry.Action))
+		// Normalize legacy "notify" to "warn"
+		if entry.Action == "notify" {
+			entry.Action = "warn"
+			config.MemoryWatch[i] = entry
+		}
+		if entry.Action != "warn" && entry.Action != "restart" {
+			writeError(w, 400, fmt.Sprintf("Invalid memory watch action '%s': must be 'warn' or 'restart'", entry.Action))
 			return
 		}
 		if entry.Duration != "" {
 			n, err := strconv.Atoi(entry.Duration)
 			if err != nil || n <= 0 {
 				writeError(w, 400, fmt.Sprintf("Invalid memory watch duration '%s': must be a positive integer", entry.Duration))
+				return
+			}
+		}
+		if entry.MaxTriggers != "" {
+			n, err := strconv.Atoi(entry.MaxTriggers)
+			if err != nil || n < 0 {
+				writeError(w, 400, fmt.Sprintf("Invalid memory watch maxTriggers '%s': must be a non-negative integer", entry.MaxTriggers))
+				return
+			}
+		}
+		if entry.MaxWindow != "" {
+			if _, err := time.ParseDuration(entry.MaxWindow); err != nil {
+				writeError(w, 400, fmt.Sprintf("Invalid memory watch maxWindow '%s': must be a Go duration (e.g. 24h, 12h, 1h)", entry.MaxWindow))
 				return
 			}
 		}
