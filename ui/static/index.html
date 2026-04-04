@@ -1090,6 +1090,7 @@
                       <span style="font-size:11px"><span :style="row.group._running > 0 ? 'color:#3fb950' : 'color:#8b949e'" x-text="row.group._running"></span><span style="color:#8b949e" x-text="'/' + row.group._total + ' running'"></span></span>
                       <span x-show="row.group._unhealthy > 0" style="font-size:10px;padding:1px 6px;border-radius:3px;background:#3d1f1f;color:#f85149;margin-left:4px" x-text="row.group._unhealthy + ' unhealthy'"></span>
                     </td>
+                    <template x-if="config && config.memoryWatch && config.memoryWatch.length > 0"><td></td></template>
                     <template x-if="config && config.updateCheckEnabled === 'true'"><td>
                       <span x-show="row.group.containers.filter(c => updateResults[c.name]?.hasUpdate).length > 0" class="badge badge-update" x-text="row.group.containers.filter(c => updateResults[c.name]?.hasUpdate).length + ' update' + (row.group.containers.filter(c => updateResults[c.name]?.hasUpdate).length !== 1 ? 's' : '')"></span>
                       <span x-show="Object.keys(updateResults).length > 0 && row.group.containers.filter(c => updateResults[c.name]?.hasUpdate).length === 0" class="badge badge-uptodate">Up to date</span>
