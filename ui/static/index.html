@@ -71,10 +71,10 @@
   thead { position: sticky; top: 0; z-index: 5; }
   th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; padding: 8px 12px; border-bottom: 1px solid #21262d; background: #0d1117; }
   td { padding: 10px 12px; border-bottom: 1px solid #161b22; font-size: 13px; vertical-align: middle; }
-  col.col-cpu { width: 13%; } col.col-ram { width: 13%; } col.col-net { width: 13%; }
-  col.col-networks { width: 10%; }
-  .has-stats col.col-name { width: 25%; } .has-stats col.col-health { width: 7%; } .has-stats col.col-restart { width: 7%; } .has-stats col.col-uptime { width: 12%; }
-  .no-stats col.col-name { width: 44%; } .no-stats col.col-health { width: 14%; } .no-stats col.col-restart { width: 12%; } .no-stats col.col-uptime { width: 14%; } .no-stats col.col-networks { width: 16%; }
+  col.col-cpu { width: 11%; } col.col-ram { width: 11%; } col.col-net { width: 11%; }
+  col.col-networks { width: 9%; }
+  .has-stats col.col-name { width: 24%; } .has-stats col.col-health { width: 7%; } .has-stats col.col-memory { width: 7%; } .has-stats col.col-restart { width: 6%; } .has-stats col.col-uptime { width: 10%; }
+  .no-stats col.col-name { width: 40%; } .no-stats col.col-health { width: 12%; } .no-stats col.col-memory { width: 10%; } .no-stats col.col-restart { width: 10%; } .no-stats col.col-uptime { width: 12%; } .no-stats col.col-networks { width: 16%; }
   tr:hover td { background: #161b22; }
   tr.expanded td { background: #161b22; border-bottom: none; }
 
@@ -101,6 +101,7 @@
   .badge-none { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
   .badge-stopped { background: #1c1c1c; color: #636e7b; border: 1px solid #30363d; }
   .badge-paused { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
+  .badge-starting { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
 
   /* Health suggestion tooltip */
   .hc-tip-wrap { position: relative; display: inline-flex; }
@@ -286,6 +287,9 @@
   .event-badge-paused { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
   .event-badge-unpaused { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
   .event-badge-notify { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
+  .event-badge-warn { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
+  .event-badge-mem-restart { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
+  .event-badge-mem-warn { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
   .event-badge-restart { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
   .event-badge-blocked { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
   .event-badge-recovered { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
@@ -307,7 +311,7 @@
   .event-group-header:hover { background: #161b22; }
   .event-group-chevron { color: #484f58; font-size: 10px; transition: transform 0.15s; min-width: 12px; }
   .event-group-count { font-size: 11px; color: #484f58; }
-  .event-group-children { border-left: 2px solid #21262d; margin-left: 16px; }
+  .event-group-children { border-left: 2px solid #3d444d; margin-left: 16px; }
   .event-group-children .event-row { padding-left: 24px; }
 
   /* Config tab */
@@ -867,7 +871,11 @@
                 <template x-for="mw in getMemoryWatches(c.name)" :key="mw.idx">
                   <div style="margin-bottom:8px">
                     <div style="display:flex;justify-content:space-between;font-size:11px;color:#8b949e;margin-bottom:3px">
-                      <span><span x-text="mw.action"></span> at <span x-text="formatLimit(mw.limit)"></span></span>
+                      <span>
+                        <span x-text="mw.action === 'notify' ? 'warn' : mw.action"></span> at <span x-text="formatLimit(mw.limit)"></span>
+                        <span x-show="mw.duration" style="font-size:10px" x-text="'/ ' + mw.duration + 's'"></span>
+                        <span x-show="mw.maxTriggers && parseInt(mw.maxTriggers) > 0" style="font-size:10px;color:#f85149" x-text="'· stop after ' + mw.maxTriggers + 'x in ' + (mw.maxWindow || '24h').replace(/(\d+)h/, '$1h')"></span>
+                      </span>
                       <span x-text="memoryWatchPercentForEntry(c, mw).toFixed(0) + '%'"></span>
                     </div>
                     <div class="mwatch-bar">
@@ -1039,6 +1047,7 @@
           <table :class="config && config.showStats === 'true' ? 'has-stats' : 'no-stats'">
             <colgroup>
               <col class="col-name"><col class="col-health">
+              <template x-if="config && config.memoryWatch && config.memoryWatch.length > 0"><col class="col-memory"></template>
               <template x-if="config && config.updateCheckEnabled === 'true'"><col style="width:7%"></template>
               <col class="col-restart">
               <template x-if="config && config.showStats === 'true'"><col class="col-cpu"></template>
@@ -1050,6 +1059,7 @@
             <thead><tr>
               <th class="sortable" @click="toggleSort('name')">Container <span class="sort-arrow" x-show="sortColumn === 'name'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
               <th class="sortable" @click="toggleSort('health')">Health <span class="sort-arrow" x-show="sortColumn === 'health'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
+              <template x-if="config && config.memoryWatch && config.memoryWatch.length > 0"><th class="sortable" @click="toggleSort('memwatch')">Mem Watch <span class="sort-arrow" x-show="sortColumn === 'memwatch'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
               <template x-if="config && config.updateCheckEnabled === 'true'"><th class="sortable" @click="toggleSort('update')">Update <span class="sort-arrow" x-show="sortColumn === 'update'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
               <th class="sortable" @click="toggleSort('restart')">Restart <span class="sort-arrow" x-show="sortColumn === 'restart'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
               <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('cpu')">CPU <span class="sort-arrow" x-show="sortColumn === 'cpu'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
@@ -1298,13 +1308,17 @@
                     <td>
                       <span x-show="row.container.state === 'running' && row.container.health === 'healthy'" class="badge badge-healthy">Healthy</span>
                       <span x-show="row.container.state === 'running' && row.container.health === 'unhealthy'" class="badge badge-unhealthy">Unhealthy</span>
+                      <span x-show="row.container.state === 'running' && row.container.health === 'starting'" class="badge badge-starting">Checking</span>
                       <template x-if="row.container.state === 'running' && row.container.health === 'none'">
                         <span class="hc-tip-wrap">
                           <span class="badge badge-nocheck" style="cursor:help">No HC</span>
                           <span class="hc-tip" x-text="healthTooltip(row.container)"></span>
                         </span>
                       </template>
+                      <span x-show="row.container.state !== 'running' && row.container.status === 'stopped-health'" class="badge badge-unhealthy" title="Stopped after max unhealthy restarts">Stopped: health</span>
+                      <span x-show="row.container.state !== 'running' && row.container.status === 'stopped-mem'" class="badge badge-unhealthy" title="Stopped after max memory restarts">Stopped: mem</span>
                     </td>
+                    <template x-if="config && config.memoryWatch && config.memoryWatch.length > 0"><td><span style="font-size:11px;white-space:nowrap" :style="memColStyle(row.container)" x-text="memColText(row.container)"></span></td></template>
                     <template x-if="config && config.updateCheckEnabled === 'true'"><td><span class="badge" :class="updateBadgeClass(row.container)" x-text="updateLabel(row.container)" :title="updateTooltip(row.container)"></span></td></template>
                     <td>
                       <span x-show="row.container.state === 'running' && row.container.hasRestartLabel" class="label-yes">Yes</span>
@@ -1368,6 +1382,7 @@
       <table x-show="!loading && config" :class="config && config.showStats === 'true' ? 'has-stats' : 'no-stats'">
         <colgroup>
           <col class="col-name"><col class="col-health">
+          <template x-if="config && config.memoryWatch && config.memoryWatch.length > 0"><col class="col-memory"></template>
           <template x-if="config && config.updateCheckEnabled === 'true'"><col style="width:7%"></template>
           <col class="col-restart">
           <template x-if="config && config.showStats === 'true'"><col class="col-cpu"></template>
@@ -1380,6 +1395,7 @@
           <tr>
             <th class="sortable" @click="toggleSort('name')">Container <span class="sort-arrow" x-show="sortColumn === 'name'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
             <th class="sortable" @click="toggleSort('health')">Health <span class="sort-arrow" x-show="sortColumn === 'health'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
+            <template x-if="config && config.memoryWatch && config.memoryWatch.length > 0"><th class="sortable" @click="toggleSort('memwatch')">Mem Watch <span class="sort-arrow" x-show="sortColumn === 'memwatch'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
             <template x-if="config && config.updateCheckEnabled === 'true'"><th class="sortable" @click="toggleSort('update')">Update <span class="sort-arrow" x-show="sortColumn === 'update'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
             <th class="sortable" @click="toggleSort('restart')">Restart <span class="sort-arrow" x-show="sortColumn === 'restart'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th>
             <template x-if="config && config.showStats === 'true'"><th class="sortable" @click="toggleSort('cpu')">CPU <span class="sort-arrow" x-show="sortColumn === 'cpu'" x-text="sortAsc ? '\u25B2' : '\u25BC'"></span></th></template>
@@ -1415,6 +1431,7 @@
                     <span class="hc-tip" x-text="healthTooltip(c)"></span>
                   </span>
                 </td>
+                <template x-if="config && config.memoryWatch && config.memoryWatch.length > 0"><td><span style="font-size:11px;white-space:nowrap" :style="memColStyle(c)" x-text="memColText(c)"></span></td></template>
                 <template x-if="config && config.updateCheckEnabled === 'true'"><td><span class="badge" :class="updateBadgeClass(c)" x-text="updateLabel(c)" :title="updateTooltip(c)"></span></td></template>
                 <td>
                   <span x-show="c.state === 'running' && c.hasLabel" :class="c.hasRestartLabel ? 'label-yes label-clickable' : 'label-override label-clickable'" x-text="c.hasRestartLabel ? 'Yes' : 'No'" :title="c.hasRestartLabel ? 'Click to disable auto-restart' : 'Click to enable auto-restart'" @click.stop="toggleRestart(c)"></span>
@@ -1636,7 +1653,7 @@
                     <template x-if="c.state === 'running' && config">
                       <div class="mwatch-section">
                         <h3 style="font-size:12px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Memory Watch</h3>
-                        <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Monitor memory usage and trigger alerts or auto-restart when thresholds are exceeded.</div>
+                        <div style="font-size:11px;color:#8b949e;margin-bottom:8px">Set memory thresholds to warn or restart this container.</div>
                         <!-- Card grid for existing rules -->
                         <div class="mwatch-grid" :class="mwatchGridClass(getMemoryWatches(c.name).length)" x-show="getMemoryWatches(c.name).length > 0">
                           <template x-for="mw in getMemoryWatches(c.name)" :key="mw.idx">
@@ -1646,8 +1663,9 @@
                                 <div>
                                   <div class="mwatch-info" style="margin-bottom:6px">
                                     <span><span style="color:#8b949e">Limit:</span> <span x-text="formatLimit(mw.limit)"></span></span>
-                                    <span><span style="color:#8b949e">Action:</span> <span x-text="mw.action"></span></span>
+                                    <span><span style="color:#8b949e">Action:</span> <span x-text="mw.action === 'notify' ? 'warn' : mw.action"></span></span>
                                     <span x-show="mw.duration"><span style="color:#8b949e">Duration:</span> <span x-text="mw.duration + 's'"></span></span>
+                                    <span x-show="mw.maxTriggers && parseInt(mw.maxTriggers) > 0"><span style="color:#8b949e">Max:</span> <span style="color:#f85149" x-text="mw.maxTriggers + 'x in ' + (mw.maxWindow || '24h').replace(/(\d+)h/, '$1h')"></span></span>
                                   </div>
                                   <div class="mwatch-bar">
                                     <div class="mwatch-bar-fill"
@@ -1672,15 +1690,41 @@
                               </template>
                               <!-- Edit mode -->
                               <template x-if="mwatchEditIdx === mw.idx">
-                                <div class="mwatch-inline-form" @click.stop>
-                                  <input type="text" x-model="mwatchEditForm.limit" placeholder="512m, 1.5g, 20g" style="width:80px">
-                                  <select x-model="mwatchEditForm.action">
-                                    <option value="notify">notify</option>
-                                    <option value="restart">restart</option>
-                                  </select>
-                                  <input type="text" x-model="mwatchEditForm.duration" placeholder="duration (s)" style="width:90px">
-                                  <button class="mwatch-btn" @click.stop="saveEditMemoryWatch()" style="background:#1f6feb;border-color:#1f6feb;color:#fff">Save</button>
-                                  <button class="mwatch-btn" @click.stop="mwatchEditIdx = -1">Cancel</button>
+                                <div @click.stop>
+                                  <div style="font-size:10px;color:#8b949e;margin-bottom:6px" x-text="mwatchEditForm.action === 'warn' ? 'Send Discord notification when memory stays above the limit for the duration.' : 'Restart when memory stays above the limit for the duration. Optionally stop permanently after max restarts within the time window.'"></div>
+                                  <div class="mwatch-inline-form" style="flex-wrap:wrap;gap:8px">
+                                    <div style="display:flex;flex-direction:column;gap:2px">
+                                      <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Limit</span>
+                                      <input type="text" x-model="mwatchEditForm.limit" placeholder="1g" style="width:70px">
+                                    </div>
+                                    <div style="display:flex;flex-direction:column;gap:2px">
+                                      <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Action</span>
+                                      <select x-model="mwatchEditForm.action">
+                                        <option value="warn">warn</option>
+                                        <option value="restart">restart</option>
+                                      </select>
+                                    </div>
+                                    <div style="display:flex;flex-direction:column;gap:2px">
+                                      <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Duration (s)</span>
+                                      <input type="text" x-model="mwatchEditForm.duration" placeholder="300" style="width:60px">
+                                    </div>
+                                    <template x-if="mwatchEditForm.action === 'restart'">
+                                      <div style="display:flex;flex-direction:column;gap:2px">
+                                        <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Max restarts</span>
+                                        <input type="text" x-model="mwatchEditForm.maxTriggers" placeholder="0" style="width:50px">
+                                      </div>
+                                    </template>
+                                    <template x-if="mwatchEditForm.action === 'restart'">
+                                      <div style="display:flex;flex-direction:column;gap:2px">
+                                        <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Period (h)</span>
+                                        <input type="text" x-model="mwatchEditForm.maxWindow" placeholder="24" style="width:50px">
+                                      </div>
+                                    </template>
+                                    <div style="display:flex;align-items:flex-end;gap:4px">
+                                      <button class="mwatch-btn" @click.stop="saveEditMemoryWatch()" style="background:#1f6feb;border-color:#1f6feb;color:#fff">Save</button>
+                                      <button class="mwatch-btn" @click.stop="mwatchEditIdx = -1">Cancel</button>
+                                    </div>
+                                  </div>
                                 </div>
                               </template>
                             </div>
@@ -1691,15 +1735,41 @@
                         <!-- Add button -->
                         <button class="mwatch-btn" x-show="!mwatchAdding || mwatchAddingFor !== c.name" @click.stop="startAddMemoryWatch(c.name)" style="margin-top:8px">+ Add rule</button>
                         <!-- Add form (full width) -->
-                        <div class="mwatch-inline-form" x-show="mwatchAdding && mwatchAddingFor === c.name" @click.stop style="margin-top:8px">
-                          <input type="text" x-model="mwatchForm.limit" placeholder="512m, 1.5g, 20g" style="width:80px">
-                          <select x-model="mwatchForm.action">
-                            <option value="notify">notify</option>
-                            <option value="restart">restart</option>
-                          </select>
-                          <input type="text" x-model="mwatchForm.duration" placeholder="duration (s)" style="width:90px">
-                          <button class="mwatch-btn" @click.stop="saveAddMemoryWatch(c.name)" style="background:#1f6feb;border-color:#1f6feb;color:#fff">Save</button>
-                          <button class="mwatch-btn" @click.stop="mwatchAdding = false">Cancel</button>
+                        <div x-show="mwatchAdding && mwatchAddingFor === c.name" @click.stop style="margin-top:8px">
+                          <div style="font-size:10px;color:#8b949e;margin-bottom:6px" x-text="mwatchForm.action === 'warn' ? 'Send Discord notification when memory stays above the limit for the duration.' : 'Restart when memory stays above the limit for the duration. Optionally stop permanently after max restarts within the time window.'"></div>
+                          <div class="mwatch-inline-form" style="flex-wrap:wrap;gap:8px">
+                            <div style="display:flex;flex-direction:column;gap:2px">
+                              <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Limit</span>
+                              <input type="text" x-model="mwatchForm.limit" placeholder="1g" style="width:70px">
+                            </div>
+                            <div style="display:flex;flex-direction:column;gap:2px">
+                              <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Action</span>
+                              <select x-model="mwatchForm.action">
+                                <option value="warn">warn</option>
+                                <option value="restart">restart</option>
+                              </select>
+                            </div>
+                            <div style="display:flex;flex-direction:column;gap:2px">
+                              <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Duration (s)</span>
+                              <input type="text" x-model="mwatchForm.duration" placeholder="300" style="width:60px">
+                            </div>
+                            <template x-if="mwatchForm.action === 'restart'">
+                              <div style="display:flex;flex-direction:column;gap:2px">
+                                <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Max restarts</span>
+                                <input type="text" x-model="mwatchForm.maxTriggers" placeholder="0" style="width:50px">
+                              </div>
+                            </template>
+                            <template x-if="mwatchForm.action === 'restart'">
+                              <div style="display:flex;flex-direction:column;gap:2px">
+                                <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Period (h)</span>
+                                <input type="text" x-model="mwatchForm.maxWindow" placeholder="24" style="width:50px">
+                              </div>
+                            </template>
+                            <div style="display:flex;align-items:flex-end;gap:4px">
+                              <button class="mwatch-btn" @click.stop="saveAddMemoryWatch(c.name)" style="background:#1f6feb;border-color:#1f6feb;color:#fff">Save</button>
+                              <button class="mwatch-btn" @click.stop="mwatchAdding = false">Cancel</button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </template>
@@ -1975,12 +2045,13 @@
                 <div class="mobile-event-top">
                   <span class="mobile-event-time" x-text="formatEventTime(g.events[0].timestamp)"></span>
                   <template x-for="(badge, bi) in groupBadges(g)" :key="badge">
-                    <span class="event-badge" :class="'event-badge-' + badge" x-text="badge" style="font-size:10px;padding:1px 6px"></span>
+                    <span class="event-badge" :class="'event-badge-' + badge" x-text="badge.replace('-', ' ')" style="font-size:10px;padding:1px 6px"></span>
                   </template>
                   <span style="color:#484f58;font-size:11px;margin-left:auto" x-text="g.events.length + 'x'"></span>
                 </div>
                 <div class="mobile-event-bottom">
                   <span x-text="g.container"></span>
+                  <span x-show="groupMemoryDetail(g)" class="event-detail-inline" style="font-size:10px" x-text="groupMemoryDetail(g)"></span>
                   <span class="event-group-chevron" x-text="g.expanded ? '\u25BC' : '\u25B6'"></span>
                 </div>
                 <div x-show="g.expanded" x-transition @click.stop style="margin-top:8px;padding-top:8px;border-top:1px solid #21262d">
@@ -2051,10 +2122,11 @@
                 <template x-for="(badge, bi) in groupBadges(g)" :key="badge">
                   <span style="display:inline-flex;align-items:center;gap:6px">
                     <span x-show="bi > 0" style="color:#484f58;font-size:11px">&rarr;</span>
-                    <span class="event-badge" :class="'event-badge-' + badge" x-text="badge"></span>
+                    <span class="event-badge" :class="'event-badge-' + badge" x-text="badge.replace('-', ' ')"></span>
                   </span>
                 </template>
                 <span class="event-group-count" x-text="'(' + g.events.length + ' events)'"></span>
+                <span x-show="groupMemoryDetail(g)" class="event-detail-inline" x-text="groupMemoryDetail(g)"></span>
               </div>
               <div class="event-group-children" x-show="g.expanded" x-transition>
                 <template x-for="(e, ei) in g.events" :key="'ge' + gi + '-' + ei">
@@ -2094,7 +2166,11 @@
           <span class="arrow" x-text="toolsSections.memory ? '&#9660;' : '&#9654;'"></span>
         </div>
         <div class="config-section-body" x-show="toolsSections.memory" x-transition>
-          <div style="font-size:13px;color:#c9d1d9;margin-bottom:10px">Monitor memory usage and trigger alerts or auto-restart when thresholds are exceeded.</div>
+          <div style="font-size:13px;color:#c9d1d9;margin-bottom:10px">
+            Set per-container memory thresholds. <strong>Warn</strong> sends a Discord notification when memory exceeds the limit for the duration period. <strong>Restart</strong> restarts the container instead.
+            Restart rules can set a <strong>max</strong> count — if the rule triggers that many times within the time window (default 24h), the container is <strong>stopped</strong> instead of restarted.
+            Leave max empty or 0 for unlimited restarts.
+          </div>
           <div class="config-field">
             <span class="config-label">Pause all rules</span>
             <div class="config-toggle" :class="{ on: config.memoryPaused === 'true' }" @click="config.memoryPaused = config.memoryPaused === 'true' ? 'false' : 'true'; configDirty = true"></div>
@@ -2138,9 +2214,10 @@
                       <div style="display:flex;align-items:center;gap:10px;padding:4px 0" :style="group.rules.indexOf(entry) > 0 ? 'border-top:1px solid #21262d;margin-top:4px;padding-top:8px' : ''">
                         <!-- Action + limit label -->
                         <div style="min-width:120px;flex-shrink:0">
-                          <span style="font-size:11px;font-weight:600" :style="entry.action === 'restart' ? 'color:#f85149' : 'color:#d29922'" x-text="entry.action"></span>
+                          <span style="font-size:11px;font-weight:600" :style="entry.action === 'restart' ? 'color:#f85149' : 'color:#d29922'" x-text="entry.action === 'notify' ? 'warn' : entry.action"></span>
                           <span style="font-size:11px;color:#c9d1d9;margin-left:2px">at <span x-text="formatLimit(entry.limit)"></span></span>
                           <span x-show="entry.duration" style="font-size:10px;color:#8b949e;margin-left:4px" x-text="'(' + entry.duration + 's)'"></span>
+                          <span x-show="entry.maxTriggers && parseInt(entry.maxTriggers) > 0" style="font-size:10px;color:#f85149;margin-left:4px" x-text="'stop after ' + entry.maxTriggers + 'x in ' + (entry.maxWindow || '24h').replace(/(\d+)h/, '$1h')"></span>
                         </div>
                         <!-- Progress bar -->
                         <div style="flex:1;min-width:80px" x-show="group.container">
@@ -2166,16 +2243,45 @@
                       </div>
                     </template>
                     <template x-if="mwatchEditIdx === entry.idx">
-                      <div class="mwatch-inline-form" @click.stop style="margin-top:4px">
-                        <input type="text" x-model="mwatchEditForm.name" placeholder="container-name" style="width:140px">
-                        <input type="text" x-model="mwatchEditForm.limit" placeholder="512m, 1.5g" style="width:80px">
-                        <select x-model="mwatchEditForm.action">
-                          <option value="notify">notify</option>
-                          <option value="restart">restart</option>
-                        </select>
-                        <input type="text" x-model="mwatchEditForm.duration" placeholder="duration (s)" style="width:90px">
-                        <button class="mwatch-btn" @click.stop="saveEditMemoryWatchConfig(entry.idx)" style="background:#1f6feb;border-color:#1f6feb;color:#fff">Save</button>
-                        <button class="mwatch-btn" @click.stop="mwatchEditIdx = -1">Cancel</button>
+                      <div @click.stop style="margin-top:4px">
+                        <div style="font-size:10px;color:#8b949e;margin-bottom:6px" x-text="mwatchEditForm.action === 'warn' ? 'Send Discord notification when memory stays above the limit for the duration.' : 'Restart when memory stays above the limit for the duration. Optionally stop permanently after max restarts within the time window.'"></div>
+                        <div class="mwatch-inline-form" style="flex-wrap:wrap;gap:8px">
+                          <div style="display:flex;flex-direction:column;gap:2px">
+                            <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Container</span>
+                            <input type="text" x-model="mwatchEditForm.name" placeholder="name" style="width:130px">
+                          </div>
+                          <div style="display:flex;flex-direction:column;gap:2px">
+                            <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Limit</span>
+                            <input type="text" x-model="mwatchEditForm.limit" placeholder="1g" style="width:70px">
+                          </div>
+                          <div style="display:flex;flex-direction:column;gap:2px">
+                            <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Action</span>
+                            <select x-model="mwatchEditForm.action">
+                              <option value="warn">warn</option>
+                              <option value="restart">restart</option>
+                            </select>
+                          </div>
+                          <div style="display:flex;flex-direction:column;gap:2px">
+                            <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Duration (s)</span>
+                            <input type="text" x-model="mwatchEditForm.duration" placeholder="300" style="width:60px">
+                          </div>
+                          <template x-if="mwatchEditForm.action === 'restart'">
+                            <div style="display:flex;flex-direction:column;gap:2px">
+                              <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Max restarts</span>
+                              <input type="text" x-model="mwatchEditForm.maxTriggers" placeholder="0" style="width:50px">
+                            </div>
+                          </template>
+                          <template x-if="mwatchEditForm.action === 'restart'">
+                            <div style="display:flex;flex-direction:column;gap:2px">
+                              <span style="font-size:9px;color:#8b949e;text-transform:uppercase">Period (h)</span>
+                              <input type="text" x-model="mwatchEditForm.maxWindow" placeholder="24" style="width:50px">
+                            </div>
+                          </template>
+                          <div style="display:flex;align-items:flex-end;gap:4px">
+                            <button class="mwatch-btn" @click.stop="saveEditMemoryWatchConfig(entry.idx)" style="background:#1f6feb;border-color:#1f6feb;color:#fff">Save</button>
+                            <button class="mwatch-btn" @click.stop="mwatchEditIdx = -1">Cancel</button>
+                          </div>
+                        </div>
                       </div>
                     </template>
                   </div>
@@ -2183,7 +2289,7 @@
               </div>
             </template>
           </div>
-          <button class="add-entry-btn" @click="config.memoryWatch.push({name:'', limit:'', action:'notify', duration:''}); configDirty = true; $nextTick(() => startEditMemoryWatch(config.memoryWatch.length - 1))" style="margin-top:8px">+ Add rule</button>
+          <button class="add-entry-btn" @click="config.memoryWatch.push({name:'', limit:'', action:'warn', duration:'', maxTriggers:'', maxWindow:''}); configDirty = true; $nextTick(() => startEditMemoryWatch(config.memoryWatch.length - 1))" style="margin-top:8px">+ Add rule</button>
           </div>
         </div>
       </div>
@@ -2660,15 +2766,17 @@
                 <span class="config-label">Restart label</span>
                 <input type="text" class="config-input" x-model="config.restartLabel" @input="configDirty = true">
               </div>
-              <div class="config-hint">Only containers with this Docker label will be auto-restarted</div>
+              <div class="config-hint">Docker label name that enables auto-restart. Both this value and the container label must match. Requires Constat restart to take effect.</div>
               <div class="config-field">
                 <span class="config-label">Cooldown (sec)</span>
                 <input type="text" class="config-input" style="max-width:100px" x-model="config.restartCooldown" @input="configDirty = true">
               </div>
+              <div class="config-hint">Minimum seconds between restarts for the same container. If still unhealthy after restart, Constat waits this long before restarting again.</div>
               <div class="config-field">
                 <span class="config-label">Max restarts</span>
                 <input type="text" class="config-input" style="max-width:100px" x-model="config.maxRestarts" @input="configDirty = true">
               </div>
+              <div class="config-hint">Maximum restart attempts before <strong>stopping</strong> the container. Counter resets when the container stays healthy for at least the cooldown period. Set to 0 to disable (restart indefinitely).</div>
             </div>
           </div>
 
@@ -3194,10 +3302,11 @@ function app() {
     // Memory watch inline add/edit
     mwatchAdding: false,
     mwatchAddingFor: '',
-    mwatchForm: { limit: '', action: 'notify', duration: '' },
+    mwatchForm: { limit: '', action: 'warn', duration: '', maxTriggers: '', maxWindow: '' },
     mwatchEditIdx: -1,
-    mwatchEditForm: { limit: '', action: 'notify', duration: '' },
+    mwatchEditForm: { limit: '', action: 'warn', duration: '', maxTriggers: '', maxWindow: '' },
     mwatchExceededSince: {},
+    memTriggers: {},
     mwatchTimerTick: 0,
 
     // Logs tab
@@ -3310,6 +3419,8 @@ function app() {
       this.loading = false;
       // Auto-refresh every 30s (lifecycle changes only — stats come via SSE)
       this.refreshInterval = setInterval(() => this.fetchContainers(), 30000);
+      // Auto-refresh updates every 60s (update checks run infrequently, but "last check" time needs updating)
+      setInterval(() => this.fetchUpdates(), 60000);
       // Connect stats SSE (always on — header needs totals)
       this.connectStatsSSE();
       // 1-second tick for memory watch timer reactivity
@@ -3418,7 +3529,7 @@ function app() {
       } else {
         this.sortColumn = col;
         // Default direction: asc for name/health/restart/update/uptime, desc for cpu/ram/net
-        this.sortAsc = !['cpu', 'ram', 'net'].includes(col);
+        this.sortAsc = !['cpu', 'ram', 'net', 'memwatch'].includes(col);
       }
     },
 
@@ -3541,6 +3652,82 @@ function app() {
       }
     },
 
+    _memWatchPct(c) {
+      if (!this.config || !this.config.memoryWatch || c.state !== 'running') return -1;
+      let rule = null;
+      for (const mw of this.config.memoryWatch) {
+        if (mw.name !== c.name) continue;
+        if (!rule || mw.action === 'restart') rule = mw;
+      }
+      if (!rule) return -1;
+      const limit = this.parseMemoryLimit(rule.limit);
+      return limit > 0 ? (c.memory / limit) * 100 : -1;
+    },
+
+    memColText(c) {
+      if (!this.config || !this.config.memoryWatch || c.state !== 'running') return '';
+      // Find the most relevant rule for this container (restart > warn)
+      let rule = null;
+      let ruleIdx = -1;
+      for (let i = 0; i < this.config.memoryWatch.length; i++) {
+        const mw = this.config.memoryWatch[i];
+        if (mw.name !== c.name) continue;
+        if (!rule || mw.action === 'restart') { rule = mw; ruleIdx = i; }
+      }
+      if (!rule) return '';
+      const limit = this.parseMemoryLimit(rule.limit);
+      if (limit <= 0) return '';
+      const pct = Math.round((c.memory / limit) * 100);
+      // Check if currently exceeded and counting down
+      const elapsed = this.mwatchElapsedSec(c.name, ruleIdx);
+      if (elapsed >= 0 && rule.action === 'restart') {
+        const remaining = this.mwatchEffectiveDuration(rule) - elapsed;
+        const maxT = parseInt(rule.maxTriggers) || 0;
+        let suffix = '';
+        if (maxT > 0) {
+          const key = c.name + ':' + ruleIdx;
+          const trigger = this.memTriggers[key];
+          suffix = ' (' + (trigger ? trigger.count : 0) + '/' + maxT + ')';
+        }
+        if (remaining <= 0) return 'Restarting\u2026' + suffix;
+        return this._fmtDuration(remaining) + ' restart' + suffix;
+      }
+      if (elapsed >= 0 && rule.action === 'warn') {
+        return pct + '% warn';
+      }
+      // Not exceeded — show percentage + limit
+      const limitStr = this.formatLimit(rule.limit);
+      const maxT = parseInt(rule.maxTriggers) || 0;
+      if (maxT > 0) {
+        const key = c.name + ':' + ruleIdx;
+        const trigger = this.memTriggers[key];
+        if (trigger && trigger.count > 0) {
+          return pct + '% ' + limitStr + ' (' + trigger.count + '/' + maxT + ')';
+        }
+      }
+      return pct + '% ' + limitStr;
+    },
+
+    memColStyle(c) {
+      if (!this.config || !this.config.memoryWatch || c.state !== 'running') return 'color:#484f58';
+      let rule = null;
+      let ruleIdx = -1;
+      for (let i = 0; i < this.config.memoryWatch.length; i++) {
+        const mw = this.config.memoryWatch[i];
+        if (mw.name !== c.name) continue;
+        if (!rule || mw.action === 'restart') { rule = mw; ruleIdx = i; }
+      }
+      if (!rule) return 'color:#484f58';
+      const limit = this.parseMemoryLimit(rule.limit);
+      if (limit <= 0) return 'color:#484f58';
+      const pct = (c.memory / limit) * 100;
+      const exceeded = this.mwatchElapsedSec(c.name, ruleIdx) >= 0;
+      if (exceeded) return 'color:#f85149;font-weight:600';
+      if (pct >= 90) return 'color:#f85149';
+      if (pct >= 75) return 'color:#d29922';
+      return 'color:#3fb950';
+    },
+
     expandToChart(id, metric) {
       if (this.expandedId === id) {
         // Already expanded — just enable the metric
@@ -3606,23 +3793,32 @@ function app() {
 
     healthBadgeClass(c) {
       if (c.state === 'paused') return 'badge-paused';
-      if (c.state !== 'running') return 'badge-stopped';
+      if (c.state !== 'running') {
+        if (c.status === 'stopped-health' || c.status === 'stopped-mem') return 'badge-unhealthy';
+        return 'badge-stopped';
+      }
       if (c.health === 'healthy') return 'badge-healthy';
       if (c.health === 'unhealthy') return 'badge-unhealthy';
+      if (c.health === 'starting') return 'badge-starting';
       return 'badge-none';
     },
 
     healthLabel(c) {
       if (c.state === 'paused') return 'Paused';
-      if (c.state !== 'running') return '';
+      if (c.state !== 'running') {
+        if (c.status === 'stopped-health') return 'Stopped: health';
+        if (c.status === 'stopped-mem') return 'Stopped: mem';
+        return '';
+      }
       if (c.health === 'healthy') return 'Healthy';
       if (c.health === 'unhealthy') return 'Unhealthy';
+      if (c.health === 'starting') return 'Checking';
       return 'No HC';
     },
     healthTooltip(c) {
       if (c.state === 'running' && c.health === 'none') {
         const s = this.getSuggestion(c.name);
-        return s ? 'No healthcheck — suggested: ' + s.suggestion : 'No healthcheck configured';
+        return s ? 'No healthcheck — expand container for suggestion' : 'No healthcheck configured';
       }
       return '';
     },
@@ -3660,6 +3856,16 @@ function app() {
       if (bytes >= 1048576) return (bytes / 1048576).toFixed(0) + ' MiB';
       if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KiB';
       return bytes + ' B';
+    },
+
+    formatUptime(ms) {
+      if (!ms || ms <= 0) return '';
+      const days = Math.floor(ms / 86400000);
+      const hours = Math.floor(ms / 3600000) % 24;
+      const minutes = Math.floor(ms / 60000) % 60;
+      if (days > 0) return days + 'd ' + hours + 'h ' + minutes + 'm';
+      if (hours > 0) return hours + 'h ' + minutes + 'm';
+      return minutes + 'm';
     },
 
     imageTag(image) {
@@ -4318,12 +4524,31 @@ function app() {
 
     mwatchTimerText(name, idx, mw) {
       const elapsed = this.mwatchElapsedSec(name, idx);
-      if (elapsed < 0) return '';
+      if (elapsed < 0) {
+        // Not currently exceeded — but show trigger count if escalation is configured
+        const maxT = parseInt(mw.maxTriggers) || 0;
+        if (maxT > 0 && mw.action === 'restart') {
+          const key = name + ':' + idx;
+          const trigger = this.memTriggers[key];
+          if (trigger && trigger.count > 0) {
+            return trigger.count + '/' + trigger.max + ' restarts';
+          }
+        }
+        return '';
+      }
       if (mw.action === 'restart') {
         const remaining = this.mwatchEffectiveDuration(mw) - elapsed;
+        const maxT = parseInt(mw.maxTriggers) || 0;
+        let triggerInfo = '';
+        if (maxT > 0) {
+          const key = name + ':' + idx;
+          const trigger = this.memTriggers[key];
+          const count = trigger ? trigger.count : 0;
+          triggerInfo = ' (' + count + '/' + maxT + ')';
+        }
         if (remaining <= -30) return 'Restart overdue \u2014 check backend';
-        if (remaining <= 0) return 'Restarting\u2026';
-        return this._fmtDuration(remaining) + ' until restart';
+        if (remaining <= 0) return 'Restarting\u2026' + triggerInfo;
+        return this._fmtDuration(remaining) + ' until restart' + triggerInfo;
       }
       return 'Exceeded ' + this._fmtDuration(elapsed);
     },
@@ -4337,17 +4562,20 @@ function app() {
     startAddMemoryWatch(name) {
       this.mwatchAdding = true;
       this.mwatchAddingFor = name;
-      this.mwatchForm = { limit: '512m', action: 'notify', duration: '' };
+      this.mwatchForm = { limit: '512m', action: 'warn', duration: '', maxTriggers: '', maxWindow: '' };
       this.mwatchEditIdx = -1;
     },
 
     async saveAddMemoryWatch(name) {
       if (!this.config) return;
+      this._cleanMemoryWatchForm(this.mwatchForm);
       this.config.memoryWatch.push({
         name: name,
         limit: this.mwatchForm.limit,
         action: this.mwatchForm.action,
         duration: this.mwatchForm.duration,
+        maxTriggers: this.mwatchForm.maxTriggers,
+        maxWindow: this.mwatchForm.maxWindow,
       });
       this.mwatchExceededSince = {};
       this.mwatchAdding = false;
@@ -4358,16 +4586,31 @@ function app() {
     startEditMemoryWatch(idx) {
       this.mwatchEditIdx = idx;
       const entry = this.config.memoryWatch[idx];
-      this.mwatchEditForm = { name: entry.name || '', limit: entry.limit, action: entry.action, duration: entry.duration || '' };
+      this.mwatchEditForm = { name: entry.name || '', limit: entry.limit, action: entry.action, duration: entry.duration || '', maxTriggers: entry.maxTriggers || '', maxWindow: (entry.maxWindow || '').replace(/[^0-9]/g, '') };
       this.mwatchAdding = false;
+    },
+
+    _cleanMemoryWatchForm(form) {
+      // Duration: strip non-numeric, always stored as plain number (seconds)
+      if (form.duration) form.duration = form.duration.replace(/[^0-9]/g, '');
+      // Max triggers: strip non-numeric
+      if (form.maxTriggers) form.maxTriggers = form.maxTriggers.replace(/[^0-9]/g, '');
+      // Window: strip non-numeric, auto-append 'h' (stored as Go duration)
+      if (form.maxWindow) {
+        const num = form.maxWindow.replace(/[^0-9]/g, '');
+        form.maxWindow = num ? num + 'h' : '';
+      }
     },
 
     async saveEditMemoryWatch() {
       if (!this.config || this.mwatchEditIdx < 0) return;
+      this._cleanMemoryWatchForm(this.mwatchEditForm);
       const entry = this.config.memoryWatch[this.mwatchEditIdx];
       entry.limit = this.mwatchEditForm.limit;
       entry.action = this.mwatchEditForm.action;
       entry.duration = this.mwatchEditForm.duration;
+      entry.maxTriggers = this.mwatchEditForm.maxTriggers;
+      entry.maxWindow = this.mwatchEditForm.maxWindow;
       this.mwatchExceededSince = {};
       this.mwatchEditIdx = -1;
       this.configDirty = true;
@@ -4376,11 +4619,14 @@ function app() {
 
     async saveEditMemoryWatchConfig(idx) {
       if (!this.config || idx < 0) return;
+      this._cleanMemoryWatchForm(this.mwatchEditForm);
       const entry = this.config.memoryWatch[idx];
       entry.name = this.mwatchEditForm.name;
       entry.limit = this.mwatchEditForm.limit;
       entry.action = this.mwatchEditForm.action;
       entry.duration = this.mwatchEditForm.duration;
+      entry.maxTriggers = this.mwatchEditForm.maxTriggers;
+      entry.maxWindow = this.mwatchEditForm.maxWindow;
       this.mwatchExceededSince = {};
       this.mwatchEditIdx = -1;
       this.configDirty = true;
@@ -4463,6 +4709,8 @@ function app() {
           this.totalMemory = batch.totalMemory || 0;
           this.hostMemory = batch.hostMemory || 0;
           this.hostCpus = batch.hostCpus || 0;
+          // Update memory trigger counts
+          this.memTriggers = batch.memTriggers || {};
           // Track history for host cards (keep last 20 points = ~60s at 3s interval)
           this.totalCpuHistory.push(this.totalCpu);
           if (this.totalCpuHistory.length > 20) this.totalCpuHistory.shift();
@@ -4490,7 +4738,20 @@ function app() {
           if (batch.containers) {
             for (const c of this.containers) {
               const live = batch.containers[c.name];
-              if (live && c.state === 'running') {
+              if (!live) continue;
+              // Always update state/health/status (works for running and stopped)
+              if (live.state) c.state = live.state;
+              if (live.health) c.health = live.health;
+              c.status = live.status || '';
+              if (live.startedAt && live.state === 'running') {
+                c.startedAt = live.startedAt;
+                const started = new Date(live.startedAt);
+                if (!isNaN(started)) c.uptime = this.formatUptime(Date.now() - started.getTime());
+              } else if (live.state !== 'running') {
+                c.uptime = '';
+              }
+              // Stats only for running containers
+              if (c.state === 'running') {
                 c.cpu = live.cpu;
                 c.memory = live.memory;
                 c.memoryLimit = live.memoryLimit;
@@ -4738,7 +4999,7 @@ function app() {
       const match = detail.match(/^([\d.]+\s*\S+)\s*\/\s*([\d.]+\s*\S+)\s*[—–-]\s*(after\s+)?(.*)/);
       if (!match) return detail;
       const [, current, limit, afterPrefix, duration] = match;
-      if (action === 'notify' || action === 'restart') {
+      if (action === 'warn' || action === 'notify' || action === 'restart') {
         const diffBytes = this._parseMemBytes(current) - this._parseMemBytes(limit);
         const diffStr = diffBytes > 0 ? this.formatBytes(diffBytes) : '';
         return diffStr ? `exceeded limit by ${diffStr} for ${duration} (${current} / ${limit})` : `exceeded limit for ${duration} (${current} / ${limit})`;
@@ -4773,11 +5034,22 @@ function app() {
           groups.push(current);
         }
       }
-      // Clean up intermediate Docker events within groups
+      // Sort events within each group by timestamp (oldest first), with logical tiebreaker
+      // Events within the same second use action priority instead of millisecond differences
+      const actionOrder = { 'restart': 0, 'warn': 1, 'notify': 1, 'blocked': 2, 'restarted': 3, 'started': 4, 'stopped': 5, 'died': 6, 'paused': 7, 'unpaused': 8, 'unhealthy': 9, 'healthy': 10, 'recovered': 11 };
       for (const g of groups) {
+        g.events.sort((a, b) => {
+          const ta = Math.floor(new Date(a.timestamp).getTime() / 1000);
+          const tb = Math.floor(new Date(b.timestamp).getTime() / 1000);
+          if (ta !== tb) return ta - tb;
+          return (actionOrder[a.action] ?? 50) - (actionOrder[b.action] ?? 50);
+        });
         const actions = g.events.map(e => e.action);
-        if (actions.includes('restarted') || actions.includes('started')) {
-          // Restart/start sequence: died + stopped are intermediate, keep only the outcomes
+        if (actions.includes('restarted')) {
+          // Restart sequence: died, stopped, started are all intermediate — keep restarted as the action
+          g.events = g.events.filter(e => e.action !== 'died' && e.action !== 'stopped' && e.action !== 'started');
+        } else if (actions.includes('started')) {
+          // Start sequence (no restart): died + stopped are intermediate
           g.events = g.events.filter(e => e.action !== 'died' && e.action !== 'stopped');
         } else if (actions.includes('died') && actions.includes('stopped')) {
           // Planned stop: died is just a signal exit, drop it
@@ -4791,13 +5063,20 @@ function app() {
     },
 
     groupBadges(g) {
-      // Events are newest-first: [0]=most recent, [N]=oldest
+      // Events are sorted oldest-first: [0]=oldest, [N]=newest
       const actions = g.events.map(e => e.action);
-      const newest = actions[0];
-      const oldest = actions[actions.length - 1];
+      const types = g.events.map(e => e.type);
+      const oldest = actions[0];
+      const newest = actions[actions.length - 1];
       const badges = [];
-      // Trigger: the most significant action in the group
-      if (actions.includes('restarted')) {
+      // Memory events take priority as trigger badge
+      const hasMemRestart = types.includes('memory') && actions.includes('restart');
+      const hasMemWarn = types.includes('memory') && (actions.includes('warn') || actions.includes('notify'));
+      if (hasMemRestart) {
+        badges.push('mem-restart');
+      } else if (hasMemWarn) {
+        badges.push('mem-warn');
+      } else if (actions.includes('restarted')) {
         badges.push('restarted');
       } else if (actions.includes('died')) {
         badges.push('died');
@@ -4810,6 +5089,13 @@ function app() {
         badges.push(newest);
       }
       return badges;
+    },
+
+    groupMemoryDetail(g) {
+      // Find the memory event in a group and return its formatted detail
+      const memEvent = g.events.find(e => e.type === 'memory' && e.detail);
+      if (!memEvent) return '';
+      return this.formatMemoryDetail(memEvent.action, memEvent.detail);
     },
 
     // ---- Categories ----
@@ -5231,6 +5517,12 @@ function app() {
         }
         case 'cpu': cmp = (a.cpu || 0) - (b.cpu || 0); break;
         case 'ram': cmp = (a.memory || 0) - (b.memory || 0); break;
+        case 'memwatch': {
+          const ap = this._memWatchPct(a);
+          const bp = this._memWatchPct(b);
+          cmp = ap - bp;
+          break;
+        }
         case 'network': {
           cmp = ((a.networks || [])[0] || '').localeCompare((b.networks || [])[0] || '');
           if (cmp === 0) cmp = a.name.localeCompare(b.name);
@@ -5393,7 +5685,7 @@ function app() {
       if (!u) return '\u2014';
       if (u.error === 'local image, no registry digest') return 'Local';
       if (u.error) return '\u2014';
-      return u.hasUpdate ? 'Update' : 'Up to date';
+      return u.hasUpdate ? 'Outdated' : 'Up to date';
     },
     updateTooltip(c) {
       const u = this.updateResults[c.name];

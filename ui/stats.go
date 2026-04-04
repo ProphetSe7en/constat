@@ -30,15 +30,27 @@ type ContainerLive struct {
 	MemoryLimit uint64  `json:"memoryLimit"`
 	NetRxRate   float64 `json:"netRxRate"`
 	NetTxRate   float64 `json:"netTxRate"`
+	State       string  `json:"state,omitempty"`
+	Health      string  `json:"health,omitempty"`
+	StartedAt   string  `json:"startedAt,omitempty"`
+	Status      string  `json:"status,omitempty"` // transient status: stopped-health, stopped-mem
+}
+
+// MemTriggerCount tracks restart count vs max for a memory rule
+type MemTriggerCount struct {
+	Count int    `json:"count"`
+	Max   int    `json:"max"`
+	Name  string `json:"name"`
 }
 
 // StatsBatch is the SSE payload sent to subscribers every 3s
 type StatsBatch struct {
-	Containers map[string]*ContainerLive `json:"containers"`
-	TotalCPU   float64                   `json:"totalCpu"`
-	TotalMem   uint64                    `json:"totalMemory"`
-	HostMemory uint64                    `json:"hostMemory"`
-	HostCPUs   int                       `json:"hostCpus"`
+	Containers      map[string]*ContainerLive   `json:"containers"`
+	TotalCPU        float64                     `json:"totalCpu"`
+	TotalMem        uint64                      `json:"totalMemory"`
+	HostMemory      uint64                      `json:"hostMemory"`
+	HostCPUs        int                         `json:"hostCpus"`
+	MemTriggers     map[string]*MemTriggerCount `json:"memTriggers,omitempty"`
 }
 
 // streamResult is sent from per-container stream goroutines to main loop
@@ -161,6 +173,13 @@ type netSnapshot struct {
 	tx   uint64
 }
 
+// containerMeta holds state/health info from Docker, updated via syncStreams
+type containerMeta struct {
+	State     string
+	Health    string
+	StartedAt string
+}
+
 // StatsCollector streams Docker stats and maintains per-container live data, averages, and history
 type StatsCollector struct {
 	mu          sync.RWMutex
@@ -170,6 +189,8 @@ type StatsCollector struct {
 	aggregated  map[string][]StatPoint      // keyed by container name — older data at 5min intervals
 	prevNet     map[string]netSnapshot      // keyed by container name
 	latest      map[string]*ContainerLive   // keyed by container name
+	meta        map[string]*containerMeta   // keyed by container name — state/health from Docker
+	status      map[string]string           // keyed by container name — transient status (restarting-health, stopped-health, etc.)
 	streams     map[string]context.CancelFunc // keyed by container name
 	idToName    map[string]string           // 12-char ID → container name (for API lookups)
 	statsCh     chan streamResult
@@ -188,6 +209,8 @@ func NewStatsCollector(docker *client.Client, hostCPUs int, hostMemory uint64) *
 		aggregated:  make(map[string][]StatPoint),
 		prevNet:     make(map[string]netSnapshot),
 		latest:      make(map[string]*ContainerLive),
+		meta:        make(map[string]*containerMeta),
+		status:      make(map[string]string),
 		streams:     make(map[string]context.CancelFunc),
 		idToName:    make(map[string]string),
 		statsCh:     make(chan streamResult, 256),
@@ -196,6 +219,7 @@ func NewStatsCollector(docker *client.Client, hostCPUs int, hostMemory uint64) *
 		hostMemory:  hostMemory,
 	}
 	sc.loadFromDisk()
+	sc.loadContainerStatus()
 	return sc
 }
 
@@ -240,7 +264,7 @@ func (sc *StatsCollector) syncStreams(ctx context.Context) {
 	listCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	containers, err := sc.docker.ContainerList(listCtx, container.ListOptions{All: false})
+	containers, err := sc.docker.ContainerList(listCtx, container.ListOptions{All: true})
 	if err != nil {
 		log.Printf("StatsCollector: failed to list containers: %v", err)
 		return
@@ -250,17 +274,43 @@ func (sc *StatsCollector) syncStreams(ctx context.Context) {
 		fullID string
 		name   string
 	}
-	running := make(map[string]containerInfo, len(containers)) // name -> info
+	running := make(map[string]containerInfo) // name -> info (running only)
+	newMeta := make(map[string]*containerMeta, len(containers))
 	for _, c := range containers {
 		name := c.ID[:12] // fallback
 		if len(c.Names) > 0 {
 			name = strings.TrimPrefix(c.Names[0], "/")
 		}
-		running[name] = containerInfo{fullID: c.ID, name: name}
+		if c.State == "running" {
+			running[name] = containerInfo{fullID: c.ID, name: name}
+		}
+		// Health and startedAt are set by inspect below for running containers
+		newMeta[name] = &containerMeta{State: c.State, Health: "none"}
+	}
+
+	// Refresh startedAt for running containers via inspect (cheap on local socket)
+	for name, info := range running {
+		inspCtx, inspCancel := context.WithTimeout(ctx, 2*time.Second)
+		insp, err := sc.docker.ContainerInspect(inspCtx, info.fullID)
+		inspCancel()
+		if err == nil && insp.State.StartedAt != "" {
+			if m, ok := newMeta[name]; ok {
+				m.StartedAt = insp.State.StartedAt
+			}
+			// Also update health from inspect (more precise than parsing Status string)
+			if insp.State.Health != nil {
+				if m, ok := newMeta[name]; ok {
+					m.Health = string(insp.State.Health.Status)
+				}
+			}
+		}
 	}
 
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
+
+	// Update container metadata (state/health)
+	sc.meta = newMeta
 
 	// Rebuild ID→name mapping
 	sc.idToName = make(map[string]string, len(running))
@@ -356,6 +406,11 @@ func (sc *StatsCollector) processStreamResult(r streamResult) {
 	live.Memory = r.memory
 	live.MemoryLimit = r.memoryLimit
 
+	// Update startedAt in meta (precise value from container inspect)
+	if m, ok := sc.meta[r.name]; ok {
+		m.StartedAt = r.startedAt
+	}
+
 	// Detect restart before computing network rates (startedAt changes on restart)
 	avg, avgExists := sc.averages[r.name]
 	restarted := !avgExists || avg.StartedAt != r.startedAt
@@ -410,11 +465,41 @@ func (sc *StatsCollector) broadcastLatest() {
 	}
 	for name, live := range sc.latest {
 		snapshot := *live // copy
+		if m, ok := sc.meta[name]; ok {
+			snapshot.State = m.State
+			snapshot.Health = m.Health
+			snapshot.StartedAt = m.StartedAt
+		}
+		if s, ok := sc.status[name]; ok {
+			snapshot.Status = s
+		}
 		batch.Containers[name] = &snapshot
 		batch.TotalCPU += live.CPU
 		batch.TotalMem += live.Memory
 	}
+	// Include stopped containers (no live stats, but state/health matter)
+	for name, m := range sc.meta {
+		if _, hasLive := sc.latest[name]; !hasLive {
+			cl := &ContainerLive{
+				State:     m.State,
+				Health:    m.Health,
+				StartedAt: m.StartedAt,
+			}
+			if s, ok := sc.status[name]; ok {
+				cl.Status = s
+			}
+			batch.Containers[name] = cl
+		}
+	}
 	sc.mu.RUnlock()
+
+	// Read memory trigger counts from bash (best-effort, non-blocking)
+	if raw, err := os.ReadFile("/config/mem_trigger_counts.json"); err == nil {
+		var triggers map[string]*MemTriggerCount
+		if json.Unmarshal(raw, &triggers) == nil && len(triggers) > 0 {
+			batch.MemTriggers = triggers
+		}
+	}
 
 	sc.subMu.Lock()
 	for ch := range sc.subscribers {
@@ -450,6 +535,48 @@ func (sc *StatsCollector) stopAllStreams() {
 	for name, cancelFn := range sc.streams {
 		cancelFn()
 		delete(sc.streams, name)
+	}
+}
+
+// SetContainerStatus sets a transient status for a container (e.g. "stopped-health")
+// Persists to /config/container_status.json so it survives restarts.
+func (sc *StatsCollector) SetContainerStatus(name, status string) {
+	sc.mu.Lock()
+	if status == "" {
+		delete(sc.status, name)
+	} else {
+		sc.status[name] = status
+	}
+	// Copy for persistence outside lock
+	snapshot := make(map[string]string, len(sc.status))
+	for k, v := range sc.status {
+		snapshot[k] = v
+	}
+	sc.mu.Unlock()
+
+	// Persist to disk (best-effort)
+	data, err := json.Marshal(snapshot)
+	if err == nil {
+		_ = os.WriteFile("/config/container_status.json", data, 0644)
+	}
+}
+
+// GetContainerStatus returns the transient status for a container
+func (sc *StatsCollector) GetContainerStatus(name string) string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.status[name]
+}
+
+// loadContainerStatus restores persisted container status from disk
+func (sc *StatsCollector) loadContainerStatus() {
+	data, err := os.ReadFile("/config/container_status.json")
+	if err != nil {
+		return
+	}
+	var status map[string]string
+	if err := json.Unmarshal(data, &status); err == nil {
+		sc.status = status
 	}
 }
 

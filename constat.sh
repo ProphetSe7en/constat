@@ -24,7 +24,7 @@ DISCORD_WEBHOOK_STATE="${DISCORD_WEBHOOK_STATE:-}"
 DISCORD_WEBHOOK_HEALTH="${DISCORD_WEBHOOK_HEALTH:-}"
 DISCORD_WEBHOOK_MAINTENANCE="${DISCORD_WEBHOOK_MAINTENANCE:-}"
 BOT_NAME="${BOT_NAME:-Constat}"
-CONSTAT_VERSION="0.9.8"
+CONSTAT_VERSION="0.9.9"
 SERVER_LABEL="${SERVER_LABEL:-Unraid}"
 COLOR_STARTED="${COLOR_STARTED:-2ecc71}"
 COLOR_STOPPED="${COLOR_STOPPED:-95a5a6}"
@@ -63,15 +63,18 @@ fi
 declare -a EVENT_BUFFER=()
 declare -A RESTART_TIMES=()
 declare -A RESTART_COUNTS=()
+declare -A HEALTHY_SINCE=()
 declare -A UNHEALTHY_CONTAINERS=()
 declare -A RECENTLY_STARTED=()
 declare -a MEM_RULE_NAME=()
 declare -a MEM_RULE_LIMIT=()
 declare -a MEM_RULE_ACTION=()
 declare -a MEM_RULE_DURATION=()
+declare -a MEM_RULE_MAX_TRIGGERS=()
+declare -a MEM_RULE_MAX_WINDOW=()
 declare -A MEM_EXCEEDED_SINCE=()
 declare -A MEM_LAST_ACTION=()
-declare -A MEMORY_RESTARTING=()
+declare -A MEM_TRIGGER_TIMES=()
 LAST_MEM_POLL=0
 MEM_CONFIG_MTIME=""
 TIMER_PID=""
@@ -118,16 +121,32 @@ check_restart_cooldown() {
     local now
     now=$(date +%s)
 
+    # Cooldown: minimum seconds between restarts
     local last=${RESTART_TIMES[$name]:-0}
-    if [ $((now - last)) -lt "$RESTART_COOLDOWN" ]; then
-        local count=${RESTART_COUNTS[$name]:-0}
-        if [ "$count" -ge "$MAX_RESTARTS" ]; then
-            log "WARN: $name hit max restarts ($MAX_RESTARTS) within cooldown"
+    if [ "$last" -gt 0 ]; then
+        local elapsed=$((now - last))
+        if [ "$elapsed" -lt "$RESTART_COOLDOWN" ]; then
+            log "WARN: $name restart skipped — ${elapsed}s since last restart (cooldown ${RESTART_COOLDOWN}s)"
             return 1
         fi
-    else
-        # Cooldown expired — reset counter
+    fi
+
+    # Max restarts: if reached, stop container instead of restarting
+    local count=${RESTART_COUNTS[$name]:-0}
+    if [ "$MAX_RESTARTS" -gt 0 ] && [ "$count" -ge "$MAX_RESTARTS" ]; then
+        log "WARN: $name hit max restarts ($MAX_RESTARTS) without recovery — stopping container"
+        docker stop "$name" > /dev/null 2>&1 &
         RESTART_COUNTS[$name]=0
+        unset 'RESTART_TIMES[$name]'
+        # Notify via Discord
+        send_discord "$DISCORD_WEBHOOK_HEALTH" \
+            "⚠ $BOT_NAME: Health Escalation" \
+            "Container stopped" \
+            '```'"$name stopped after $MAX_RESTARTS unhealthy restarts without recovery"'```' \
+            "$COLOR_DIED"
+        log "Discord: Health Escalation — $name stopped"
+        emit_ui_event "$name" "health" "stopped" "Stopped after $MAX_RESTARTS unhealthy restarts without recovery"
+        return 1
     fi
 
     return 0
@@ -161,9 +180,31 @@ do_restart() {
 
     RESTART_TIMES[$name]=$now
     RESTART_COUNTS[$name]=$(( ${RESTART_COUNTS[$name]:-0} + 1 ))
-
-    log "Restarting $name (attempt ${RESTART_COUNTS[$name]}/$MAX_RESTARTS)"
+    log "Restarting $name (health auto-restart, attempt ${RESTART_COUNTS[$name]}/$MAX_RESTARTS)"
     docker restart "$name" > /dev/null 2>&1 &
+}
+
+#=============================================================================
+# UNHEALTHY RECHECK
+#=============================================================================
+# Docker only sends health_status:unhealthy once per state change.
+# After a skipped restart (cooldown), we must re-check periodically
+# to retry once cooldown expires.
+
+unhealthy_recheck() {
+    [ ${#UNHEALTHY_CONTAINERS[@]} -eq 0 ] && return 0
+
+    for name in "${!UNHEALTHY_CONTAINERS[@]}"; do
+        # Only recheck containers that have a pending restart (last attempt was skipped)
+        [ -z "${RESTART_TIMES[$name]}" ] && continue
+
+        if can_restart "$name"; then
+            do_restart "$name"
+            EVENT_BUFFER+=("health|Unhealthy|$COLOR_UNHEALTHY|$name unhealthy (restarting)")
+            log "EVENT: $name unhealthy recheck — restarting (attempt ${RESTART_COUNTS[$name]}/$MAX_RESTARTS)"
+            reset_timer
+        fi
+    done
 }
 
 #=============================================================================
@@ -222,6 +263,17 @@ format_duration() {
     fi
 }
 
+parse_duration_to_seconds() {
+    local val="${1,,}"  # lowercase
+    local num="${val%[hms]}"
+    case "$val" in
+        *h) echo $(( ${num%.*} * 3600 )) ;;
+        *m) echo $(( ${num%.*} * 60 )) ;;
+        *s) echo "${num%.*}" ;;
+        *)  echo "${num%.*}" ;;
+    esac
+}
+
 reset_mem_timers_for() {
     local target_name="$1"
     local idx
@@ -238,19 +290,23 @@ parse_memory_watch() {
     MEM_RULE_LIMIT=()
     MEM_RULE_ACTION=()
     MEM_RULE_DURATION=()
+    MEM_RULE_MAX_TRIGGERS=()
+    MEM_RULE_MAX_WINDOW=()
 
     [ ${#MEMORY_WATCH[@]} -eq 0 ] && return 0
 
     local idx=0
     for entry in "${MEMORY_WATCH[@]}"; do
-        IFS=':' read -r name limit action duration <<< "$entry"
+        IFS=':' read -r name limit action duration max_triggers max_window <<< "$entry"
         if [ -z "$name" ] || [ -z "$limit" ] || [ -z "$action" ]; then
             log "WARN: Invalid MEMORY_WATCH entry: $entry"
             continue
         fi
-        if [ "$action" != "notify" ] && [ "$action" != "restart" ]; then
-            log "WARN: Invalid action '$action' for $name (must be notify or restart), defaulting to notify"
-            action="notify"
+        # Normalize: accept "notify" (legacy) or "warn"
+        if [ "$action" = "notify" ]; then action="warn"; fi
+        if [ "$action" != "warn" ] && [ "$action" != "restart" ]; then
+            log "WARN: Invalid action '$action' for $name (must be warn or restart), defaulting to warn"
+            action="warn"
         fi
         local limit_bytes
         limit_bytes=$(parse_mem_limit "$limit")
@@ -258,7 +314,14 @@ parse_memory_watch() {
         MEM_RULE_LIMIT[$idx]=$limit_bytes
         MEM_RULE_ACTION[$idx]="$action"
         MEM_RULE_DURATION[$idx]=${duration:-$MEMORY_DEFAULT_DURATION}
-        log "MEMORY: Rule $idx — $name, limit $(format_mem "$limit_bytes"), action $action, duration ${MEM_RULE_DURATION[$idx]}s"
+        MEM_RULE_MAX_TRIGGERS[$idx]=${max_triggers:-0}
+        MEM_RULE_MAX_WINDOW[$idx]=${max_window:-24h}
+
+        local rule_info="$name, limit $(format_mem "$limit_bytes"), action $action, duration ${MEM_RULE_DURATION[$idx]}s"
+        if [ "${MEM_RULE_MAX_TRIGGERS[$idx]}" -gt 0 ] 2>/dev/null; then
+            rule_info+=", stop after ${MEM_RULE_MAX_TRIGGERS[$idx]} triggers in ${MEM_RULE_MAX_WINDOW[$idx]}"
+        fi
+        log "MEMORY: Rule $idx — $rule_info"
         idx=$((idx + 1))
     done
 }
@@ -409,27 +472,90 @@ memory_check() {
     done
 }
 
+_write_mem_trigger_counts() {
+    # Write current trigger counts to JSON for UI consumption
+    local json="{"
+    local first=true
+    for idx in "${!MEM_RULE_NAME[@]}"; do
+        local max_t=${MEM_RULE_MAX_TRIGGERS[$idx]:-0}
+        [ "$max_t" -le 0 ] 2>/dev/null && continue
+        local trigger_key="rule_${idx}"
+        local now
+        now=$(date +%s)
+        local window_secs
+        window_secs=$(parse_duration_to_seconds "${MEM_RULE_MAX_WINDOW[$idx]:-24h}")
+        local cutoff=$((now - window_secs))
+        local count=0
+        IFS=',' read -ra times <<< "${MEM_TRIGGER_TIMES[$trigger_key]}"
+        for t in "${times[@]}"; do
+            [ -z "$t" ] && continue
+            [ "$t" -ge "$cutoff" ] && count=$((count + 1))
+        done
+        $first || json+=","
+        first=false
+        json+="\"${MEM_RULE_NAME[$idx]}:${idx}\":{\"count\":$count,\"max\":$max_t,\"name\":\"${MEM_RULE_NAME[$idx]}\"}"
+    done
+    json+="}"
+    echo "$json" > /config/mem_trigger_counts.json 2>/dev/null || true
+}
+
 memory_action_rule() {
     local idx="$1" usage="$2" limit="$3" elapsed="$4"
     local name="${MEM_RULE_NAME[$idx]}"
     local action="${MEM_RULE_ACTION[$idx]}"
+    local max_triggers=${MEM_RULE_MAX_TRIGGERS[$idx]:-0}
+    local max_window="${MEM_RULE_MAX_WINDOW[$idx]:-24h}"
     local usage_fmt limit_fmt
     usage_fmt=$(format_mem "$usage")
     limit_fmt=$(format_mem "$limit")
 
     if [ "$action" = "restart" ]; then
-        if check_restart_cooldown "$name"; then
-            log "MEMORY: Rule $idx — restarting $name — $usage_fmt / $limit_fmt (exceeded for $(format_duration "$elapsed"))"
-            MEMORY_RESTARTING[$name]=1
-            do_restart "$name"
-            send_memory_discord "$name" "$usage_fmt" "$limit_fmt" "$elapsed" "restart" "Container restarted (exceeded $limit_fmt for $(format_duration "$elapsed"))"
-        else
-            log "MEMORY: Rule $idx — restart blocked for $name — cooldown/max attempts"
-            send_memory_discord "$name" "$usage_fmt" "$limit_fmt" "$elapsed" "blocked" "Restart blocked (max attempts reached)"
+        # Check escalation: stop instead of restart if max triggers reached
+        if [ "$max_triggers" -gt 0 ] 2>/dev/null; then
+            local now
+            now=$(date +%s)
+            local window_secs
+            window_secs=$(parse_duration_to_seconds "$max_window")
+            local cutoff=$((now - window_secs))
+            local trigger_key="rule_${idx}"
+
+            # Count recent triggers within window
+            local count=0
+            local kept=()
+            IFS=',' read -ra times <<< "${MEM_TRIGGER_TIMES[$trigger_key]}"
+            for t in "${times[@]}"; do
+                [ -z "$t" ] && continue
+                if [ "$t" -ge "$cutoff" ]; then
+                    count=$((count + 1))
+                    kept+=("$t")
+                fi
+            done
+
+            if [ "$count" -ge "$max_triggers" ]; then
+                log "MEMORY: Rule $idx — stopping $name — $max_triggers restarts within $max_window without sustained recovery"
+                docker stop "$name" > /dev/null 2>&1 &
+                send_memory_discord "$name" "$usage_fmt" "$limit_fmt" "$elapsed" "blocked" "Container stopped after $max_triggers memory restarts within $max_window"
+                emit_ui_event "$name" "memory" "stopped" "Stopped after $max_triggers memory restarts within $max_window ($usage_fmt / $limit_fmt)"
+                MEM_TRIGGER_TIMES[$trigger_key]=""
+                MEM_LAST_ACTION["rule_${idx}"]=$(date +%s)
+                _write_mem_trigger_counts
+                return
+            fi
+
+            # Record this trigger
+            kept+=("$now")
+            MEM_TRIGGER_TIMES[$trigger_key]=$(IFS=','; echo "${kept[*]}")
+            # Write trigger counts to file for UI
+            _write_mem_trigger_counts
         fi
+
+        log "MEMORY: Rule $idx — restarting $name — $usage_fmt / $limit_fmt (exceeded for $(format_duration "$elapsed"))"
+        log "Restarting $name (memory rule)"
+        docker restart "$name" > /dev/null 2>&1 &
+        send_memory_discord "$name" "$usage_fmt" "$limit_fmt" "$elapsed" "restart" "Container restarted (exceeded $limit_fmt for $(format_duration "$elapsed"))"
     else
-        log "MEMORY: Rule $idx — alert for $name — $usage_fmt / $limit_fmt (exceeded for $(format_duration "$elapsed"))"
-        send_memory_discord "$name" "$usage_fmt" "$limit_fmt" "$elapsed" "notify" "Notification sent (exceeded $limit_fmt for $(format_duration "$elapsed"))"
+        log "MEMORY: Rule $idx — warn for $name — $usage_fmt / $limit_fmt (exceeded for $(format_duration "$elapsed"))"
+        send_memory_discord "$name" "$usage_fmt" "$limit_fmt" "$elapsed" "warn" "Warning: exceeded $limit_fmt for $(format_duration "$elapsed")"
     fi
 
     MEM_LAST_ACTION["rule_${idx}"]=$(date +%s)
@@ -455,7 +581,7 @@ send_memory_discord() {
 
     local color_hex title
     case "$severity" in
-        notify)    color_hex="$COLOR_MEMORY_WARN"; title="Memory Warning" ;;
+        warn)      color_hex="$COLOR_MEMORY_WARN"; title="Memory Warning" ;;
         restart)   color_hex="$COLOR_MEMORY_CRIT"; title="Memory Restart" ;;
         blocked)   color_hex="$COLOR_MEMORY_CRIT"; title="Memory Alert — restart blocked" ;;
         recovered) color_hex="$COLOR_RECOVERED";    title="Memory Recovered" ;;
@@ -683,6 +809,7 @@ while $RUNNING; do
             LAST_SUMMARY=$now_s
         fi
         memory_check
+        unhealthy_recheck
         continue
     }; do
         # Periodic summary check (in case events keep flowing)
@@ -692,6 +819,7 @@ while $RUNNING; do
             LAST_SUMMARY=$now_s
         fi
         memory_check
+        unhealthy_recheck
 
         # Parse event
         action=$(echo "$event" | jq -r '.Action // empty')
@@ -768,14 +896,8 @@ while $RUNNING; do
                 done
                 EVENT_BUFFER=("${cleaned[@]}")
                 reset_mem_timers_for "$name"
-                # Suppress state notification if this was a memory-triggered restart
-                if [ "${MEMORY_RESTARTING[$name]}" = "1" ]; then
-                    unset 'MEMORY_RESTARTING[$name]'
-                    log "EVENT: $name restarted (memory-triggered, state notification suppressed)"
-                else
-                    EVENT_BUFFER+=("state|Restarted|$COLOR_RESTARTING|$name restarted")
-                    log "EVENT: $name restarted ($image)"
-                fi
+                EVENT_BUFFER+=("state|Restarted|$COLOR_RESTARTING|$name restarted")
+                log "EVENT: $name restarted ($image)"
                 reset_timer
                 ;;
             pause)
@@ -790,6 +912,16 @@ while $RUNNING; do
                 ;;
             "health_status: unhealthy")
                 UNHEALTHY_CONTAINERS[$name]=1
+                # If container was healthy long enough, reset restart counter
+                if [ -n "${HEALTHY_SINCE[$name]}" ]; then
+                    local healthy_elapsed=$(( $(date +%s) - ${HEALTHY_SINCE[$name]} ))
+                    if [ "$healthy_elapsed" -ge "$RESTART_COOLDOWN" ]; then
+                        RESTART_COUNTS[$name]=0
+                        unset 'RESTART_TIMES[$name]'
+                        log "EVENT: $name was healthy for ${healthy_elapsed}s — restart counter reset"
+                    fi
+                    unset 'HEALTHY_SINCE[$name]'
+                fi
                 restart_info=""
                 if can_restart "$name"; then
                     do_restart "$name"
@@ -803,6 +935,8 @@ while $RUNNING; do
                 if [ "${UNHEALTHY_CONTAINERS[$name]}" = "1" ]; then
                     # Was unhealthy — this is a real recovery
                     unset 'UNHEALTHY_CONTAINERS[$name]'
+                    # Mark recovery time — counter resets after sustained healthy period
+                    HEALTHY_SINCE[$name]=$(date +%s)
                     EVENT_BUFFER+=("health|Recovered|$COLOR_RECOVERED|$name unhealthy → healthy")
                     log "EVENT: $name recovered ($image)"
                 elif [ -n "${RECENTLY_STARTED[$name]}" ]; then

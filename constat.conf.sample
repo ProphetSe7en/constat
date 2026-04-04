@@ -45,10 +45,15 @@ SUMMARY_INTERVAL="21600"
 # Docker label that enables auto-restart
 RESTART_LABEL="constat.restart"
 
-# Minimum seconds between restarts for the same container
+# Minimum seconds between restarts for the same container.
+# If a container is still unhealthy after restart, Constat waits this
+# many seconds before restarting again.
 RESTART_COOLDOWN="300"
 
-# Maximum restart attempts within the cooldown period
+# Maximum restart attempts before stopping the container.
+# If a container is restarted this many times without staying healthy
+# for at least RESTART_COOLDOWN seconds, Constat stops it and sends
+# a Discord notification. Set to 0 to disable (restart indefinitely).
 MAX_RESTARTS="3"
 
 #=== MEMORY MONITORING =======================================================#
@@ -64,16 +69,19 @@ MEMORY_POLL_INTERVAL="30"
 # Seconds memory must stay above threshold before action (default: 5 min)
 MEMORY_DEFAULT_DURATION="300"
 
-# Per-container watch list: "name:limit:action[:duration]"
-#   name     — container name (must match docker ps)
-#   limit    — threshold (512m, 1g, 2g, 4g, 1500m)
-#   action   — "notify" (alert only) or "restart" (graceful restart + alert)
-#   duration — optional per-container override of MEMORY_DEFAULT_DURATION
+# Per-container watch list: "name:limit:action[:duration[:maxTriggers[:maxWindow]]]"
+#   name        — container name (must match docker ps)
+#   limit       — threshold (512m, 1g, 2g, 4g, 1500m)
+#   action      — "warn" (alert only) or "restart" (graceful restart + alert)
+#   duration    — optional seconds above threshold before action (default: MEMORY_DEFAULT_DURATION)
+#   maxTriggers — optional: stop container after this many restarts (0 = no limit)
+#   maxWindow   — optional: time window for maxTriggers (e.g. 24h, 12h, 1h — default: 24h)
 #
 # Examples:
 #   MEMORY_WATCH=(
 #       "plex:4g:restart"
-#       "radarr:2g:notify"
+#       "radarr:2g:warn"
+#       "qBit-tv:15g:restart:300:3:24h"  # restart, stop after 3x in 24h
 #       "qBit-movies:3g:restart:600"
 #   )
 MEMORY_WATCH=()

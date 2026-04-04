@@ -62,10 +62,12 @@ type ConfigData struct {
 
 // MemoryWatchEntry represents one entry in the MEMORY_WATCH array
 type MemoryWatchEntry struct {
-	Name     string `json:"name"`
-	Limit    string `json:"limit"`
-	Action   string `json:"action"`
-	Duration string `json:"duration,omitempty"`
+	Name        string `json:"name"`
+	Limit       string `json:"limit"`
+	Action      string `json:"action"`
+	Duration    string `json:"duration,omitempty"`
+	MaxTriggers string `json:"maxTriggers,omitempty"` // stop after this many restarts (0 or empty = no limit)
+	MaxWindow   string `json:"maxWindow,omitempty"`   // time window for maxTriggers (e.g. "24h", "12h", "1h")
 }
 
 // keyToField maps bash variable names to ConfigData JSON field names
@@ -425,8 +427,16 @@ func buildMemoryWatchBlock(entries []MemoryWatchEntry) []string {
 	lines := []string{"MEMORY_WATCH=("}
 	for _, e := range entries {
 		entry := fmt.Sprintf("%s:%s:%s", shellSanitizer.Replace(e.Name), shellSanitizer.Replace(e.Limit), shellSanitizer.Replace(e.Action))
-		if e.Duration != "" {
-			entry += ":" + e.Duration
+		// Always include duration if any later fields are set
+		dur := e.Duration
+		if dur != "" || e.MaxTriggers != "" || e.MaxWindow != "" {
+			entry += ":" + dur
+		}
+		if e.MaxTriggers != "" || e.MaxWindow != "" {
+			entry += ":" + e.MaxTriggers
+		}
+		if e.MaxWindow != "" {
+			entry += ":" + e.MaxWindow
 		}
 		lines = append(lines, fmt.Sprintf(`    "%s"`, entry))
 	}
@@ -447,7 +457,7 @@ func parseMemoryWatchEntries(inner string) []MemoryWatchEntry {
 	return entries
 }
 
-// parseMemoryWatchEntry parses a single "name:limit:action[:duration]" entry
+// parseMemoryWatchEntry parses a single "name:limit:action[:duration[:maxTriggers[:maxWindow]]]" entry
 func parseMemoryWatchEntry(raw string) *MemoryWatchEntry {
 	// Strip quotes and whitespace
 	s := strings.TrimSpace(raw)
@@ -456,7 +466,7 @@ func parseMemoryWatchEntry(raw string) *MemoryWatchEntry {
 		return nil
 	}
 
-	parts := strings.SplitN(s, ":", 4)
+	parts := strings.SplitN(s, ":", 6)
 	if len(parts) < 3 {
 		return nil
 	}
@@ -466,8 +476,14 @@ func parseMemoryWatchEntry(raw string) *MemoryWatchEntry {
 		Limit:  parts[1],
 		Action: parts[2],
 	}
-	if len(parts) == 4 {
+	if len(parts) >= 4 && parts[3] != "" {
 		entry.Duration = parts[3]
+	}
+	if len(parts) >= 5 && parts[4] != "" {
+		entry.MaxTriggers = parts[4]
+	}
+	if len(parts) >= 6 && parts[5] != "" {
+		entry.MaxWindow = parts[5]
 	}
 	return entry
 }

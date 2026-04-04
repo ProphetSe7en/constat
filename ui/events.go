@@ -242,6 +242,10 @@ func (app *App) processDockerEvent(msg events.Message) {
 			Type:   "state",
 			Action: "started",
 		}
+		// Clear escalation status when container starts
+		if app.stats != nil {
+			app.stats.SetContainerStatus(name, "")
+		}
 	case "stop":
 		event = &Event{
 			Type:   "state",
@@ -303,6 +307,10 @@ func (app *App) processDockerEvent(msg events.Message) {
 		event = &Event{
 			Type:   "health",
 			Action: "healthy",
+		}
+		// Clear stopped-health status on recovery
+		if app.stats != nil {
+			app.stats.SetContainerStatus(name, "")
 		}
 	}
 
