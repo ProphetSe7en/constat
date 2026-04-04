@@ -341,6 +341,13 @@ func (sc *StatsCollector) syncStreams(ctx context.Context) {
 
 // streamContainer opens a streaming stats connection for a single container
 func (sc *StatsCollector) streamContainer(ctx context.Context, fullID, name string) {
+	// Clean up streams map on exit so syncStreams can start a new stream after restart
+	defer func() {
+		sc.mu.Lock()
+		delete(sc.streams, name)
+		sc.mu.Unlock()
+	}()
+
 	// Fetch startedAt once via inspect
 	inspectCtx, inspectCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer inspectCancel()

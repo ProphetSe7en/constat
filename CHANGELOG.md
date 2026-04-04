@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.10
+
+### Bug fixes
+- **Stats freeze after container restart** — Fixed: per-container stats stream goroutine exited on restart (EOF) but never cleaned up, preventing syncStreams from starting a new stream. Stats (CPU/RAM/network) would freeze permanently for restarted containers.
+- **Group view column misalignment** — Fixed: group header row was missing the Mem Watch column cell, causing all columns after Health to shift left (Update showed in Mem Watch, CPU in Restart, etc.).
+
 ## v0.9.9
 
 ### Features
