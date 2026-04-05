@@ -35,7 +35,8 @@ type Container struct {
 	RestartPolicy   string      `json:"restartPolicy"`
 	HealthcheckCmd  string      `json:"healthcheckCmd"`
 	Icon            string      `json:"icon,omitempty"`
-	NetParent       string      `json:"netParent,omitempty"` // parent container name when using container:X network mode
+	NetParent       string      `json:"netParent,omitempty"`     // parent container name when using container:X network mode
+	NetParentDown   bool        `json:"netParentDown,omitempty"` // true when network parent container is not running
 	Status          string      `json:"status,omitempty"`    // transient status: stopped-health, stopped-mem
 	InternalPorts   []uint16    `json:"-"`                   // internal container ports, used for healthcheck suggestions
 }
@@ -196,6 +197,19 @@ func (app *App) ListContainers(ctx context.Context) ([]Container, error) {
 	for _, c := range containers {
 		if c.Name != "" {
 			result = append(result, c)
+		}
+	}
+
+	// Mark containers whose network parent is not running
+	nameToState := make(map[string]string, len(result))
+	for _, c := range result {
+		nameToState[c.Name] = c.State
+	}
+	for i := range result {
+		if result[i].NetParent != "" {
+			if parentState, ok := nameToState[result[i].NetParent]; !ok || parentState != "running" {
+				result[i].NetParentDown = true
+			}
 		}
 	}
 

@@ -15,6 +15,16 @@ type ConfigData struct {
 	WebhookState       string `json:"webhookState"`
 	WebhookHealth      string `json:"webhookHealth"`
 	WebhookMaintenance string `json:"webhookMaintenance"`
+	// Gotify
+	GotifyEnabled          string `json:"gotifyEnabled"`
+	GotifyURL              string `json:"gotifyUrl"`
+	GotifyToken            string `json:"gotifyToken"`
+	GotifyPriorityCritical string `json:"gotifyPriorityCritical"`
+	GotifyPriorityWarning  string `json:"gotifyPriorityWarning"`
+	GotifyPriorityInfo     string `json:"gotifyPriorityInfo"`
+	GotifyCriticalValue    string `json:"gotifyCriticalValue"`
+	GotifyWarningValue     string `json:"gotifyWarningValue"`
+	GotifyInfoValue        string `json:"gotifyInfoValue"`
 	// Identity
 	BotName     string `json:"botName"`
 	ServerLabel string `json:"serverLabel"`
@@ -76,6 +86,15 @@ var keyToField = map[string]string{
 	"DISCORD_WEBHOOK_STATE":       "webhookState",
 	"DISCORD_WEBHOOK_HEALTH":      "webhookHealth",
 	"DISCORD_WEBHOOK_MAINTENANCE": "webhookMaintenance",
+	"GOTIFY_ENABLED":           "gotifyEnabled",
+	"GOTIFY_URL":               "gotifyUrl",
+	"GOTIFY_TOKEN":             "gotifyToken",
+	"GOTIFY_PRIORITY_CRITICAL": "gotifyPriorityCritical",
+	"GOTIFY_PRIORITY_WARNING":  "gotifyPriorityWarning",
+	"GOTIFY_PRIORITY_INFO":     "gotifyPriorityInfo",
+	"GOTIFY_CRITICAL_VALUE":    "gotifyCriticalValue",
+	"GOTIFY_WARNING_VALUE":     "gotifyWarningValue",
+	"GOTIFY_INFO_VALUE":        "gotifyInfoValue",
 	"BOT_NAME":                    "botName",
 	"SERVER_LABEL":            "serverLabel",
 	"BATCH_WINDOW":            "batchWindow",
@@ -126,10 +145,10 @@ var kvPattern = regexp.MustCompile(`^([A-Z_]+)="(.*)"$`)
 
 // shellSanitizer escapes characters that are dangerous inside double-quoted bash strings
 var shellSanitizer = strings.NewReplacer(
+	`\`, `\\`,
 	`"`, `\"`,
 	`$`, `\$`,
 	"`", "\\`",
-	`\`, `\\`,
 )
 
 // ReadConfig parses a constat.conf file into ConfigData
@@ -192,6 +211,36 @@ func ReadConfig(path string) (*ConfigData, error) {
 	data.WebhookState = values["DISCORD_WEBHOOK_STATE"]
 	data.WebhookHealth = values["DISCORD_WEBHOOK_HEALTH"]
 	data.WebhookMaintenance = values["DISCORD_WEBHOOK_MAINTENANCE"]
+	data.GotifyEnabled = values["GOTIFY_ENABLED"]
+	if data.GotifyEnabled == "" {
+		data.GotifyEnabled = "false"
+	}
+	data.GotifyURL = values["GOTIFY_URL"]
+	data.GotifyToken = values["GOTIFY_TOKEN"]
+	data.GotifyPriorityCritical = values["GOTIFY_PRIORITY_CRITICAL"]
+	if data.GotifyPriorityCritical == "" {
+		data.GotifyPriorityCritical = "true"
+	}
+	data.GotifyPriorityWarning = values["GOTIFY_PRIORITY_WARNING"]
+	if data.GotifyPriorityWarning == "" {
+		data.GotifyPriorityWarning = "true"
+	}
+	data.GotifyPriorityInfo = values["GOTIFY_PRIORITY_INFO"]
+	if data.GotifyPriorityInfo == "" {
+		data.GotifyPriorityInfo = "false"
+	}
+	data.GotifyCriticalValue = values["GOTIFY_CRITICAL_VALUE"]
+	if data.GotifyCriticalValue == "" {
+		data.GotifyCriticalValue = "8"
+	}
+	data.GotifyWarningValue = values["GOTIFY_WARNING_VALUE"]
+	if data.GotifyWarningValue == "" {
+		data.GotifyWarningValue = "5"
+	}
+	data.GotifyInfoValue = values["GOTIFY_INFO_VALUE"]
+	if data.GotifyInfoValue == "" {
+		data.GotifyInfoValue = "3"
+	}
 	data.BotName = values["BOT_NAME"]
 	data.ServerLabel = values["SERVER_LABEL"]
 	data.BatchWindow = values["BATCH_WINDOW"]
@@ -294,6 +343,15 @@ func WriteConfig(path string, data *ConfigData) error {
 		"DISCORD_WEBHOOK_STATE":       data.WebhookState,
 		"DISCORD_WEBHOOK_HEALTH":      data.WebhookHealth,
 		"DISCORD_WEBHOOK_MAINTENANCE": data.WebhookMaintenance,
+		"GOTIFY_ENABLED":           data.GotifyEnabled,
+		"GOTIFY_URL":               data.GotifyURL,
+		"GOTIFY_TOKEN":             data.GotifyToken,
+		"GOTIFY_PRIORITY_CRITICAL": data.GotifyPriorityCritical,
+		"GOTIFY_PRIORITY_WARNING":  data.GotifyPriorityWarning,
+		"GOTIFY_PRIORITY_INFO":     data.GotifyPriorityInfo,
+		"GOTIFY_CRITICAL_VALUE":    data.GotifyCriticalValue,
+		"GOTIFY_WARNING_VALUE":     data.GotifyWarningValue,
+		"GOTIFY_INFO_VALUE":        data.GotifyInfoValue,
 		"BOT_NAME":                    data.BotName,
 		"SERVER_LABEL":                data.ServerLabel,
 		"BATCH_WINDOW":            data.BatchWindow,
@@ -317,6 +375,9 @@ func WriteConfig(path string, data *ConfigData) error {
 		"IMAGE_CLEANUP_TIME":      data.ImageCleanupTime,
 		"IMAGE_CLEANUP_MODE":      data.ImageCleanupMode,
 		"IMAGE_CLEANUP_DRY_RUN":   data.ImageCleanupDryRun,
+		"CLEANUP_ORPHAN_IMAGES":   data.CleanupOrphanImages,
+		"CLEANUP_UNUSED_IMAGES":   data.CleanupUnusedImages,
+		"CLEANUP_VOLUMES":         data.CleanupVolumes,
 		"TIMEZONE":                data.Timezone,
 		"TIME_FORMAT":             data.TimeFormat,
 		"DATE_FORMAT":             data.DateFormat,

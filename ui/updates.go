@@ -275,12 +275,13 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 		uc.mu.RLock()
 		for _, name := range newUpdateNames {
 			if r, ok := uc.results[name]; ok {
-				lines = append(lines, fmt.Sprintf("• **%s** — `%s`", name, r.Image))
+				lines = append(lines, fmt.Sprintf("• **%s** — `%s`  ", name, r.Image))
 			}
 		}
 		uc.mu.RUnlock()
 		description := fmt.Sprintf("%d new update(s) available:\n%s", len(newUpdateNames), strings.Join(lines, "\n"))
 		go sendDiscordMaintenance("Image Updates Available", description, 0xd29922)
+		go sendGotifyMaintenance("Image Updates Available", fmt.Sprintf("%d new update(s) available:\n\n%s", len(newUpdateNames), strings.Join(lines, "\n")))
 	}
 }
 

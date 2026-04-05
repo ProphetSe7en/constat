@@ -105,7 +105,7 @@
 
   /* Health suggestion tooltip */
   .hc-tip-wrap { position: relative; display: inline-flex; }
-  .hc-tip { display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #1c2128; border: 1px solid #30363d; border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #c9d1d9; white-space: normal; max-width: 400px; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.4); line-height: 1.5; font-weight: 400; word-break: break-all; cursor: text; user-select: text; }
+  .hc-tip { display: none; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 4px; background: #1c2128; border: 1px solid #30363d; border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #c9d1d9; white-space: nowrap; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.4); line-height: 1.5; font-weight: 400; cursor: text; user-select: text; }
   .hc-tip-wrap:hover .hc-tip { display: block; }
 
   /* Update badge */
@@ -183,6 +183,7 @@
   .net-bridge { background: #1c1c1c; color: #636e7b; border: 1px solid #30363d; }
   .net-host { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
   .net-container { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
+  .net-container-down { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
   .net-custom-green { background: #0d2818; color: #3fb950; border: 1px solid rgba(63,185,80,0.2); }
   .net-custom-blue { background: #0d1f3c; color: #58a6ff; border: 1px solid rgba(88,166,255,0.2); }
   .net-custom-purple { background: #1c1226; color: #bc8cff; border: 1px solid rgba(188,140,255,0.2); }
@@ -293,6 +294,8 @@
   .event-badge-restart { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
   .event-badge-blocked { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
   .event-badge-recovered { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
+  .event-badge-net-down { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
+  .event-badge-net-up { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
   .event-detail { font-size: 11px; color: #8b949e; }
   .event-detail-inline { font-size: 11px; color: #6e7681; margin-left: 2px; }
   .event-exit { color: #f85149; }
@@ -847,6 +850,7 @@
               <span class="dot" :class="dotClass(c)"></span>
             </template>
             <span class="mobile-card-name" x-text="c.name"></span>
+            <span x-show="c.netParentDown && c.state === 'running'" style="color:#f85149">&#9888;</span>
             <span class="mobile-card-state" :class="'csi-' + c.state" x-text="c.state"></span>
           </div>
           <div class="mobile-card-metrics">
@@ -863,6 +867,11 @@
           </div>
           <!-- Expanded detail -->
           <div class="mobile-card-detail" x-show="expandedId === c.id" x-transition @click.stop>
+
+            <!-- Network parent down warning -->
+            <div x-show="c.netParentDown && c.state === 'running'" style="font-size:12px;color:#f85149;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+              <span>&#9888;</span> <span>Network parent <strong x-text="c.netParent"></strong> is down</span>
+            </div>
 
             <!-- Memory Watch rules (compact) -->
             <template x-if="c.state === 'running' && config">
@@ -1297,7 +1306,7 @@
                       <div style="display:flex;align-items:center;gap:8px">
                         <img x-show="row.container.icon" :src="row.container.icon" style="width:18px;height:18px;border-radius:3px" loading="lazy">
                         <div>
-                          <div class="container-name" x-text="row.container.name"></div>
+                          <div class="container-name"><span x-text="row.container.name"></span> <span x-show="row.container.netParentDown && row.container.state === 'running'" style="color:#f85149;cursor:help" :title="'Network parent ' + row.container.netParent + ' is down'">&#9888;</span></div>
                           <div class="container-meta">
                             <span x-show="row.container.state === 'running'" class="label-running">&#9654; running</span>
                             <span x-show="row.container.state !== 'running'" class="label-stopped">&#9632; <span x-text="row.container.state"></span></span>
@@ -1350,7 +1359,7 @@
                     </td></template>
                     <td>
                       <div style="font-size:11px;line-height:1.6">
-                        <template x-for="n in (row.container.networks || [])" :key="n"><span :class="netBadgeClass(n)" x-text="n"></span></template>
+                        <template x-for="n in (row.container.networks || [])" :key="n"><span :class="netBadgeClass(n, row.container)" x-text="n"></span></template>
                         <span x-show="!row.container.networks || row.container.networks.length === 0" style="color:#484f58">&mdash;</span>
                       </div>
                     </td>
@@ -1419,6 +1428,7 @@
                       <span class="dot" :class="dotClass(c)"></span>
                     </template>
                     <span x-text="c.name"></span>
+                    <span x-show="c.netParentDown && c.state === 'running'" style="color:#f85149;cursor:help" :title="'Network parent ' + c.netParent + ' is down'">&#9888;</span>
                   </div>
                   <div class="container-sub">
                     <span class="container-state-indicator" :class="'csi-' + c.state" x-text="(c.state === 'running' ? '\u25B6' : c.state === 'paused' ? '\u23F8' : '\u25A0') + ' ' + c.state"></span>
@@ -1478,7 +1488,7 @@
                 <td>
                   <div style="font-size:11px;line-height:1.6">
                     <template x-for="n in (c.networks || [])" :key="n">
-                      <span :class="netBadgeClass(n)" x-text="n"></span>
+                      <span :class="netBadgeClass(n, c)" x-text="n"></span>
                     </template>
                     <span x-show="!c.networks || c.networks.length === 0" style="color:#484f58">&mdash;</span>
                   </div>
@@ -2080,6 +2090,7 @@
         <option value="state">State</option>
         <option value="health">Health</option>
         <option value="memory">Memory</option>
+        <option value="network">Network</option>
       </select>
       <input type="text" class="search" style="max-width:200px" placeholder="Filter by container..." x-model="eventsFilter.container" @input.debounce.300ms="fetchEvents(true)">
       <div style="flex:1"></div>
@@ -2693,6 +2704,70 @@
             </div>
           </div>
 
+          <!-- Gotify -->
+          <div class="config-section">
+            <div class="config-section-header" @click="configSections.gotify = !configSections.gotify">
+              Gotify
+              <span class="arrow" x-text="configSections.gotify ? '&#9660;' : '&#9654;'"></span>
+            </div>
+            <div class="config-section-body" x-show="configSections.gotify" x-transition>
+              <div class="config-field">
+                <span class="config-label">Enable Gotify</span>
+                <div class="config-toggle" :class="{ on: config.gotifyEnabled === 'true' }" @click="config.gotifyEnabled = config.gotifyEnabled === 'true' ? 'false' : 'true'; configDirty = true"></div>
+              </div>
+
+              <div class="config-field">
+                <span class="config-label">Gotify URL</span>
+                <input type="text" class="config-input wide" x-model="config.gotifyUrl" @input="configDirty = true" placeholder="https://gotify.example.com">
+              </div>
+              <div class="config-hint">Base URL of your Gotify server</div>
+
+              <div class="config-field">
+                <span class="config-label">App token</span>
+                <div class="webhook-field-row">
+                  <input :type="gotifyTokenVisible ? 'text' : 'password'" class="config-input wide" x-model="config.gotifyToken" @input="configDirty = true" placeholder="App token from Gotify">
+                  <button class="test-btn" style="min-width:36px;font-size:13px" @click="gotifyTokenVisible = !gotifyTokenVisible" x-text="gotifyTokenVisible ? '🔒' : '👁'"></button>
+                  <button class="test-btn" @click="testGotify()" :disabled="!config.gotifyUrl || !config.gotifyToken || gotifyTesting">
+                    <span x-show="!gotifyTesting">Test</span>
+                    <span x-show="gotifyTesting">...</span>
+                  </button>
+                  <span class="test-result" x-show="gotifyTestResult" :style="gotifyTestResult === 'Sent!' ? 'color:#3fb950' : 'color:#f85149'" x-text="gotifyTestResult"></span>
+                </div>
+              </div>
+
+              <div style="border-top:1px solid #21262d;margin-top:12px;padding-top:12px">
+                <div class="config-hint" style="margin-left:0;margin-bottom:8px">Notification levels — choose which severity levels to send to Gotify</div>
+                <div class="config-field">
+                  <span class="config-label">Critical</span>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <div class="config-toggle" :class="{ on: config.gotifyPriorityCritical === 'true' }" @click="config.gotifyPriorityCritical = config.gotifyPriorityCritical === 'true' ? 'false' : 'true'; configDirty = true"></div>
+                    <span style="font-size:11px;color:#8b949e">Priority:</span>
+                    <input type="number" class="config-input" style="max-width:50px;text-align:center" min="0" max="10" x-model="config.gotifyCriticalValue" @input="configDirty = true">
+                  </div>
+                </div>
+                <div class="config-hint">Died, network down, health escalation, memory stopped</div>
+                <div class="config-field">
+                  <span class="config-label">Warning</span>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <div class="config-toggle" :class="{ on: config.gotifyPriorityWarning === 'true' }" @click="config.gotifyPriorityWarning = config.gotifyPriorityWarning === 'true' ? 'false' : 'true'; configDirty = true"></div>
+                    <span style="font-size:11px;color:#8b949e">Priority:</span>
+                    <input type="number" class="config-input" style="max-width:50px;text-align:center" min="0" max="10" x-model="config.gotifyWarningValue" @input="configDirty = true">
+                  </div>
+                </div>
+                <div class="config-hint">Unhealthy, memory warning</div>
+                <div class="config-field">
+                  <span class="config-label">Info</span>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <div class="config-toggle" :class="{ on: config.gotifyPriorityInfo === 'true' }" @click="config.gotifyPriorityInfo = config.gotifyPriorityInfo === 'true' ? 'false' : 'true'; configDirty = true"></div>
+                    <span style="font-size:11px;color:#8b949e">Priority:</span>
+                    <input type="number" class="config-input" style="max-width:50px;text-align:center" min="0" max="10" x-model="config.gotifyInfoValue" @input="configDirty = true">
+                  </div>
+                </div>
+                <div class="config-hint">Started, stopped, recovered, cleanup, paused, restarted</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Behavior -->
           <div class="config-section">
             <div class="config-section-header" @click="configSections.behavior = !configSections.behavior">
@@ -3250,7 +3325,7 @@ function app() {
     configDirty: false,
     configError: '',
     configSuccess: '',
-    configSections: { discord: false, behavior: false, display: false, restart: false },
+    configSections: { discord: false, gotify: false, behavior: false, display: false, restart: false },
     categories: [],
     showCategoryModal: false,
     categoryEditIdx: -2,
@@ -3299,6 +3374,9 @@ function app() {
     // Webhook testing
     webhookTesting: null,
     webhookTestResult: {},
+    gotifyTesting: false,
+    gotifyTestResult: '',
+    gotifyTokenVisible: false,
 
     // Memory watch inline add/edit
     mwatchAdding: false,
@@ -3890,10 +3968,10 @@ function app() {
       return Math.round(bps) + ' B/s';
     },
 
-    netBadgeClass(name) {
+    netBadgeClass(name, container) {
       if (name === 'bridge' || name === 'none') return 'net-badge net-bridge';
       if (name === 'host') return 'net-badge net-host';
-      if (name.startsWith('→ ')) return 'net-badge net-container';
+      if (name.startsWith('→ ')) return 'net-badge ' + (container && container.netParentDown ? 'net-container-down' : 'net-container');
       const customColors = ['net-custom-pink', 'net-custom-green', 'net-custom-purple', 'net-custom-cyan', 'net-custom-orange', 'net-custom-blue'];
       let hash = 0;
       for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
@@ -5609,6 +5687,30 @@ function app() {
         setTimeout(() => {
           this.webhookTestResult = { ...this.webhookTestResult, [field]: '' };
         }, 5000);
+      }
+    },
+
+    async testGotify() {
+      if (!this.config.gotifyUrl || !this.config.gotifyToken) return;
+      this.gotifyTesting = true;
+      this.gotifyTestResult = '';
+      try {
+        const resp = await fetch('/api/config/test-gotify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: this.config.gotifyUrl, token: this.config.gotifyToken }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json();
+          this.gotifyTestResult = err.error || 'Failed';
+        } else {
+          this.gotifyTestResult = 'Sent!';
+        }
+      } catch (e) {
+        this.gotifyTestResult = e.message;
+      } finally {
+        this.gotifyTesting = false;
+        setTimeout(() => { this.gotifyTestResult = ''; }, 5000);
       }
     },
 

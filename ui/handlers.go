@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -528,6 +529,103 @@ func sendDiscordMaintenance(title, description string, color int) {
 	resp.Body.Close()
 }
 
+// sendGotifyMessage sends a push notification via Gotify
+func sendGotifyMessage(title, message string, priority int) {
+	cfg, err := ReadConfig(configPath)
+	if err != nil || cfg.GotifyEnabled != "true" {
+		return
+	}
+	if cfg.GotifyURL == "" || cfg.GotifyToken == "" {
+		return
+	}
+	// Check priority toggle and map to user-configured value
+	var gotifyPriority int
+	switch {
+	case priority >= 8:
+		if cfg.GotifyPriorityCritical != "true" {
+			return
+		}
+		gotifyPriority, _ = strconv.Atoi(cfg.GotifyCriticalValue)
+	case priority >= 5:
+		if cfg.GotifyPriorityWarning != "true" {
+			return
+		}
+		gotifyPriority, _ = strconv.Atoi(cfg.GotifyWarningValue)
+	default:
+		if cfg.GotifyPriorityInfo != "true" {
+			return
+		}
+		gotifyPriority, _ = strconv.Atoi(cfg.GotifyInfoValue)
+	}
+	payload := map[string]any{
+		"title":    title,
+		"message":  message,
+		"priority": gotifyPriority,
+		"extras": map[string]any{
+			"client::display": map[string]string{
+				"contentType": "text/markdown",
+			},
+		},
+	}
+	body, _ := json.Marshal(payload)
+	client := &http.Client{Timeout: 10 * time.Second}
+	url := strings.TrimRight(cfg.GotifyURL, "/") + "/message?token=" + url.QueryEscape(cfg.GotifyToken)
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("Gotify: send failed: %v", err)
+		return
+	}
+	resp.Body.Close()
+}
+
+// sendGotifyMaintenance sends a Gotify notification for maintenance events (info priority)
+func sendGotifyMaintenance(title, description string) {
+	cfg, err := ReadConfig(configPath)
+	if err != nil {
+		return
+	}
+	botName := cfg.BotName
+	if botName == "" {
+		botName = "Constat"
+	}
+	sendGotifyMessage(fmt.Sprintf("%s: %s", botName, title), description, 3)
+}
+
+func (app *App) handleTestGotify(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		URL   string `json:"url"`
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" || req.Token == "" {
+		writeError(w, 400, "url and token required")
+		return
+	}
+	payload := map[string]any{
+		"title":   "Constat Test",
+		"message": "If you see this, Gotify is configured correctly!",
+		"priority": 5,
+		"extras": map[string]any{
+			"client::display": map[string]string{
+				"contentType": "text/markdown",
+			},
+		},
+	}
+	body, _ := json.Marshal(payload)
+	client := &http.Client{Timeout: 10 * time.Second}
+	gotifyURL := strings.TrimRight(req.URL, "/") + "/message?token=" + url.QueryEscape(req.Token)
+	resp, err := client.Post(gotifyURL, "application/json", bytes.NewReader(body))
+	if err != nil {
+		writeError(w, 502, fmt.Sprintf("Failed to reach Gotify: %v", err))
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		writeError(w, resp.StatusCode, fmt.Sprintf("Gotify returned %d", resp.StatusCode))
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
 func (app *App) handleGetUpdates(w http.ResponseWriter, r *http.Request) {
 	if app.updateChecker == nil {
 		writeJSON(w, map[string]any{"results": map[string]any{}, "checking": false})
@@ -625,6 +723,23 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if config.ShowCharts != "" && config.ShowCharts != "true" && config.ShowCharts != "false" {
 		writeError(w, 400, "showCharts must be 'true' or 'false'")
+		return
+	}
+
+	// Validate Gotify fields
+	for _, field := range []struct{ name, val string }{
+		{"gotifyEnabled", config.GotifyEnabled},
+		{"gotifyPriorityCritical", config.GotifyPriorityCritical},
+		{"gotifyPriorityWarning", config.GotifyPriorityWarning},
+		{"gotifyPriorityInfo", config.GotifyPriorityInfo},
+	} {
+		if field.val != "" && field.val != "true" && field.val != "false" {
+			writeError(w, 400, fmt.Sprintf("%s must be 'true' or 'false'", field.name))
+			return
+		}
+	}
+	if config.GotifyURL != "" && !strings.HasPrefix(config.GotifyURL, "http://") && !strings.HasPrefix(config.GotifyURL, "https://") {
+		writeError(w, 400, "gotifyUrl must start with http:// or https://")
 		return
 	}
 

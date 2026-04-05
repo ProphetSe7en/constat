@@ -163,6 +163,7 @@ func (app *App) handlePruneVolumes(w http.ResponseWriter, r *http.Request) {
 
 	if count > 0 {
 		go sendDiscordMaintenance("Volume Cleanup", fmt.Sprintf("Removed %d volumes, reclaimed %s", count, formatBytesGo(reclaimed)), 0x3fb950)
+		go sendGotifyMaintenance("Volume Cleanup", fmt.Sprintf("Removed %d volumes, reclaimed %s", count, formatBytesGo(reclaimed)))
 	}
 
 	writeJSON(w, map[string]interface{}{

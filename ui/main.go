@@ -107,6 +107,7 @@ func main() {
 	mux.HandleFunc("GET /api/config", app.handleGetConfig)
 	mux.HandleFunc("PUT /api/config", app.handleUpdateConfig)
 	mux.HandleFunc("POST /api/config/test-webhook", app.handleTestWebhook)
+	mux.HandleFunc("POST /api/config/test-gotify", app.handleTestGotify)
 	mux.HandleFunc("GET /api/containers/{id}/history", app.handleContainerHistory)
 	mux.HandleFunc("GET /api/containers/{id}/config", app.handleContainerConfig)
 	mux.HandleFunc("GET /api/containers/{id}/logs/stream", app.handleLogsSSE)
@@ -191,7 +192,7 @@ func main() {
 	}
 }
 
-const constatVersion = "0.9.8"
+const constatVersion = "0.9.11"
 const restartDisabledPath = "/config/restart_disabled.json"
 
 // App holds shared application state

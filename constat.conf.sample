@@ -19,6 +19,29 @@ DISCORD_WEBHOOK_HEALTH=""
 # Maintenance (image cleanup, volume cleanup — falls back to Health if empty)
 DISCORD_WEBHOOK_MAINTENANCE=""
 
+#=== GOTIFY NOTIFICATIONS ====================================================#
+# Send push notifications via Gotify alongside or instead of Discord.
+# Create an app in Gotify and use the app token here.
+# Toggle which severity levels to receive.
+
+GOTIFY_ENABLED="false"
+GOTIFY_URL=""
+GOTIFY_TOKEN=""
+
+# Which notification levels to send (true/false)
+# Critical: container died, network down, health escalation, memory stopped
+# Warning:  unhealthy, memory warning
+# Info:     started, stopped, recovered, cleanup, paused, restarted
+GOTIFY_PRIORITY_CRITICAL="true"
+GOTIFY_PRIORITY_WARNING="true"
+GOTIFY_PRIORITY_INFO="false"
+
+# Gotify priority values (0-10). Higher = more urgent.
+# 0-3: no push notification, 4+: triggers push notification on mobile
+GOTIFY_CRITICAL_VALUE="8"
+GOTIFY_WARNING_VALUE="5"
+GOTIFY_INFO_VALUE="3"
+
 #=== IDENTITY ================================================================#
 # How Constat identifies itself in Discord messages
 
