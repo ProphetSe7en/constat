@@ -28,12 +28,13 @@ type ImageCleanupResult struct {
 
 // ImageCleaner runs scheduled image cleanup
 type ImageCleaner struct {
-	docker      *client.Client
-	app         *App
-	lastRunYear int
-	lastRunDay  int // day of year when last run happened
-	mu          sync.Mutex
-	lastResult  *ImageCleanupResult
+	docker       *client.Client
+	app          *App
+	lastRunYear  int
+	lastRunDay   int    // day of year when last run happened
+	lastRunTime  string // cleanup time when last run happened — reset if user changes it
+	mu           sync.Mutex
+	lastResult   *ImageCleanupResult
 }
 
 // GetLastResult returns the last cleanup result (thread-safe)
@@ -93,11 +94,18 @@ func (ic *ImageCleaner) check(ctx context.Context) {
 		}
 	}
 
+	// Reset daily guard if user changed the cleanup time
+	if ic.lastRunTime != "" && ic.lastRunTime != cfg.ImageCleanupTime {
+		ic.lastRunDay = 0
+		ic.lastRunYear = 0
+	}
+
 	// Check if current time matches and we haven't run today
 	year, dayOfYear := now.Year(), now.YearDay()
 	if now.Hour() == hour && now.Minute() == minute && (ic.lastRunYear != year || ic.lastRunDay != dayOfYear) {
 		ic.lastRunYear = year
 		ic.lastRunDay = dayOfYear
+		ic.lastRunTime = cfg.ImageCleanupTime
 		dryRun := cfg.ImageCleanupDryRun == "true"
 		orphans := cfg.CleanupOrphanImages == "true"
 		unused := cfg.CleanupUnusedImages == "true"
@@ -291,6 +299,7 @@ func (ic *ImageCleaner) sendCleanupDiscord(result *ImageCleanupResult) {
 	}
 
 	sendDiscordMaintenance(title, description, color)
+	go sendGotifyMaintenance(title, description)
 }
 
 func formatBytesGo(b int64) string {

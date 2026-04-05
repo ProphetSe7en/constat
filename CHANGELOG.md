@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.9.11
+
+### Features
+- **Gotify push notifications** — Optional Gotify support alongside Discord. One app token with configurable priority values per severity level (critical/warning/info). Includes test button in settings UI and markdown formatting in messages
+- **Network parent down detection** — Containers using `container:X` network mode now show a warning triangle when their network parent is down. Red badge in the Networks column, Discord/Gotify notifications, and events in the Events tab. No restart of dependent containers (restarting doesn't help when the network parent is the problem)
+
+### Bug fixes
+- **Health tooltip width** — Tooltip no longer follows the narrow column width, now centers over the badge with proper sizing
+
+### Improvements
+- **Version sync** — Fixed Go web UI version (`0.9.8` → `0.9.11`) to match bash script and changelog
+
 ## v0.9.10
 
 ### Bug fixes

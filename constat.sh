@@ -24,7 +24,7 @@ DISCORD_WEBHOOK_STATE="${DISCORD_WEBHOOK_STATE:-}"
 DISCORD_WEBHOOK_HEALTH="${DISCORD_WEBHOOK_HEALTH:-}"
 DISCORD_WEBHOOK_MAINTENANCE="${DISCORD_WEBHOOK_MAINTENANCE:-}"
 BOT_NAME="${BOT_NAME:-Constat}"
-CONSTAT_VERSION="0.9.9"
+CONSTAT_VERSION="0.9.11"
 SERVER_LABEL="${SERVER_LABEL:-Unraid}"
 COLOR_STARTED="${COLOR_STARTED:-2ecc71}"
 COLOR_STOPPED="${COLOR_STOPPED:-95a5a6}"
@@ -46,6 +46,17 @@ MEMORY_DEFAULT_DURATION="${MEMORY_DEFAULT_DURATION:-300}"
 if [ -z "${MEMORY_WATCH+x}" ]; then MEMORY_WATCH=(); fi
 COLOR_MEMORY_WARN="${COLOR_MEMORY_WARN:-e67e22}"
 COLOR_MEMORY_CRIT="${COLOR_MEMORY_CRIT:-ed4245}"
+
+# Gotify defaults
+GOTIFY_ENABLED="${GOTIFY_ENABLED:-false}"
+GOTIFY_URL="${GOTIFY_URL:-}"
+GOTIFY_TOKEN="${GOTIFY_TOKEN:-}"
+GOTIFY_PRIORITY_CRITICAL="${GOTIFY_PRIORITY_CRITICAL:-true}"
+GOTIFY_PRIORITY_WARNING="${GOTIFY_PRIORITY_WARNING:-true}"
+GOTIFY_PRIORITY_INFO="${GOTIFY_PRIORITY_INFO:-false}"
+GOTIFY_CRITICAL_VALUE="${GOTIFY_CRITICAL_VALUE:-8}"
+GOTIFY_WARNING_VALUE="${GOTIFY_WARNING_VALUE:-5}"
+GOTIFY_INFO_VALUE="${GOTIFY_INFO_VALUE:-3}"
 
 #=============================================================================
 # LOCKFILE
@@ -80,6 +91,9 @@ MEM_CONFIG_MTIME=""
 TIMER_PID=""
 EVENTS_PID=""
 RUNNING=true
+declare -A NET_PARENT_DOWN=()
+LAST_NET_PARENT_POLL=0
+NET_PARENT_POLL_INTERVAL=30
 
 #=============================================================================
 # HELPER FUNCTIONS
@@ -145,6 +159,7 @@ check_restart_cooldown() {
             '```'"$name stopped after $MAX_RESTARTS unhealthy restarts without recovery"'```' \
             "$COLOR_DIED"
         log "Discord: Health Escalation — $name stopped"
+        send_gotify "$BOT_NAME: Health Escalation" "**$name** stopped after $MAX_RESTARTS unhealthy restarts without recovery" 8
         emit_ui_event "$name" "health" "stopped" "Stopped after $MAX_RESTARTS unhealthy restarts without recovery"
         return 1
     fi
@@ -203,6 +218,74 @@ unhealthy_recheck() {
             EVENT_BUFFER+=("health|Unhealthy|$COLOR_UNHEALTHY|$name unhealthy (restarting)")
             log "EVENT: $name unhealthy recheck — restarting (attempt ${RESTART_COUNTS[$name]}/$MAX_RESTARTS)"
             reset_timer
+        fi
+    done
+}
+
+#=============================================================================
+# NETWORK PARENT MONITORING
+#=============================================================================
+network_parent_check() {
+    local now
+    now=$(date +%s)
+    if [ $((now - LAST_NET_PARENT_POLL)) -lt "$NET_PARENT_POLL_INTERVAL" ]; then
+        return 0
+    fi
+    LAST_NET_PARENT_POLL=$now
+
+    # Single docker call: get name, network mode, and state for all containers
+    local inspect_output
+    inspect_output=$(docker ps -aq | xargs -r docker inspect --format '{{.Name}}|{{.HostConfig.NetworkMode}}|{{.State.Status}}' 2>/dev/null) || return 0
+
+    # Build state map and dependency map
+    local -A state_map=()
+    local -A dep_map=()
+    while IFS='|' read -r cname netmode cstate; do
+        [ -z "$cname" ] && continue
+        cname="${cname#/}"
+        state_map[$cname]="$cstate"
+        if [[ "$netmode" == container:* ]]; then
+            dep_map[$cname]="${netmode#container:}"
+        fi
+    done <<< "$inspect_output"
+
+    # Resolve parent refs and check state
+    for dependent in "${!dep_map[@]}"; do
+        should_exclude "$dependent" && continue
+        local parent_ref="${dep_map[$dependent]}"
+
+        # Resolve: parent_ref may be a container ID, resolve to name
+        local parent_name="$parent_ref"
+        if [ -z "${state_map[$parent_ref]+x}" ]; then
+            local resolved
+            resolved=$(docker inspect --format '{{.Name}}' "$parent_ref" 2>/dev/null) || continue
+            parent_name="${resolved#/}"
+        fi
+
+        local parent_state="${state_map[$parent_name]:-unknown}"
+        local dep_state="${state_map[$dependent]:-unknown}"
+
+        # Only care about running dependents
+        [ "$dep_state" != "running" ] && continue
+
+        if [ "$parent_state" != "running" ]; then
+            # Parent is down — notify if not already tracked
+            if [ -z "${NET_PARENT_DOWN[$dependent]+x}" ]; then
+                NET_PARENT_DOWN[$dependent]="$parent_name"
+                EVENT_BUFFER+=("state|NetworkDown|$COLOR_DIED|$dependent — network parent $parent_name is down")
+                log "EVENT: $dependent network parent ($parent_name) is down"
+                emit_ui_event "$dependent" "network" "net-down" "Network parent $parent_name is down"
+                reset_timer
+            fi
+        else
+            # Parent is running — notify recovery if previously down
+            if [ -n "${NET_PARENT_DOWN[$dependent]+x}" ]; then
+                unset 'NET_PARENT_DOWN[$dependent]'
+                EVENT_BUFFER+=("state|NetworkRecovered|$COLOR_STARTED|$dependent — network parent $parent_name is back")
+                log "EVENT: $dependent network parent ($parent_name) recovered"
+                emit_ui_event "$dependent" "network" "net-up" "Network parent $parent_name recovered"
+                reset_timer
+            fi
         fi
     done
 }
@@ -623,6 +706,46 @@ send_memory_discord() {
 
     curl -sS -X POST "$DISCORD_WEBHOOK_HEALTH" -H "Content-Type: application/json" -d "$payload" > /dev/null 2>&1 || true
     log "Discord: Health — $title ($name)"
+
+    # Gotify notification for memory events
+    local gotify_priority=5
+    case "$severity" in
+        restart|blocked) gotify_priority=8 ;;
+        warn)            gotify_priority=5 ;;
+        recovered)       gotify_priority=3 ;;
+    esac
+    send_gotify "$BOT_NAME: $title" "**$name** — $status_msg ($usage / $limit)" "$gotify_priority"
+}
+
+#=============================================================================
+# GOTIFY NOTIFICATION
+#=============================================================================
+send_gotify() {
+    [ "$GOTIFY_ENABLED" != "true" ] && return 0
+    [ -z "$GOTIFY_URL" ] && return 0
+    [ -z "$GOTIFY_TOKEN" ] && return 0
+
+    local title="$1" message="$2" level="$3"
+
+    # Check if this priority level is enabled, and map to user-configured value
+    local priority
+    case "$level" in
+        8) [ "$GOTIFY_PRIORITY_CRITICAL" != "true" ] && return 0; priority="$GOTIFY_CRITICAL_VALUE" ;;
+        5) [ "$GOTIFY_PRIORITY_WARNING" != "true" ] && return 0; priority="$GOTIFY_WARNING_VALUE" ;;
+        3) [ "$GOTIFY_PRIORITY_INFO" != "true" ] && return 0; priority="$GOTIFY_INFO_VALUE" ;;
+        *) priority="$level" ;;
+    esac
+
+    local payload
+    payload=$(jq -n \
+        --arg title "$title" \
+        --arg message "$message" \
+        --argjson priority "$priority" \
+        '{title: $title, message: $message, priority: $priority, extras: {"client::display": {contentType: "text/markdown"}}}')
+
+    curl -sS -X POST "${GOTIFY_URL%/}/message?token=${GOTIFY_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "$payload" > /dev/null 2>&1 || true
 }
 
 #=============================================================================
@@ -695,7 +818,7 @@ flush_batch() {
     done
 
     # Send state change embeds in logical order
-    local ordered_states="Stopped Died Killed Paused Restarted Unpaused Started"
+    local ordered_states="NetworkDown Stopped Died Killed Paused Restarted Unpaused Started NetworkRecovered"
     for category in $ordered_states; do
         [ -z "${state_lines[$category]}" ] && continue
         local count=${state_counts[$category]}
@@ -708,6 +831,17 @@ flush_batch() {
             "$category ($count)" \
             '```'"$lines"'```' \
             "$color"
+
+        # Gotify: map state categories to severity (skip Restarted — already covered by health/memory restart notifications)
+        if [ "$category" != "Restarted" ]; then
+            local gotify_priority=3
+            case "$category" in
+                Died|NetworkDown|Killed) gotify_priority=8 ;;
+            esac
+            local gotify_lines
+            gotify_lines=$(echo "$lines" | sed 's/^\([^ ]*\)/\*\*\1\*\*/')
+            send_gotify "$BOT_NAME: $category" "$gotify_lines" "$gotify_priority"
+        fi
 
         log "Discord: State Change — $category ($count)"
     done
@@ -724,6 +858,15 @@ flush_batch() {
             "$category ($count)" \
             '```'"$lines"'```' \
             "$color"
+
+        # Gotify: map health categories to severity
+        local gotify_priority=5
+        case "$category" in
+            Recovered) gotify_priority=3 ;;
+        esac
+        local gotify_lines
+        gotify_lines=$(echo "$lines" | sed 's/^\([^ ]*\)/\*\*\1\*\*/')
+        send_gotify "$BOT_NAME: $category" "$gotify_lines" "$gotify_priority"
 
         log "Discord: Health Issue — $category ($count)"
     done
@@ -795,10 +938,13 @@ LAST_SUMMARY=$(date +%s)
 while $RUNNING; do
     log "Connecting to Docker event stream..."
 
-    # Read timeout: use shorter of SUMMARY_INTERVAL and MEMORY_POLL_INTERVAL
+    # Read timeout: use shortest of SUMMARY_INTERVAL, MEMORY_POLL_INTERVAL, and NET_PARENT_POLL_INTERVAL
     READ_TIMEOUT="$SUMMARY_INTERVAL"
     if [ ${#MEM_RULE_NAME[@]} -gt 0 ] && [ "$MEMORY_PAUSED" != "true" ] && [ "$MEMORY_POLL_INTERVAL" -lt "$READ_TIMEOUT" ]; then
         READ_TIMEOUT="$MEMORY_POLL_INTERVAL"
+    fi
+    if [ "$NET_PARENT_POLL_INTERVAL" -lt "$READ_TIMEOUT" ]; then
+        READ_TIMEOUT="$NET_PARENT_POLL_INTERVAL"
     fi
 
     while read -r -t "$READ_TIMEOUT" event || {
@@ -810,6 +956,7 @@ while $RUNNING; do
         fi
         memory_check
         unhealthy_recheck
+        network_parent_check
         continue
     }; do
         # Periodic summary check (in case events keep flowing)
@@ -820,6 +967,7 @@ while $RUNNING; do
         fi
         memory_check
         unhealthy_recheck
+        network_parent_check
 
         # Parse event
         action=$(echo "$event" | jq -r '.Action // empty')
@@ -844,6 +992,7 @@ while $RUNNING; do
                 RECENTLY_STARTED[$name]=$(date +%s)
                 EVENT_BUFFER+=("state|Started|$COLOR_STARTED|$name exited → running")
                 log "EVENT: $name started ($image)"
+                LAST_NET_PARENT_POLL=0  # force network parent check
                 reset_timer
                 ;;
             stop)
@@ -860,6 +1009,7 @@ while $RUNNING; do
                 EVENT_BUFFER+=("state|Stopped|$COLOR_STOPPED|$name running → exited")
                 reset_mem_timers_for "$name"
                 log "EVENT: $name stopped ($image)"
+                LAST_NET_PARENT_POLL=0  # force network parent check
                 reset_timer
                 ;;
             die)
