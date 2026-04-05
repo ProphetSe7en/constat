@@ -2725,7 +2725,7 @@
               <div class="config-field">
                 <span class="config-label">App token</span>
                 <div class="webhook-field-row">
-                  <input :type="gotifyTokenVisible ? 'text' : 'password'" class="config-input wide" x-model="config.gotifyToken" @input="configDirty = true" placeholder="App token from Gotify">
+                  <input :type="gotifyTokenVisible ? 'text' : 'password'" autocomplete="new-password" class="config-input wide" x-model="config.gotifyToken" @input="configDirty = true" placeholder="App token from Gotify">
                   <button class="test-btn" style="min-width:36px;font-size:13px" @click="gotifyTokenVisible = !gotifyTokenVisible" x-text="gotifyTokenVisible ? '🔒' : '👁'"></button>
                   <button class="test-btn" @click="testGotify()" :disabled="!config.gotifyUrl || !config.gotifyToken || gotifyTesting">
                     <span x-show="!gotifyTesting">Test</span>

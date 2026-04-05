@@ -81,6 +81,10 @@ var healthcheckSuggestions = map[string]struct {
 		defaultPort: "6767",
 	},
 	// Web apps — seerr variants (same API, different images)
+	"hotio/seerr": {
+		cmd:         `--health-cmd='curl -fSs -o /dev/null http://localhost:5055/api/v1/status || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
+		defaultPort: "5055",
+	},
 	"overseerr": {
 		cmd:         `--health-cmd='curl -fSs -o /dev/null http://localhost:5055/api/v1/status || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
 		defaultPort: "5055",
@@ -145,6 +149,43 @@ var healthcheckSuggestions = map[string]struct {
 	"seasonpackarr": {
 		cmd:  `--health-cmd='pgrep -f seasonpackarr' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=30s`,
 		note: "No HTTP health endpoint — uses process check",
+	},
+	// DNS / Ad blocking
+	"adguardhome": {
+		cmd:         `--health-cmd='wget -q --spider http://localhost:80/ || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
+		note:        "Uses wget (no curl in image)",
+		defaultPort: "80",
+	},
+	// Dashboards
+	"homarr": {
+		cmd:         `--health-cmd='wget -q --spider http://localhost:7575/ || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
+		note:        "Uses wget (no curl in image)",
+		defaultPort: "7575",
+	},
+	// Notifications & monitoring
+	"notifiarr": {
+		cmd:  `--health-cmd='pgrep -f notifiarr || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
+		note: "HTTP endpoints require authentication — uses process check",
+	},
+	// Media bridges
+	"plexanibridge": {
+		cmd:  `--health-cmd='pgrep -f "main.py" || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
+		note: "HTTP endpoint requires Basic Auth when configured — uses process check",
+	},
+	// Poster management
+	"postarr": {
+		cmd:         `--health-cmd='curl -fSs http://localhost:8000/ -o /dev/null || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
+		defaultPort: "8000",
+	},
+	// Torrent notifications
+	"ptnotifier": {
+		cmd:  `--health-cmd='pgrep -f "ptn.py" || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
+		note: "No HTTP endpoint — uses process check",
+	},
+	// IDE
+	"linuxserver/code-server": {
+		cmd:         `--health-cmd='curl -fSs http://localhost:8443/healthz -o /dev/null || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
+		defaultPort: "8443",
 	},
 	// Cloudflare DDNS (hotio — no curl/wget available)
 	"cloudflareddns": {
