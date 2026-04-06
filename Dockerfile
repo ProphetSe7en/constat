@@ -1,13 +1,19 @@
 # Stage 1: Build Go binary
 FROM golang:1.24-alpine AS builder
+
+ARG VERSION=0.9.12
+
 WORKDIR /build
 COPY ui/ .
 RUN go mod download
-RUN CGO_ENABLED=0 go build -o constat-ui -ldflags="-s -w" .
+RUN CGO_ENABLED=0 go build -o constat-ui -ldflags="-s -w -X main.Version=${VERSION}" .
 
 # Stage 2: Runtime
 FROM alpine:3.21
 
+ARG VERSION=0.9.12
+ENV CONSTAT_VERSION=${VERSION}
+LABEL org.opencontainers.image.version=${VERSION}
 LABEL maintainer="ProphetSe7en" \
       description="Docker container monitor with web UI, Discord notifications, and auto-restart"
 

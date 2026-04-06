@@ -1788,8 +1788,10 @@
                     <!-- Healthcheck suggestion -->
                     <template x-if="c.state === 'running' && c.health === 'none' && getSuggestion(c.name)">
                       <div>
-                        <div class="suggestion-label">&#9888; No healthcheck configured &mdash; suggested Extra Parameter:</div>
-                        <div class="suggestion-box" x-text="getSuggestion(c.name).suggestion"></div>
+                        <div class="suggestion-label" x-text="getSuggestion(c.name).suggestion ? '&#9888; No healthcheck configured — suggested Extra Parameter:' : '&#9888; No healthcheck configured'"></div>
+                        <template x-if="getSuggestion(c.name).suggestion">
+                          <div class="suggestion-box" x-text="getSuggestion(c.name).suggestion"></div>
+                        </template>
                         <div x-show="getSuggestion(c.name).note" style="font-size:11px;color:#8b949e;margin-top:4px" x-text="getSuggestion(c.name).note"></div>
                       </div>
                     </template>
@@ -2659,7 +2661,7 @@
                   <div class="config-field">
                     <span class="config-label" x-text="label"></span>
                     <div class="webhook-field-row">
-                      <input type="text" class="config-input wide" x-model="config[field]" @input="configDirty = true" placeholder="https://discord.com/api/webhooks/...">
+                      <input type="text" class="config-input wide" x-model="config[field]" @input="configDirty = true" placeholder="https://discord.com/api/webhooks/..." autocomplete="one-time-code">
                       <button class="test-btn" @click="testWebhook(field)" :disabled="!config[field] || webhookTesting === field">
                         <span x-show="webhookTesting !== field">Test</span>
                         <span x-show="webhookTesting === field">...</span>
@@ -2718,14 +2720,14 @@
 
               <div class="config-field">
                 <span class="config-label">Gotify URL</span>
-                <input type="text" class="config-input wide" x-model="config.gotifyUrl" @input="configDirty = true" placeholder="https://gotify.example.com">
+                <input type="text" class="config-input wide" x-model="config.gotifyUrl" @input="configDirty = true" placeholder="https://gotify.example.com" autocomplete="one-time-code">
               </div>
               <div class="config-hint">Base URL of your Gotify server</div>
 
               <div class="config-field">
                 <span class="config-label">App token</span>
                 <div class="webhook-field-row">
-                  <input :type="gotifyTokenVisible ? 'text' : 'password'" autocomplete="new-password" class="config-input wide" x-model="config.gotifyToken" @input="configDirty = true" placeholder="App token from Gotify">
+                  <input :type="gotifyTokenVisible ? 'text' : 'password'" autocomplete="one-time-code" class="config-input wide" x-model="config.gotifyToken" @input="configDirty = true" placeholder="App token from Gotify">
                   <button class="test-btn" style="min-width:36px;font-size:13px" @click="gotifyTokenVisible = !gotifyTokenVisible" x-text="gotifyTokenVisible ? '🔒' : '👁'"></button>
                   <button class="test-btn" @click="testGotify()" :disabled="!config.gotifyUrl || !config.gotifyToken || gotifyTesting">
                     <span x-show="!gotifyTesting">Test</span>

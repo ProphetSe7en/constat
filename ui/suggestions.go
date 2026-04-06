@@ -187,10 +187,23 @@ var healthcheckSuggestions = map[string]struct {
 		cmd:         `--health-cmd='curl -fSs http://localhost:8443/healthz -o /dev/null || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
 		defaultPort: "8443",
 	},
+	// Cloudflare Tunnel (distroless image — no /bin/sh, --health-cmd cannot work)
+	"cloudflare/cloudflared": {
+		note: "This image has no shell — Extra Parameters healthchecks cannot work. Switch to ghcr.io/prophetse7en/cloudflare-tunnel:latest (identical image with healthcheck built in). Add TUNNEL_METRICS=0.0.0.0:60123 as environment variable",
+	},
+	// Cloudflare Tunnel (ProphetSe7en wrapper with healthcheck baked in)
+	"prophetse7en/cloudflare-tunnel": {
+		note: "Healthcheck is built into this image. Just add TUNNEL_METRICS=0.0.0.0:60123 as environment variable if not already set",
+	},
 	// Cloudflare DDNS (hotio — no curl/wget available)
 	"cloudflareddns": {
 		cmd:  `--health-cmd='pgrep -f cloudflare || exit 1' --health-interval=300s --health-retries=3 --health-timeout=10s --health-start-period=30s`,
 		note: "No curl/wget available in hotio images — uses process check",
+	},
+	// DAPS (Drazzilb08 Plex/*arr Services) — verified working
+	"drazzilb08/daps": {
+		cmd:         `--health-cmd='curl -fSs -o /dev/null http://localhost:8000/ || exit 1' --health-interval=60s --health-retries=3 --health-timeout=10s --health-start-period=60s`,
+		defaultPort: "8000",
 	},
 }
 

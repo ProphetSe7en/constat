@@ -5,11 +5,15 @@
   <Registry>https://github.com/prophetse7en/constat/pkgs/container/constat</Registry>
   <Branch>
     <Tag>latest</Tag>
-    <TagDescription>Latest stable release (auto-updates)</TagDescription>
+    <TagDescription>Stable release (recommended)</TagDescription>
   </Branch>
   <Branch>
-    <Tag>v0.9.11</Tag>
-    <TagDescription>Pinned stable — update manually when ready</TagDescription>
+    <Tag>dev</Tag>
+    <TagDescription>Development builds — may contain bugs or breaking changes</TagDescription>
+  </Branch>
+  <Branch>
+    <Tag>v0.9.12</Tag>
+    <TagDescription>Pinned stable release</TagDescription>
   </Branch>
   <Network>bridge</Network>
   <Shell>bash</Shell>
