@@ -11,10 +11,6 @@
     <Tag>dev</Tag>
     <TagDescription>Development builds — may contain bugs or breaking changes</TagDescription>
   </Branch>
-  <Branch>
-    <Tag>v0.9.12</Tag>
-    <TagDescription>Pinned stable release</TagDescription>
-  </Branch>
   <Network>bridge</Network>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
