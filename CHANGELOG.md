@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.12
+
+### Bug fixes
+- **Gotify settings autofill** — Browser password managers no longer autofill the Gotify URL and token fields in Config (added `autocomplete="one-time-code"`). Also applied to the Discord webhook field.
+
+### Improvements
+- **Version single source of truth** — Version is now defined once in the Dockerfile `ARG VERSION` and injected into the Go binary at build time (`-ldflags -X main.Version=...`) and into `constat.sh` via the `CONSTAT_VERSION` environment variable. CI overrides it automatically from the git tag on release builds.
+- **Healthcheck suggestions** — Added verified suggestion for `drazzilb08/daps`.
+
 ## v0.9.11
 
 ### Features

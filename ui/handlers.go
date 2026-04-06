@@ -515,7 +515,7 @@ func sendDiscordMaintenance(title, description string, color int) {
 			"author":      map[string]string{"name": fmt.Sprintf("🧹 %s: %s", botName, title)},
 			"description": description + serverLabel,
 			"color":       color,
-			"footer":      map[string]string{"text": fmt.Sprintf("Constat v%s by ProphetSe7en", constatVersion)},
+			"footer":      map[string]string{"text": fmt.Sprintf("Constat v%s by ProphetSe7en", Version)},
 			"timestamp":   time.Now().UTC().Format(time.RFC3339),
 		}},
 	}
@@ -688,7 +688,7 @@ func (app *App) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	resp := struct {
 		ConfigData
 		Version string `json:"version"`
-	}{*config, constatVersion}
+	}{*config, Version}
 	writeJSON(w, resp)
 }
 

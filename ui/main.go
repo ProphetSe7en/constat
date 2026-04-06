@@ -192,7 +192,8 @@ func main() {
 	}
 }
 
-const constatVersion = "0.9.11"
+// Version is set at build time via -ldflags="-X main.Version=..."
+var Version = "dev"
 const restartDisabledPath = "/config/restart_disabled.json"
 
 // App holds shared application state
