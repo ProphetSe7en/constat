@@ -27,7 +27,11 @@
   .container-icon { width: 20px; height: 20px; border-radius: 4px; flex-shrink: 0; object-fit: contain; }
   .container-icon-stopped { opacity: 0.5; filter: grayscale(0.8); }
   .dot-blue { background: #58a6ff; }
-  .stat-num { color: #e1e4e8; font-weight: 600; }
+  .stat-num { color: #e1e4e8; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .header-res .stat-num { display: inline-block; text-align: right; }
+  .header-res.res-cpu .stat-num { min-width: 42px; }
+  .header-res.res-ram .stat-num { min-width: 58px; }
+  .header-res.res-net .stat-num { min-width: 64px; }
   .header-live { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #3fb950; border-left: 1px solid #30363d; padding-left: 16px; margin-left: 4px; }
   .header-live .live-dot-sm { width: 5px; height: 5px; background: #3fb950; border-radius: 50%; animation: pulse 2s infinite; }
   .header-view-toggle { display: flex; align-items: center; gap: 2px; margin-left: 8px; padding-left: 12px; border-left: 1px solid #30363d; }
@@ -718,9 +722,9 @@
         </button>
       </div>
       <div class="header-inline-resources" x-show="!mobileView && headerView === 'compact' && (totalCpu > 0 || totalMemory > 0)">
-        <span class="header-res" x-show="totalCpu > 0"><span style="color:#58a6ff">CPU</span> <span class="stat-num" x-text="totalCpuPercent().toFixed(1) + '%'"></span></span>
-        <span class="header-res" x-show="totalMemory > 0"><span style="color:#bc8cff">RAM</span> <span class="stat-num" x-text="formatBytes(totalMemory)"></span><span x-show="hostMemory > 0" x-text="'/' + formatBytes(hostMemory)" style="color:#484f58"></span></span>
-        <span class="header-res" x-show="totalNetTx > 0 || totalNetRx > 0"><span style="color:#3fb950">&#8593;</span><span class="stat-num" x-text="formatRate(totalNetTx)"></span> <span style="color:#d29922">&#8595;</span><span class="stat-num" x-text="formatRate(totalNetRx)"></span></span>
+        <span class="header-res res-cpu" x-show="totalCpu > 0"><span style="color:#58a6ff">CPU</span> <span class="stat-num" x-text="totalCpuPercent().toFixed(1) + '%'"></span></span>
+        <span class="header-res res-ram" x-show="totalMemory > 0"><span style="color:#bc8cff">RAM</span> <span class="stat-num" x-text="formatBytes(totalMemory)"></span><span x-show="hostMemory > 0" x-text="'/' + formatBytes(hostMemory)" style="color:#484f58"></span></span>
+        <span class="header-res res-net" x-show="totalNetTx > 0 || totalNetRx > 0"><span style="color:#3fb950">&#8593;</span><span class="stat-num" x-text="formatRate(totalNetTx)"></span> <span style="color:#d29922">&#8595;</span><span class="stat-num" x-text="formatRate(totalNetRx)"></span></span>
       </div>
     </div>
     <div class="header-stats" x-show="!mobileView">
