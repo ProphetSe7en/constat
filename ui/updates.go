@@ -224,6 +224,55 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 		}
 		status.LocalDigest = extractDigestFromRepoDigests(imageInspect.RepoDigests)
 
+		// When c.Image is a valid tag (the normal case), respect it — never
+		// override with RepoTags[0] because Docker may order multiple tags
+		// unpredictably and we'd report the wrong tag for multi-tagged images.
+		// Only fall back to RepoTags / title-label recovery when c.Image is a
+		// bare "sha256:..." (tagless image — original tag displaced locally).
+		if strings.HasPrefix(imageRef, "sha256:") {
+			// First try RepoTags in case Docker still has some tag on the image
+			if len(imageInspect.RepoTags) > 0 && imageInspect.RepoTags[0] != "<none>:<none>" {
+				imageRef = imageInspect.RepoTags[0]
+				status.Image = imageRef
+			}
+		}
+		if strings.HasPrefix(imageRef, "sha256:") {
+			// Tagless image — try to recover the tag from the OCI title label.
+			// Publishers like hotio set org.opencontainers.image.title to "name:tag"
+			// which lets us rebuild the full ref when combined with RepoDigests.
+			recovered := ""
+			repoName := ""
+			for _, rd := range imageInspect.RepoDigests {
+				if idx := strings.LastIndex(rd, "@"); idx >= 0 {
+					repoName = rd[:idx]
+					break
+				}
+			}
+			if repoName != "" && imageInspect.Config != nil {
+				if title := imageInspect.Config.Labels["org.opencontainers.image.title"]; title != "" {
+					if colonIdx := strings.LastIndex(title, ":"); colonIdx >= 0 && colonIdx < len(title)-1 {
+						tag := title[colonIdx+1:]
+						recovered = repoName + ":" + tag
+					}
+				}
+			}
+			if recovered != "" {
+				log.Printf("Updates: %s — tag recovered from image.title label: %s", name, recovered)
+				imageRef = recovered
+				status.Image = recovered
+			} else {
+				log.Printf("Updates: skipping %s (tagless image — original tag displaced locally)", name)
+				if repoName != "" {
+					status.Error = fmt.Sprintf("tagless local image — repull %s with your desired tag to enable update checks", repoName)
+					status.Image = repoName + " (tag unknown)"
+				} else {
+					status.Error = "tagless local image — repull the original tag to enable update checks"
+				}
+				uc.setResult(name, status)
+				continue
+			}
+		}
+
 		// Normalize image ref — ensure tag
 		if !strings.Contains(imageRef, ":") {
 			imageRef += ":latest"

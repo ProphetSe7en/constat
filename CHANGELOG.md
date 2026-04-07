@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.13
+
+### Bug fixes
+- **Update checker failing on tagless images** — When a local image tag was displaced by a newer pull (common with rolling tags like hotio's `:release`), the Docker API returned `sha256:...` instead of the tag in the container list. Constat then tried to query `docker.io/library/sha256:...` via regctl and failed with `unauthorized`. Now reconstructs the full image reference from the OCI `org.opencontainers.image.title` label combined with the repo path from `RepoDigests`, so update checks work correctly even for tagless images. Falls back to a helpful error message ("repull `<repo>` with your desired tag") when reconstruction isn't possible.
+- **Header toolbar shifts when values change** — CPU/RAM/NET stats in the top header had variable-width fields, so the entire toolbar shifted sideways whenever a number gained or lost digits (e.g. `0 B/s` → `12.3 MB/s`). Fixed with `font-variant-numeric: tabular-nums` globally on stat numbers plus per-type `min-width` + right-align on the header resource pills.
+
 ## v0.9.12
 
 ### Bug fixes
