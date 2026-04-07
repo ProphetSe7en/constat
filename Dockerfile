@@ -1,7 +1,7 @@
 # Stage 1: Build Go binary
 FROM golang:1.24-alpine AS builder
 
-ARG VERSION=0.9.13
+ARG VERSION=0.9.15
 
 WORKDIR /build
 COPY ui/ .
@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 go build -o constat-ui -ldflags="-s -w -X main.Version=${VERSI
 # Stage 2: Runtime
 FROM alpine:3.21
 
-ARG VERSION=0.9.13
+ARG VERSION=0.9.15
 ENV CONSTAT_VERSION=${VERSION}
 LABEL org.opencontainers.image.version=${VERSION}
 LABEL maintainer="ProphetSe7en" \
@@ -24,12 +24,14 @@ RUN apk add --no-cache \
     docker-cli \
     tzdata
 
-ARG REGCTL_VERSION=0.8.3
-RUN wget -qO /usr/local/bin/regctl \
-    "https://github.com/regclient/regclient/releases/download/v${REGCTL_VERSION}/regctl-linux-amd64" && \
-    chmod +x /usr/local/bin/regctl
+# regctl removed in v0.9.15 — update checks now use the Docker daemon's
+# /distribution/{ref}/json endpoint (client.DistributionInspect) directly.
+# Saves ~38 MB image size and eliminates subprocess spawn per container.
 
 ENV TZ=Europe/Oslo
+# Where regctl and docker-cli look for registry credentials. Persisted to
+# /config so the user's logins survive container recreates.
+ENV DOCKER_CONFIG=/config/.docker
 
 COPY constat.sh /constat.sh
 COPY constat.conf.sample /constat.conf.sample

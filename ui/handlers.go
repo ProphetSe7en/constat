@@ -631,10 +631,33 @@ func (app *App) handleGetUpdates(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"results": map[string]any{}, "checking": false})
 		return
 	}
+	results := app.updateChecker.GetResults()
+	// Filter out excluded containers live so newly-added exclusions take
+	// effect immediately without waiting for the next scheduled check.
+	if cfg, err := ReadConfig(configPath); err == nil && cfg.UpdateExclude != "" {
+		excludeSet := make(map[string]bool)
+		for _, name := range strings.Split(cfg.UpdateExclude, ",") {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				excludeSet[strings.ToLower(name)] = true
+			}
+		}
+		for k := range results {
+			if excludeSet[strings.ToLower(k)] {
+				delete(results, k)
+			}
+		}
+	}
+	done, total, current := app.updateChecker.Progress()
 	writeJSON(w, map[string]any{
-		"results":   app.updateChecker.GetResults(),
+		"results":   results,
 		"checking":  app.updateChecker.IsChecking(),
 		"lastCheck": app.updateChecker.LastCheck(),
+		"progress": map[string]any{
+			"done":    done,
+			"total":   total,
+			"current": current,
+		},
 	})
 }
 
@@ -645,6 +668,93 @@ func (app *App) handleTriggerUpdateCheck(w http.ResponseWriter, r *http.Request)
 	}
 	app.updateChecker.TriggerCheck()
 	writeJSON(w, map[string]string{"status": "check triggered"})
+}
+
+// ---- Registry login ----
+
+// handleListRegistry returns all registries Constat is logged in to, with
+// usernames but no tokens.
+func (app *App) handleListRegistry(w http.ResponseWriter, r *http.Request) {
+	if app.registryStore == nil {
+		writeJSON(w, []MaskedAuth{})
+		return
+	}
+	list, err := app.registryStore.List()
+	if err != nil {
+		writeError(w, 500, fmt.Sprintf("Failed to read registry config: %v", err))
+		return
+	}
+	if list == nil {
+		list = []MaskedAuth{}
+	}
+	writeJSON(w, list)
+}
+
+// handleRegistryLogin verifies credentials against the registry's /v2/
+// endpoint and only saves them on success. An immediate update check is
+// triggered so the user sees fresh results.
+func (app *App) handleRegistryLogin(w http.ResponseWriter, r *http.Request) {
+	if app.registryStore == nil {
+		writeError(w, 500, "Registry store not initialized")
+		return
+	}
+	var req struct {
+		Registry string `json:"registry"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+	req.Registry = strings.TrimSpace(req.Registry)
+	req.Username = strings.TrimSpace(req.Username)
+	if req.Registry == "" || req.Username == "" || req.Password == "" {
+		writeError(w, 400, "registry, username, and token are required")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	if err := app.registryStore.Verify(ctx, req.Registry, req.Username, req.Password); err != nil {
+		writeError(w, 401, err.Error())
+		return
+	}
+	if err := app.registryStore.Save(req.Registry, req.Username, req.Password); err != nil {
+		writeError(w, 500, fmt.Sprintf("Failed to save credentials: %v", err))
+		return
+	}
+	if app.updateChecker != nil {
+		app.updateChecker.TriggerCheck()
+	}
+	writeJSON(w, map[string]string{"status": "logged in to " + req.Registry})
+}
+
+// handleRegistryLogout removes credentials for a registry host.
+//
+// The host is read from the "host" query parameter rather than a path
+// wildcard because Docker Hub's canonical auth key is
+// "https://index.docker.io/v1/" — a URL with slashes and a scheme that
+// can't fit into a Go ServeMux single-segment wildcard pattern even when
+// URL-encoded. A query parameter sidesteps that entirely and accepts any
+// host value verbatim.
+func (app *App) handleRegistryLogout(w http.ResponseWriter, r *http.Request) {
+	if app.registryStore == nil {
+		writeError(w, 500, "Registry store not initialized")
+		return
+	}
+	host := r.URL.Query().Get("host")
+	if host == "" {
+		writeError(w, 400, "host query parameter required")
+		return
+	}
+	if err := app.registryStore.Remove(host); err != nil {
+		writeError(w, 500, fmt.Sprintf("Failed to remove credentials: %v", err))
+		return
+	}
+	if app.updateChecker != nil {
+		app.updateChecker.TriggerCheck()
+	}
+	writeJSON(w, map[string]string{"status": "logged out of " + host})
 }
 
 const configPath = "/config/constat.conf"

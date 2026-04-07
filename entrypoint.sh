@@ -10,6 +10,16 @@ if [ -d "/config" ]; then
     find /config -maxdepth 1 -type f -exec chown "$PUID:$PGID" {} +
 fi
 
+# Registry credentials directory ($DOCKER_CONFIG). Persists private registry
+# logins across container recreates. regctl and docker-cli both read from here.
+mkdir -p /config/.docker
+chown "$PUID:$PGID" /config/.docker
+chmod 700 /config/.docker
+if [ -f /config/.docker/config.json ]; then
+    chown "$PUID:$PGID" /config/.docker/config.json
+    chmod 600 /config/.docker/config.json
+fi
+
 # Set umask for new files
 [ -n "$UMASK" ] && umask "$UMASK"
 

@@ -2548,12 +2548,120 @@
 
       <!-- Image Updates Section -->
       <div class="config-section">
-      <div class="config-section-header" @click="toolsSections.updates = !toolsSections.updates; if(toolsSections.updates) fetchUpdates()">
+      <div class="config-section-header" @click="toolsSections.updates = !toolsSections.updates; if(toolsSections.updates) { fetchUpdates(); fetchRegistryAuths(); }">
         Image Updates
         <span class="arrow" x-text="toolsSections.updates ? '&#9660;' : '&#9654;'"></span>
       </div>
       <div class="config-section-body" x-show="toolsSections.updates" x-transition>
         <div style="font-size:13px;color:#c9d1d9;margin-bottom:10px">Check for available image updates on container registries using digest comparison. No images are pulled — only manifests are checked.</div>
+
+        <!-- Private registry login (collapsed by default — most users don't need it) -->
+        <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;margin-bottom:16px;overflow:hidden">
+          <div style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;user-select:none" @click="toolsSections.registry = !toolsSections.registry">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:13px;font-weight:600;color:#c9d1d9">Private registry login</span>
+              <span x-show="registryAuths.length > 0" style="font-size:11px;color:#3fb950" x-text="registryAuths.length + ' configured'"></span>
+              <span x-show="registryAuths.length === 0" style="font-size:11px;color:#484f58">optional</span>
+            </div>
+            <span style="color:#484f58;font-size:10px" x-text="toolsSections.registry ? '&#9660;' : '&#9654;'"></span>
+          </div>
+          <div x-show="toolsSections.registry" x-transition style="padding:0 14px 14px;border-top:1px solid #21262d">
+            <div style="font-size:12px;color:#8b949e;margin-top:10px;line-height:1.5">
+              <strong style="color:#c9d1d9">You only need this if an update check reports errors like "unauthorized" or "denied".</strong>
+              Public images (the vast majority) work without any login — Constat contacts the registry anonymously and gets the current digest.
+              <br><br>
+              Some images are gated: sponsor-only GHCR packages, private organization images, or images behind a paid Docker Hub plan.
+              Those registries return "unauthorized" to anonymous requests, and the corresponding container will show an error in the Image Updates list below.
+              Logging in with a personal access token lets Constat check those images.
+              <br><br>
+              Credentials are stored in <code style="background:#0d1117;padding:1px 4px;border-radius:3px;font-size:11px">/config/.docker/config.json</code> with 600 permissions (owner-only). Tokens are never shown again after saving and are never logged. If an authenticated request is rejected for an image that is actually public, Constat automatically retries anonymously so logging in never breaks public image checks.
+            </div>
+
+            <!-- Logged-in hosts list -->
+            <div x-show="registryAuths.length > 0" style="margin-top:14px">
+              <div style="font-size:11px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Configured</div>
+              <template x-for="auth in registryAuths" :key="auth.host">
+                <div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:#0d1117;border:1px solid #21262d;border-radius:6px;margin-bottom:6px">
+                  <div style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0">
+                    <span style="font-size:13px;font-weight:600;color:#e1e4e8" x-text="auth.host"></span>
+                    <span style="font-size:11px;color:#8b949e">
+                      <span x-text="auth.username || '(no username)'"></span>
+                      <span style="color:#484f58;margin-left:8px">•••••••• (hidden)</span>
+                    </span>
+                  </div>
+                  <button type="button" class="mwatch-btn mwatch-btn-remove" style="padding:4px 12px;font-size:11px" @click.stop.prevent="removeRegistryAuth(auth.host)">Remove</button>
+                </div>
+              </template>
+            </div>
+
+            <!-- Add new -->
+            <div style="margin-top:14px">
+              <div style="font-size:11px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Add a registry login</div>
+              <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+                <div style="display:flex;flex-direction:column;gap:3px;min-width:140px;flex:1">
+                  <label style="font-size:11px;color:#8b949e">Registry host</label>
+                  <input type="text" class="config-input" x-model="registryForm.registry" placeholder="ghcr.io" @keydown.enter="loginRegistry()">
+                </div>
+                <div style="display:flex;flex-direction:column;gap:3px;min-width:140px;flex:1">
+                  <label style="font-size:11px;color:#8b949e">Username</label>
+                  <input type="text" class="config-input" x-model="registryForm.username" placeholder="github-username" @keydown.enter="loginRegistry()">
+                </div>
+                <div style="display:flex;flex-direction:column;gap:3px;min-width:200px;flex:2">
+                  <label style="font-size:11px;color:#8b949e">Token / password</label>
+                  <input type="password" class="config-input" x-model="registryForm.password" placeholder="ghp_..." autocomplete="new-password" @keydown.enter="loginRegistry()">
+                </div>
+                <button type="button" class="mwatch-btn" style="padding:6px 16px;background:#1f6feb;border-color:#1f6feb;color:#fff" @click.stop.prevent="loginRegistry()" :disabled="registryLoggingIn">
+                  <span x-show="!registryLoggingIn">Login</span>
+                  <span x-show="registryLoggingIn">Verifying...</span>
+                </button>
+              </div>
+              <div x-show="registryError" style="font-size:12px;color:#f85149;margin-top:8px" x-text="registryError"></div>
+              <div x-show="registrySuccess" style="font-size:12px;color:#3fb950;margin-top:8px" x-text="registrySuccess"></div>
+
+              <!-- How to create a GHCR token — always visible -->
+              <div style="margin-top:14px;background:#0d1117;border:1px solid #21262d;border-left:3px solid #1f6feb;border-radius:6px;padding:12px 14px">
+                <div style="font-size:12px;font-weight:600;color:#e1e4e8;margin-bottom:8px">
+                  How to create a GitHub token for GHCR (read-only)
+                </div>
+                <ol style="margin:0 0 0 18px;padding:0;font-size:12px;color:#c9d1d9;line-height:1.7">
+                  <li>
+                    Open
+                    <a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener" style="color:#58a6ff;text-decoration:underline;font-weight:600">
+                      https://github.com/settings/tokens/new
+                    </a>
+                    (classic token — <strong>not</strong> fine-grained)
+                  </li>
+                  <li><strong>Note:</strong> <code style="background:#161b22;padding:1px 5px;border-radius:3px;color:#e1e4e8">constat-ghcr</code></li>
+                  <li><strong>Expiration:</strong> 30–90 days recommended</li>
+                  <li>
+                    <strong>Scopes:</strong> check <strong style="color:#3fb950">only</strong>
+                    <code style="background:#161b22;padding:1px 5px;border-radius:3px;color:#3fb950">read:packages</code>
+                    — nothing else
+                  </li>
+                  <li>Click <strong>Generate token</strong> and copy it immediately (shown only once)</li>
+                  <li>Paste into the <strong>Token</strong> field above and click <strong>Login</strong></li>
+                </ol>
+                <div style="margin-top:10px;padding:8px 10px;background:#1c1409;border:1px solid #3d2e0f;border-radius:4px;font-size:11px;color:#e1e4e8;line-height:1.5">
+                  <strong style="color:#d29922">⚠ Do not</strong> enable <code style="color:#f85149">repo</code>, <code style="color:#f85149">write:packages</code>, <code style="color:#f85149">delete:packages</code>, <code style="color:#f85149">admin:*</code> or any other scope.
+                  <code style="color:#3fb950">read:packages</code> is read-only and cannot modify anything on your GitHub account.
+                </div>
+                <div style="margin-top:8px;font-size:11px;color:#8b949e">
+                  <strong>Docker Hub:</strong>
+                  create a token at
+                  <a href="https://hub.docker.com/settings/security" target="_blank" rel="noopener" style="color:#58a6ff;text-decoration:underline">
+                    hub.docker.com/settings/security
+                  </a>
+                  with <strong>Public Repo Read-only</strong> permission.
+                </div>
+              </div>
+
+              <div style="font-size:11px;color:#484f58;margin-top:10px">
+                Credentials are verified against the registry before saving — invalid tokens are rejected immediately.
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Enable toggle -->
         <div class="config-field" style="margin-bottom:12px">
           <span class="config-label">Scheduled update checks</span>
@@ -2576,19 +2684,22 @@
             <div class="config-hint" style="margin-bottom:12px">Comma-separated container names to skip during update checks</div>
             <!-- Check Now + Status -->
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-              <button class="mwatch-btn" style="padding:6px 16px" @click="triggerUpdateCheck()" :disabled="updateChecking">
+              <button class="mwatch-btn" type="button" style="padding:6px 16px;min-width:160px" @click.stop.prevent="triggerUpdateCheck()" :disabled="updateChecking">
                 <span x-show="!updateChecking">Check Now</span>
-                <span x-show="updateChecking">Checking...</span>
+                <span x-show="updateChecking" x-text="updateProgress.total > 0 ? 'Checking ' + updateProgress.done + '/' + updateProgress.total : 'Starting...'"></span>
               </button>
-              <span x-show="updateLastCheck && updateLastCheck !== '0001-01-01T00:00:00Z'" style="font-size:11px;color:#8b949e" x-text="'Last check: ' + formatEventTime(updateLastCheck)"></span>
+              <span x-show="!updateChecking && updateLastCheck && updateLastCheck !== '0001-01-01T00:00:00Z'" style="font-size:11px;color:#8b949e" x-text="(mwatchTimerTick, 'Last check: ' + formatEventTime(updateLastCheck))"></span>
+              <span x-show="updateChecking && updateProgress.current" style="font-size:11px;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1" x-text="'Checking: ' + updateProgress.current"></span>
             </div>
-            <!-- Summary -->
-            <div x-show="updateCheckSummary.total > 0" style="display:flex;gap:16px;margin-bottom:12px;font-size:12px">
-              <span style="color:#3fb950" x-text="updateCheckSummary.upToDate + ' up to date'"></span>
-              <span :style="updateCheckSummary.updates > 0 ? 'color:#d29922;font-weight:600' : 'color:#8b949e'" x-text="updateCheckSummary.updates + ' updates'"></span>
-              <span :style="updateCheckSummary.errors > 0 ? 'color:#f85149' : 'color:#8b949e'" x-text="updateCheckSummary.errors + ' errors'"></span>
+            <!-- Summary — only show categories that have a non-zero count -->
+            <div x-show="updateCheckSummary.total > 0" style="display:flex;gap:16px;margin-bottom:12px;font-size:12px;flex-wrap:wrap">
+              <span x-show="updateCheckSummary.upToDate > 0" style="color:#3fb950" x-text="updateCheckSummary.upToDate + ' up to date'"></span>
+              <span x-show="updateCheckSummary.updates > 0" style="color:#d29922;font-weight:600" x-text="updateCheckSummary.updates + ' outdated'"></span>
+              <span x-show="updateCheckSummary.local > 0" style="color:#8b949e" x-text="updateCheckSummary.local + ' local'"></span>
+              <span x-show="updateCheckSummary.noAccess > 0" style="color:#8b949e" x-text="updateCheckSummary.noAccess + ' no access'" title="These containers need a registry login — see Private registry login above"></span>
+              <span x-show="updateCheckSummary.other > 0" style="color:#8b949e" x-text="updateCheckSummary.other + ' unknown'" title="Pinned images, tagless locals, or transient registry errors — hover the badge in the containers table for details"></span>
             </div>
-            <!-- Updates available list -->
+            <!-- Outdated list -->
             <template x-if="updateCheckSummary.updates > 0">
               <div style="margin-bottom:12px">
                 <div style="font-size:12px;font-weight:600;color:#d29922;margin-bottom:6px">Updates Available</div>
@@ -2603,16 +2714,18 @@
                 </div>
               </div>
             </template>
-            <!-- Errors list -->
-            <template x-if="updateCheckSummary.errors > 0">
+            <!-- No access list — shown only if any container needs login.
+                 Local builds and rare edge cases are deliberately not listed:
+                 they would just clutter the panel without being actionable. -->
+            <template x-if="updateCheckSummary.noAccess > 0">
               <div>
-                <div style="font-size:12px;font-weight:600;color:#f85149;margin-bottom:6px">Errors</div>
+                <div style="font-size:12px;font-weight:600;color:#8b949e;margin-bottom:6px">Needs registry login</div>
                 <div style="border:1px solid #21262d;border-radius:6px;background:#0d1117;overflow:hidden">
-                  <template x-for="u in updateCheckSummary.errorContainers" :key="u.containerName">
+                  <template x-for="u in updateCheckSummary.errorContainers.filter(e => (e.error || '').toLowerCase().match(/unauthorized|denied/))" :key="u.containerName">
                     <div style="padding:6px 12px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px;font-size:12px">
-                      <span style="color:#484f58;font-size:10px">&#9679;</span>
-                      <span style="color:#8b949e" x-text="u.containerName"></span>
-                      <span style="color:#484f58;font-size:11px" x-text="u.error"></span>
+                      <span style="color:#8b949e;font-size:10px">&#9679;</span>
+                      <span style="color:#c9d1d9;font-weight:500" x-text="u.containerName"></span>
+                      <span style="color:#484f58;font-size:11px" x-text="u.image"></span>
                     </div>
                   </template>
                 </div>
@@ -3355,7 +3468,16 @@ function app() {
     groupMemberEnabled: {},
     groupChartRefreshInterval: null,
     groupActionConfirm: null,
-    toolsSections: { memory: false, rules: true, cleanup: false, updates: false },
+    toolsSections: { memory: false, rules: true, cleanup: false, updates: false, registry: false },
+
+    // Registry login (private image update checks)
+    registryAuths: [],
+    registryLoading: false,
+    registryLoggingIn: false,
+    registryRemoving: {},
+    registryForm: { registry: 'ghcr.io', username: '', password: '' },
+    registryError: '',
+    registrySuccess: '',
     imageData: null,
     imageLoading: false,
     imagePruning: false,
@@ -3376,6 +3498,13 @@ function app() {
     updateResults: {},
     updateChecking: false,
     updateLastCheck: null,
+    updateProgress: { done: 0, total: 0, current: '' },
+    // Monotonically increasing seq: used to drop stale responses that land
+    // out of order (e.g. the 5s poll response arriving after a 2s poll
+    // response from the same run). Without this the "Checking..." button
+    // can get stuck when an older in-flight request resolves last.
+    _updateReqSeq: 0,
+    _updateLastAppliedSeq: 0,
 
     // Webhook testing
     webhookTesting: null,
@@ -5585,11 +5714,18 @@ function app() {
           break;
         }
         case 'update': {
-          const ua = this.updateResults[a.name];
-          const ub = this.updateResults[b.name];
-          const av = ua ? (ua.hasUpdate ? 0 : ua.error ? 2 : 1) : 3;
-          const bv = ub ? (ub.hasUpdate ? 0 : ub.error ? 2 : 1) : 3;
-          cmp = av - bv;
+          // Sort order: most-actionable first → least-actionable last.
+          // 0 outdated, 1 up to date, 2 local, 3 no access, 4 other/pending.
+          const rank = (c) => {
+            switch (this._updateState(c)) {
+              case 'outdated': return 0;
+              case 'uptodate': return 1;
+              case 'local':    return 2;
+              case 'noaccess': return 3;
+              default:         return 4;
+            }
+          };
+          cmp = rank(a) - rank(b);
           if (cmp === 0) cmp = a.name.localeCompare(b.name);
           break;
         }
@@ -5661,6 +5797,9 @@ function app() {
         this.configSuccess = 'Saved successfully';
         this.configDirty = false;
         setTimeout(() => { this.configSuccess = ''; }, 3000);
+        // Refresh updates list immediately so newly-excluded containers
+        // disappear without waiting for the next 60s poll.
+        this.fetchUpdates();
       } catch (e) {
         this.configError = e.message;
       } finally {
@@ -5720,6 +5859,74 @@ function app() {
       }
     },
 
+    // ---- Registry Login ----
+    async fetchRegistryAuths() {
+      this.registryLoading = true;
+      try {
+        const resp = await fetch('/api/registry');
+        if (resp.ok) {
+          this.registryAuths = (await resp.json()) || [];
+        }
+      } catch (e) { /* ignore */ }
+      finally { this.registryLoading = false; }
+    },
+
+    async loginRegistry() {
+      if (this.registryLoggingIn) return;
+      this.registryError = '';
+      this.registrySuccess = '';
+      const host = (this.registryForm.registry || '').trim();
+      const user = (this.registryForm.username || '').trim();
+      const pass = this.registryForm.password || '';
+      if (!host || !user || !pass) {
+        this.registryError = 'Registry, username, and token are required';
+        return;
+      }
+      this.registryLoggingIn = true;
+      try {
+        const resp = await fetch('/api/registry/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ registry: host, username: user, password: pass }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          this.registryError = err.error || 'Login failed';
+          return;
+        }
+        this.registrySuccess = 'Logged in to ' + host;
+        // Token is never kept in memory after save.
+        this.registryForm = { registry: host, username: '', password: '' };
+        await this.fetchRegistryAuths();
+        setTimeout(() => { this.registrySuccess = ''; }, 4000);
+      } catch (e) {
+        this.registryError = e.message || 'Login failed';
+      } finally {
+        this.registryLoggingIn = false;
+      }
+    },
+
+    async removeRegistryAuth(host) {
+      this.registryError = '';
+      this.registrySuccess = '';
+      try {
+        const resp = await fetch('/api/registry?host=' + encodeURIComponent(host), { method: 'DELETE' });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          this.registryError = err.error || ('Failed to remove (HTTP ' + resp.status + ')');
+          return;
+        }
+        // Remove from local state immediately so the row disappears even if
+        // the refetch lags. fetchRegistryAuths will then reconcile.
+        this.registryAuths = this.registryAuths.filter(a => a.host !== host);
+        this.registrySuccess = 'Removed ' + host;
+        setTimeout(() => { this.registrySuccess = ''; }, 3000);
+        await this.fetchRegistryAuths();
+      } catch (e) {
+        this.registryError = e.message || 'Failed to remove';
+      }
+    },
+
     // ---- Image Management ----
     async fetchCleanupStatus() {
       try {
@@ -5773,48 +5980,112 @@ function app() {
 
     // ---- Image Updates ----
     async fetchUpdates() {
+      const mySeq = ++this._updateReqSeq;
       try {
         const resp = await fetch('/api/updates');
         if (!resp.ok) return;
         const data = await resp.json();
+        // Drop this response if a newer one was already applied. Without
+        // this guard, a slow in-flight request can overwrite fresh state
+        // (e.g. flip updateChecking back to true after we already saw the
+        // check complete), leaving the UI stuck in the Checking state.
+        if (mySeq < this._updateLastAppliedSeq) return;
+        this._updateLastAppliedSeq = mySeq;
         this.updateResults = data.results || {};
+        const wasChecking = this.updateChecking;
         this.updateChecking = data.checking;
         this.updateLastCheck = data.lastCheck;
+        this.updateProgress = data.progress || { done: 0, total: 0, current: '' };
+        // While a check is actively running, poll more aggressively so the
+        // user sees results trickle in instead of waiting for the next 60s
+        // tick. The fast poll auto-stops when checking flips back to false.
+        if (this.updateChecking && !this._updateFastPoll) {
+          this._updateFastPoll = setInterval(() => this.fetchUpdates(), 2000);
+        } else if (!this.updateChecking && this._updateFastPoll) {
+          clearInterval(this._updateFastPoll);
+          this._updateFastPoll = null;
+          // One final fetch a moment later to catch the very last result
+          // written between the previous tick and the "checking=false" flip.
+          if (wasChecking) setTimeout(() => this.fetchUpdates(), 500);
+        }
       } catch (e) { console.error('Failed to fetch updates:', e); }
     },
-    updateBadgeClass(c) {
+    // Classify an update-check result into one of a small fixed set of
+    // visible states. Keeps the table calm: only "outdated" (actionable),
+    // "uptodate", "local" (known, not applicable), "noaccess" (fixable via
+    // registry login), or a dash for everything else (pinned, tagless,
+    // transient network hiccups, not yet checked). The dash category
+    // intentionally collapses rare edge cases into a single neutral icon.
+    _updateState(c) {
       const u = this.updateResults[c.name];
-      if (!u) return 'badge-unchecked';
-      if (u.error === 'local image, no registry digest') return 'badge-unchecked';
-      if (u.error) return 'badge-unchecked';
-      return u.hasUpdate ? 'badge-update' : 'badge-uptodate';
+      if (!u) return 'pending';
+      if (u.error) {
+        if (u.error === 'local image, no registry digest') return 'local';
+        const s = u.error.toLowerCase();
+        if (s.includes('unauthorized') || s.includes('denied')) return 'noaccess';
+        return 'other';
+      }
+      return u.hasUpdate ? 'outdated' : 'uptodate';
+    },
+    updateBadgeClass(c) {
+      switch (this._updateState(c)) {
+        case 'outdated': return 'badge-update';
+        case 'uptodate': return 'badge-uptodate';
+        default: return 'badge-unchecked'; // local, noaccess, pending, other
+      }
     },
     updateLabel(c) {
-      const u = this.updateResults[c.name];
-      if (!u) return '\u2014';
-      if (u.error === 'local image, no registry digest') return 'Local';
-      if (u.error) return '\u2014';
-      return u.hasUpdate ? 'Outdated' : 'Up to date';
+      switch (this._updateState(c)) {
+        case 'outdated': return 'Outdated';
+        case 'uptodate': return 'Up to date';
+        case 'local': return 'Local';
+        case 'noaccess': return 'No access';
+        default: return '\u2014'; // pending + other (pinned, tagless, network)
+      }
     },
     updateTooltip(c) {
       const u = this.updateResults[c.name];
-      if (!u) return 'Not checked yet';
-      if (u.error === 'local image, no registry digest') return 'Locally built image — no registry to check';
-      if (u.error === 'pinned image') return 'Image pinned to specific digest';
-      if (u.error) return u.error;
-      if (u.hasUpdate) return u.image + ' — new image available';
-      return u.image + ' — checked ' + this.formatEventTime(u.checkedAt);
+      const state = this._updateState(c);
+      switch (state) {
+        case 'pending': return 'Not checked yet';
+        case 'local': return 'Locally built image — no registry to check';
+        case 'noaccess': return 'Registry requires login — add credentials in Tools → Image Updates → Private registry login';
+        case 'outdated': return u.image + ' — new image available';
+        case 'uptodate': return u.image + ' — checked ' + this.formatEventTime(u.checkedAt);
+      }
+      // "other" catches pinned, tagless, and transient errors. Surface the
+      // underlying reason in the tooltip so curious users still see it.
+      if (u && u.error) {
+        if (u.error === 'pinned image') return 'Pinned to a specific digest — no update check possible';
+        if (u.error.toLowerCase().includes('tagless')) return 'Tagless local image — repull to enable update checks';
+        return 'Could not check: ' + u.error;
+      }
+      return '';
     },
     get updateCheckSummary() {
-      const r = Object.values(this.updateResults || {});
-      return {
-        total: r.length,
-        upToDate: r.filter(u => !u.hasUpdate && !u.error).length,
-        updates: r.filter(u => u.hasUpdate).length,
-        errors: r.filter(u => u.error).length,
-        updatedContainers: r.filter(u => u.hasUpdate).map(u => u.containerName),
-        errorContainers: r.filter(u => u.error),
-      };
+      const counts = { total: 0, upToDate: 0, updates: 0, local: 0, noAccess: 0, other: 0 };
+      const updatedContainers = [];
+      const errorContainers = [];
+      for (const name in this.updateResults) {
+        const u = this.updateResults[name];
+        counts.total++;
+        if (u.hasUpdate) {
+          counts.updates++;
+          updatedContainers.push(u.containerName);
+          continue;
+        }
+        if (!u.error) { counts.upToDate++; continue; }
+        const s = u.error.toLowerCase();
+        if (u.error === 'local image, no registry digest') { counts.local++; continue; }
+        if (s.includes('unauthorized') || s.includes('denied')) {
+          counts.noAccess++;
+          errorContainers.push(u);
+          continue;
+        }
+        counts.other++;
+        errorContainers.push(u);
+      }
+      return { ...counts, updatedContainers, errorContainers };
     },
     async triggerUpdateCheck() {
       this.updateChecking = true;

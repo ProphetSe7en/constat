@@ -66,6 +66,11 @@ func main() {
 	// Initialize sequence executor
 	seqExecutor := NewSequenceExecutor(cli)
 
+	// Registry credential store for private image update checks.
+	// Must be created before the UpdateChecker so it can pass auth headers
+	// to the Docker daemon's /distribution endpoint.
+	registryStore := NewRegistryStore()
+
 	// Create app context
 	app := &App{
 		docker:          cli,
@@ -73,6 +78,7 @@ func main() {
 		restartLabel:    restartLabel,
 		stats:           statsCollector,
 		sequences:       seqExecutor,
+		registryStore:   registryStore,
 		restartDisabled: make(map[string]bool),
 	}
 	app.loadRestartDisabled()
@@ -86,7 +92,7 @@ func main() {
 	go imageCleaner.Run(ctx)
 
 	// Start update checker
-	updateChecker := NewUpdateChecker(cli)
+	updateChecker := NewUpdateChecker(cli, registryStore)
 	app.updateChecker = updateChecker
 	go updateChecker.Run(ctx)
 
@@ -144,6 +150,14 @@ func main() {
 	// Update checking
 	mux.HandleFunc("GET /api/updates", app.handleGetUpdates)
 	mux.HandleFunc("POST /api/updates/check", app.handleTriggerUpdateCheck)
+
+	// Private registry login (Tools tab). The logout endpoint takes the
+	// host as a query parameter instead of a path wildcard because
+	// Docker Hub's canonical key contains slashes that can't fit a
+	// single-segment ServeMux pattern.
+	mux.HandleFunc("GET /api/registry", app.handleListRegistry)
+	mux.HandleFunc("POST /api/registry/login", app.handleRegistryLogin)
+	mux.HandleFunc("DELETE /api/registry", app.handleRegistryLogout)
 
 	// Categories
 	cats := newCategoryStore()
@@ -205,6 +219,7 @@ type App struct {
 	sequences       *SequenceExecutor
 	imageCleaner    *ImageCleaner
 	updateChecker   *UpdateChecker
+	registryStore   *RegistryStore
 	categories      *categoryStore
 	restartDisabled map[string]bool
 	restartMu       sync.RWMutex
