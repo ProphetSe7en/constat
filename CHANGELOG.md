@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.9.15
+
+### Features
+- **Private registry login** — Update checks now work for images on private container registries (sponsor-gated GHCR packages, private organization images, paid Docker Hub accounts). Add credentials under **Tools → Image Updates → Private registry login**. Credentials are verified against the registry's `/v2/` endpoint with bearer-token challenge handling before saving, stored in the standard Docker config format (`/config/.docker/config.json`, permissions 600), and are never returned via the API or written to logs. If an authenticated request is rejected for an image that is actually publicly pullable (GHCR behavior when the token owner lacks explicit access to a public package), Constat automatically retries anonymously so logging in never breaks checks for other images on the same host.
+- **Token creation guide in UI** — The Private registry login form includes an inline, always-visible guide with a direct link to `github.com/settings/tokens/new` and a warning that only the `read:packages` scope should be enabled. Docker Hub alternative is also covered.
+- **Progress indicator during update checks** — The Check Now button now shows `Checking 42/57` live with the name of the container currently being processed, so you can see what is happening during the 1–2 minute full run instead of a static spinner.
+- **Calmer update-check taxonomy** — Replaced the binary "up to date / error" classification with five distinct, non-alarming states: **Outdated** (yellow, actionable), **Up to date** (green), **Local** (locally built, grey), **No access** (registry requires login, grey), and a neutral dash for rare edge cases (pinned digests, tagless locals, transient registry errors). Summary row in the Image Updates panel no longer uses the word "errors" for local builds and hides zero-count categories. Update-column sort order now puts most-actionable states first.
+
+### Breaking changes
+- **regctl removed from the image** — Update checks now go through the Docker daemon's `/distribution/{ref}/json` endpoint (`client.DistributionInspect`) instead of spawning `regctl` as a subprocess for each container. The image is ~38 MB smaller, update checks are faster, and there are no more `signal: killed` errors when a registry is slow. No user action required — the new path is strictly better. If you were reading `update-status.json` directly for the `Error` field, a few error strings have changed wording (e.g. `registry check timed out` → the daemon's own `context deadline exceeded`).
+
+### Performance
+- **No more 1-second rate limit between containers** — The previous sleep existed to throttle the regctl subprocess. Now that Constat goes through the Docker daemon directly (which queues and serializes registry calls internally), the sleep has been removed. A full update check of 57 containers is roughly 57 seconds faster per run.
+- **Registry auths snapshot once per run** — Configured credentials are now loaded once at the start of each check run instead of re-reading `/config/.docker/config.json` for every container. For a 57-container run this drops 57 disk reads down to 1.
+
+### Internal
+- **`DELETE /api/registry` now takes `host` as a query parameter** instead of a path wildcard. Go's ServeMux single-segment wildcard cannot match Docker Hub's canonical key (`https://index.docker.io/v1/`) which contains slashes.
+- **`RegistryStore.Save()` validates host format** against a regex (with an explicit pass-through for the Docker Hub sentinel key) so callers can't write garbage keys if they bypass the Verify/login path.
+- **Frontend race fix:** `/api/updates` poll responses are now ignored if a newer sequence number has already been applied. Previously, out-of-order responses from overlapping in-flight requests could flip `updateChecking` back to `true` after the check completed, leaving the UI stuck on "Checking...".
+- **README:** Added sections documenting the Tools tab, Image Update Checks, and Private registry login with a step-by-step token creation guide.
+
+## v0.9.14
+
+### Bug fixes
+- **Update checker exclude list ignored** — Containers added to the Tools → Image Cleanup exclude list still appeared under "Updates available" or "Errors" because the cached results from earlier checks were never cleaned up. Now excluded containers are filtered out at the API layer (immediate effect after saving config) and also pruned from the result map on every check run.
+- **Exclude takes effect immediately on save** — `saveConfig` now triggers a fresh `/api/updates` fetch right after a successful save, so newly-added exclusions disappear from the UI without waiting for the next 60s poll.
+- **"Last check" timestamp frozen** — The "Last check: X ago" label only re-rendered when the underlying value changed, so the relative time appeared stuck even though polling kept running in the background. Now ticks live every second alongside other timer-driven UI.
+- **`signal: killed` registry errors** — When a registry check exceeded the 30s timeout, `exec.CommandContext` killed regctl with SIGKILL and the cryptic `signal: killed` string was shown to the user. Now reported as `registry check timed out (>30s)`.
+- **Updates list does not refresh during a running check** — While `checking=true`, the frontend now polls `/api/updates` every 2s instead of 60s, so the up-to-date / updates / errors counts and the per-container badges trickle in live as regctl finishes each container. Polling falls back to the normal 60s cadence as soon as the check completes.
+- **Stale image references after repo rename** — Containers whose `Config.Image` points at a repo name that no longer matches any local tag (e.g. user renamed the GHCR repo but the local image still carries the old tag) caused Docker's list API to return a bare `sha256:...` for `c.Image`. The previous tag-recovery code then picked the *local* RepoTag (the old, displaced repo name) and asked the registry about it — failing with `unauthorized` because the old repo no longer exists. Now the checker first calls `ContainerInspect` and prefers `Config.Image` (the container template's intent) when recovering a tagless `c.Image`, falling back to `RepoTags[0]` and finally the OCI title-label recovery.
+- **Registry retry on missing-image errors** — As a second safety net, when the chosen image ref returns `unauthorized` / `manifest unknown` / `not found`, the checker now retries with whatever tag the local image actually carries. This catches edge cases where neither `Config.Image` nor `RepoTags[0]` initially produces a working ref.
+
 ## v0.9.13
 
 ### Bug fixes

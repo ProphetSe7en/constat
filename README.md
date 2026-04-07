@@ -22,6 +22,8 @@ A Docker container monitor with a built-in web UI. Track container health, view 
 - **Health monitoring** — tracks Docker healthcheck status, detects unhealthy containers
 - **Auto-restart** — label-gated restart for unhealthy containers with cooldown protection
 - **Memory watch** — per-container memory thresholds with notify or restart actions
+- **Image update checks** — registry digest comparison with support for private registries (GHCR sponsor packages, private org images, Docker Hub paid plans)
+- **Image & volume cleanup** — scheduled or manual pruning of unused images and volumes
 - **Log viewer** — real-time log streaming with level detection and color-coded display
 - **Event history** — Docker events (start, stop, die, health changes) with grouping
 - **Sequences** — multi-step container orchestration (start/stop chains with dependencies)
@@ -29,7 +31,7 @@ A Docker container monitor with a built-in web UI. Track container health, view 
 - **Mobile view** — dedicated mobile UI with container cards, sort/filter, charts, and events
 - **Healthcheck suggestions** — built-in database of recommended healthchecks for common images
 - **Config inspector** — view ports, volumes, networks, env vars, and labels per container
-- **Discord notifications** — state changes and health events with colored embeds
+- **Discord notifications** — state changes, health events, new updates with colored embeds
 - **Docker-native** — PUID/PGID/UMASK, healthcheck, Alpine-based (~46 MB)
 
 ## Quick Start
@@ -124,12 +126,21 @@ Multi-step container orchestration:
 - Dependency chains — fail-fast on required steps, skip optional failures
 - Searchable container dropdown for step assignment
 
+### Tools Tab
+
+Operational tools that complement the pure settings in Config:
+
+- **Memory Watch** — per-container memory thresholds with live progress bars, inline editor, and grouped rule display
+- **Image Updates** — registry digest comparison (no pulls), scheduled checks with Discord notifications for new updates, color-coded status per container in the main table
+- **Private registry login** — optional credential store for sponsor-gated GHCR packages, private organization images, and paid Docker Hub accounts. Credentials are verified against the registry's `/v2/` endpoint before saving and stored in `/config/.docker/config.json` with 600 permissions. Public images always work without any login — the registry login only unlocks update checks for images that anonymous requests cannot reach.
+- **Cleanup** — manual or scheduled pruning of unused Docker images and volumes, with dry-run mode for safety
+
 ### Config Tab
 
 Edit all settings from the browser:
 
-- Discord webhooks (state + health, separate channels)
-- Memory watch rules — add, edit, remove with inline forms
+- Discord webhooks (state + health + maintenance, separate channels)
+- Gotify notifications
 - Display toggles: show/hide stats columns, charts
 - Embed color customization with hex previews
 - Time/date format and timezone
@@ -192,6 +203,22 @@ MEMORY_WATCH=(
 
 Rules can also be managed from the Config tab in the Web UI.
 
+### Image Update Checks
+
+Constat can check whether newer versions of your container images exist on the registry, without pulling anything. It asks the Docker daemon for the current remote manifest digest and compares it to what is stored locally — if they differ, the container is flagged as "Outdated" in the main table.
+
+**Enable it** in the Tools tab under Image Updates. You can pick how often the scheduled check runs (6/12/24 hours) and list containers to exclude. Each full check takes about 60–120 seconds depending on how many containers you have. A one-shot **Check Now** button triggers a manual run with a live progress counter.
+
+**Private registries.** Public images work without any configuration — Constat contacts the registry anonymously. Some images require authentication (sponsor-gated GHCR packages, private organization images, paid Docker Hub tiers). Those show up as **No access** in the Update column. To enable checks for them, expand the **Private registry login** subsection under Image Updates and add a credential:
+
+1. For GHCR: create a [classic personal access token](https://github.com/settings/tokens/new) with **only** the `read:packages` scope. Do not enable `repo`, `write:packages`, `delete:packages`, or any other scope — `read:packages` is read-only and cannot modify anything on your account.
+2. For Docker Hub: create an access token at [hub.docker.com/settings/security](https://hub.docker.com/settings/security) with **Public Repo Read-only** permission.
+3. Paste the token into the login form and click Login. Credentials are verified against the registry before saving — invalid tokens are rejected immediately.
+
+Credentials are stored in `/config/.docker/config.json` using the standard Docker config format (the same file `docker login` writes). The file is created with 600 permissions (owner-only). Tokens are never shown again after saving, never returned via the API, and never logged. Click **Remove** next to a registry to delete the stored credentials immediately.
+
+If an authenticated request is rejected for an image that is actually publicly pullable (GHCR sometimes does this when the token owner doesn't have explicit access to a public package), Constat automatically retries anonymously so logging in to one registry never breaks checks for other packages on the same host.
+
 ### Healthcheck Suggestions
 
 Constat includes a built-in database of recommended healthcheck commands for common Docker images (Plex, Radarr, Sonarr, Prowlarr, Bazarr, PostgreSQL, MariaDB, qBittorrent, SWAG, and more). When a running container has no healthcheck configured, a suggestion appears in the expanded view with the command to add as an Extra Parameter. Ports are automatically detected from the container's actual port bindings — if a non-standard port is in use, the suggestion adjusts automatically.
@@ -224,7 +251,7 @@ Note: you'll need read/write access for container restart and start/stop functio
 | Container Path | Purpose |
 |---------------|---------|
 | `/var/run/docker.sock` | Docker socket (required for monitoring) |
-| `/config` | Config, sequences, stats history, restart overrides |
+| `/config` | Config, sequences, stats history, restart overrides, registry logins (`.docker/config.json`) |
 
 ### Ports
 
@@ -289,6 +316,9 @@ Docker Engine
        ├── /api/containers/{id}/logs/stream — SSE: live log streaming
        ├── /api/events/stream      — SSE: Docker events
        ├── /api/sequences/*        — sequence CRUD + execution
+       ├── /api/updates            — image update check results
+       ├── /api/registry           — private registry logins (list/add/remove)
+       ├── /api/images, /api/volumes — image and volume cleanup
        ├── /api/config             — config read/write
        ├── /api/health-suggestions — healthcheck database
        └── /api/summary            — container counts (healthcheck endpoint)
@@ -310,6 +340,7 @@ The Web UI has no authentication — anyone with network access to port 7890 can
 - Use a reverse proxy with authentication if exposing externally
 - Docker socket access grants full container control — use a socket proxy for read-only if you don't need restart/start/stop
 - Config can contain Discord webhook URLs — treat port 7890 as a trusted interface
+- Registry credentials (if you use Private registry login) are stored at `/config/.docker/config.json` in the standard Docker format with 600 permissions — the same as `docker login` on the host. Back up or restrict your `/config` mount accordingly
 
 ## Support
 

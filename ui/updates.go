@@ -1,13 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -29,21 +27,28 @@ type UpdateStatus struct {
 	CheckedAt     time.Time `json:"checkedAt"`
 }
 
-// UpdateChecker runs periodic image update checks using regctl
+// UpdateChecker runs periodic image update checks using the Docker daemon's
+// /distribution/{ref}/json endpoint (DistributionInspect). Credentials for
+// private registries come from the RegistryStore.
 type UpdateChecker struct {
-	mu            sync.RWMutex
-	docker        *client.Client
-	results       map[string]*UpdateStatus
-	lastFullRun   time.Time
-	checking      bool
-	wasEnabled    bool
-	manualTrigger chan struct{}
+	mu             sync.RWMutex
+	docker         *client.Client
+	registry       *RegistryStore
+	results        map[string]*UpdateStatus
+	lastFullRun    time.Time
+	checking       bool
+	wasEnabled     bool
+	manualTrigger  chan struct{}
+	checkProgress  int    // containers processed in current run
+	checkTotal     int    // total containers queued for current run
+	checkCurrent   string // container currently being checked
 }
 
 // NewUpdateChecker creates a new update checker
-func NewUpdateChecker(docker *client.Client) *UpdateChecker {
+func NewUpdateChecker(docker *client.Client, registry *RegistryStore) *UpdateChecker {
 	uc := &UpdateChecker{
 		docker:        docker,
+		registry:      registry,
 		results:       make(map[string]*UpdateStatus),
 		manualTrigger: make(chan struct{}, 1),
 	}
@@ -53,12 +58,6 @@ func NewUpdateChecker(docker *client.Client) *UpdateChecker {
 
 // Run starts the periodic update check loop
 func (uc *UpdateChecker) Run(ctx context.Context) {
-	// Check if regctl is available
-	if _, err := exec.LookPath("regctl"); err != nil {
-		log.Println("Updates: regctl not found, update checking disabled")
-		return
-	}
-
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
@@ -111,6 +110,9 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 		return
 	}
 	uc.checking = true
+	uc.checkProgress = 0
+	uc.checkTotal = 0
+	uc.checkCurrent = ""
 	uc.mu.Unlock()
 
 	log.Println("Updates: starting update check...")
@@ -118,6 +120,9 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 	defer func() {
 		uc.mu.Lock()
 		uc.checking = false
+		uc.checkProgress = 0
+		uc.checkTotal = 0
+		uc.checkCurrent = ""
 		uc.lastFullRun = time.Now()
 		uc.mu.Unlock()
 		uc.saveToDisk()
@@ -127,6 +132,16 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 	if err != nil {
 		log.Printf("Updates: failed to read config: %v", err)
 		return
+	}
+
+	// Snapshot registry auths once up front. All per-container auth lookups
+	// during this run read from this snapshot instead of re-opening
+	// config.json, which would otherwise happen dozens of times per check.
+	var authSnap AuthSnapshot
+	if uc.registry != nil {
+		authSnap = uc.registry.Snapshot()
+	} else {
+		authSnap = AuthSnapshot{}
 	}
 
 	// Build exclude set
@@ -145,18 +160,26 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 		return
 	}
 
-	// Clean up stale results for removed containers
+	// Single pass: collect names, build the "currently exists" set for
+	// stale-result cleanup, and compute the progress total (excluding any
+	// containers that match the exclude set).
 	currentNames := make(map[string]bool, len(containers))
+	total := 0
 	for _, c := range containers {
-		name := c.ID[:12]
+		n := c.ID[:12]
 		if len(c.Names) > 0 {
-			name = strings.TrimPrefix(c.Names[0], "/")
+			n = strings.TrimPrefix(c.Names[0], "/")
 		}
-		currentNames[name] = true
+		currentNames[n] = true
+		if !excludeSet[strings.ToLower(n)] {
+			total++
+		}
 	}
+
 	uc.mu.Lock()
+	uc.checkTotal = total
 	for k := range uc.results {
-		if !currentNames[k] {
+		if !currentNames[k] || excludeSet[strings.ToLower(k)] {
 			delete(uc.results, k)
 		}
 	}
@@ -191,6 +214,15 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 			log.Printf("Updates: skipping %s (excluded)", name)
 			continue
 		}
+
+		// Progress is tracked per-iteration (one tick for every container
+		// we actually attempt — excluded ones were already subtracted from
+		// checkTotal above). The checkCurrent field is only used for the
+		// UI's "Checking name..." label.
+		uc.mu.Lock()
+		uc.checkCurrent = name
+		uc.checkProgress++
+		uc.mu.Unlock()
 
 		imageRef := c.Image
 		status := &UpdateStatus{
@@ -227,13 +259,26 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 		// When c.Image is a valid tag (the normal case), respect it — never
 		// override with RepoTags[0] because Docker may order multiple tags
 		// unpredictably and we'd report the wrong tag for multi-tagged images.
-		// Only fall back to RepoTags / title-label recovery when c.Image is a
-		// bare "sha256:..." (tagless image — original tag displaced locally).
+		// Only fall back when c.Image is a bare "sha256:..." (tag displaced
+		// locally because the container template references a tag that no
+		// longer matches any local tag — common when an upstream repo gets
+		// renamed and the user updated their template but never re-pulled).
 		if strings.HasPrefix(imageRef, "sha256:") {
-			// First try RepoTags in case Docker still has some tag on the image
-			if len(imageInspect.RepoTags) > 0 && imageInspect.RepoTags[0] != "<none>:<none>" {
+			// 1. Prefer Config.Image from the container itself — that's the
+			//    user's intent at create time and is the most authoritative
+			//    source for "what should this be checked against".
+			if inspect, err := uc.docker.ContainerInspect(ctx, c.ID); err == nil &&
+				inspect.Config != nil && inspect.Config.Image != "" &&
+				!strings.HasPrefix(inspect.Config.Image, "sha256:") {
+				imageRef = inspect.Config.Image
+				status.Image = imageRef
+				log.Printf("Updates: %s — c.Image was sha256, recovered from container Config.Image: %s", name, imageRef)
+			} else if len(imageInspect.RepoTags) > 0 && imageInspect.RepoTags[0] != "<none>:<none>" {
+				// 2. Container inspect failed or also returned sha256 — fall
+				//    back to whatever tag the local image actually carries.
 				imageRef = imageInspect.RepoTags[0]
 				status.Image = imageRef
+				log.Printf("Updates: %s — c.Image was sha256, recovered from RepoTags: %s", name, imageRef)
 			}
 		}
 		if strings.HasPrefix(imageRef, "sha256:") {
@@ -278,14 +323,39 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 			imageRef += ":latest"
 		}
 
-		// Get remote digest via regctl
-		remoteDigest, err := uc.getRemoteDigest(ctx, imageRef)
+		// Ask the Docker daemon for the current remote digest. The daemon
+		// contacts the registry directly and handles bearer-token auth,
+		// multi-arch manifest lists, and redirects.
+		remoteDigest, err := uc.getRemoteDigest(ctx, imageRef, authSnap)
 		if err != nil {
-			log.Printf("Updates: %s — registry error: %s", name, err)
-			status.Error = err.Error()
-			uc.setResult(name, status)
-			time.Sleep(1 * time.Second)
-			continue
+			// Fallback: if the registry says the image doesn't exist, the
+			// container reference is probably stale (e.g. user renamed the
+			// repo on GHCR but the container still points at the old name).
+			// Retry using whatever tag the local image is actually labeled
+			// with — that reflects the last successful pull.
+			errStr := strings.ToLower(err.Error())
+			isMissing := strings.Contains(errStr, "unauthorized") ||
+				strings.Contains(errStr, "manifest unknown") ||
+				strings.Contains(errStr, "not found") ||
+				strings.Contains(errStr, "repository name not known")
+			if isMissing && len(imageInspect.RepoTags) > 0 &&
+				imageInspect.RepoTags[0] != "<none>:<none>" &&
+				imageInspect.RepoTags[0] != imageRef {
+				altRef := imageInspect.RepoTags[0]
+				log.Printf("Updates: %s — %q failed (%s), retrying with local tag %q", name, imageRef, err, altRef)
+				if altDigest, altErr := uc.getRemoteDigest(ctx, altRef, authSnap); altErr == nil {
+					imageRef = altRef
+					status.Image = altRef
+					remoteDigest = altDigest
+					err = nil
+				}
+			}
+			if err != nil {
+				log.Printf("Updates: %s — registry error: %s", name, err)
+				status.Error = err.Error()
+				uc.setResult(name, status)
+				continue
+			}
 		}
 		status.RemoteDigest = remoteDigest
 
@@ -303,7 +373,12 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 		}
 
 		uc.setResult(name, status)
-		time.Sleep(1 * time.Second) // Rate limit between checks
+		// No explicit rate limit here: the Docker daemon queues and
+		// serializes registry calls internally, and the registries we
+		// care about (GHCR, Docker Hub, GitLab, Quay) all tolerate
+		// back-to-back manifest HEAD requests at this cadence. The
+		// previous 1s sleep existed to throttle a regctl subprocess
+		// that has since been removed.
 	}
 
 	// Count total updates
@@ -334,23 +409,62 @@ func (uc *UpdateChecker) runCheck(ctx context.Context) {
 	}
 }
 
-func (uc *UpdateChecker) getRemoteDigest(ctx context.Context, imageRef string) (string, error) {
+// getRemoteDigest asks the Docker daemon for the current registry digest of
+// an image reference. The daemon contacts the registry itself and handles
+// multi-arch manifest lists, redirects, and bearer-token auth internally.
+//
+// Auth handling:
+//
+//  1. If Constat has stored credentials for the image's registry host, try
+//     with auth first — this is needed for private packages.
+//  2. If the authenticated request is rejected with "denied"/"unauthorized",
+//     retry anonymously. GHCR specifically returns "denied: denied" when
+//     a PAT is sent for a package the token owner doesn't have explicit
+//     access to, EVEN IF the package is publicly pullable. Anonymous works
+//     in that case, so we fall through.
+//  3. If there are no stored credentials, go straight to an anonymous call.
+//
+// The authSnap argument is an in-memory snapshot taken at the start of the
+// check run so we don't re-read config.json once per container.
+func (uc *UpdateChecker) getRemoteDigest(ctx context.Context, imageRef string, authSnap AuthSnapshot) (string, error) {
 	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(checkCtx, "regctl", "image", "digest", "--list", imageRef)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	encodedAuth := BuildRegistryAuthFrom(authSnap, imageRef)
 
-	if err := cmd.Run(); err != nil {
-		errMsg := strings.TrimSpace(stderr.String())
-		if errMsg == "" {
-			errMsg = err.Error()
-		}
-		return "", fmt.Errorf("%s", errMsg)
+	resp, err := uc.docker.DistributionInspect(checkCtx, imageRef, encodedAuth)
+	if err != nil && encodedAuth != "" && isAuthRejection(err) {
+		// Retry anonymously — our creds don't grant access to this specific
+		// package, but it may be public.
+		log.Printf("Updates: %s — auth rejected (%v), retrying anonymously", imageRef, err)
+		resp, err = uc.docker.DistributionInspect(checkCtx, imageRef, "")
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	if err != nil {
+		msg := err.Error()
+		// Clean up the common prefix the daemon adds to HEAD errors so
+		// users see "unauthorized" rather than a 200-character wrapper.
+		if idx := strings.Index(msg, ": "); idx >= 0 && idx < 60 {
+			msg = strings.TrimSpace(msg[idx+2:])
+		}
+		return "", fmt.Errorf("%s", msg)
+	}
+	digest := string(resp.Descriptor.Digest)
+	if digest == "" {
+		return "", fmt.Errorf("registry returned empty digest")
+	}
+	return digest, nil
+}
+
+// isAuthRejection reports whether an error from DistributionInspect looks
+// like the registry denying our credentials (vs. network/transport errors
+// or legitimate "image not found"). Matches the common phrases GHCR, Docker
+// Hub, and standard OCI registries return.
+func isAuthRejection(err error) bool {
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "unauthorized") ||
+		strings.Contains(s, "denied: denied") ||
+		strings.Contains(s, "denied: requested access to the resource is denied") ||
+		strings.Contains(s, "403 forbidden")
 }
 
 func extractDigestFromRepoDigests(repoDigests []string) string {
@@ -384,6 +498,15 @@ func (uc *UpdateChecker) IsChecking() bool {
 	uc.mu.RLock()
 	defer uc.mu.RUnlock()
 	return uc.checking
+}
+
+// Progress returns the current check's progress: containers processed,
+// total queued, and the name of the container being checked right now.
+// When no check is running all three return zero values.
+func (uc *UpdateChecker) Progress() (done, total int, current string) {
+	uc.mu.RLock()
+	defer uc.mu.RUnlock()
+	return uc.checkProgress, uc.checkTotal, uc.checkCurrent
 }
 
 // LastCheck returns the time of the last full check run
