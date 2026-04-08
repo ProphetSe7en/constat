@@ -29,7 +29,6 @@
   <Config Name="WebUI" Target="7890" Default="7890" Mode="tcp" Description="Web UI port" Type="Port" Display="always" Required="true" Mask="false">7890</Config>
   <Config Name="Docker Socket" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="rw" Description="Docker socket for container monitoring and auto-restart" Type="Path" Display="always" Required="true" Mask="false">/var/run/docker.sock</Config>
   <Config Name="Config Path" Target="/config" Default="/mnt/user/appdata/constat" Mode="rw" Description="Config directory — edit constat.conf for all settings" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/constat</Config>
-  <Config Name="TZ" Target="TZ" Default="America/New_York" Mode="" Description="Timezone (TZ database name)" Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID for file ownership" Type="Variable" Display="always" Required="false" Mask="false">99</Config>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID for file ownership" Type="Variable" Display="always" Required="false" Mask="false">100</Config>
   <Config Name="UMASK" Target="UMASK" Default="002" Mode="" Description="File creation mask" Type="Variable" Display="always" Required="false" Mask="false">002</Config>

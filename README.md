@@ -1,5 +1,7 @@
 # Constat
 
+![GitHub Release](https://img.shields.io/github/v/release/ProphetSe7en/constat?label=latest)
+
 A Docker container monitor with a built-in web UI. Track container health, view live resource stats, stream logs, get Discord notifications, and auto-restart unhealthy containers — all from a single lightweight image.
 
 ## Screenshots
