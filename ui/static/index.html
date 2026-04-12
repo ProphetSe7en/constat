@@ -853,7 +853,7 @@
             <template x-if="!c.icon">
               <span class="dot" :class="dotClass(c)"></span>
             </template>
-            <span class="mobile-card-name" x-text="c.name"></span>
+            <span class="mobile-card-name" :style="config && config.updateCheckEnabled === 'true' && _updateState(c) === 'outdated' ? 'color:#d29922' : ''" x-text="c.name"></span>
             <span x-show="c.netParentDown && c.state === 'running'" style="color:#f85149">&#9888;</span>
             <span class="mobile-card-state" :class="'csi-' + c.state" x-text="c.state"></span>
           </div>
@@ -871,6 +871,11 @@
           </div>
           <!-- Expanded detail -->
           <div class="mobile-card-detail" x-show="expandedId === c.id" x-transition @click.stop>
+
+            <!-- Update available -->
+            <div x-show="config && config.updateCheckEnabled === 'true' && _updateState(c) === 'outdated'" style="font-size:12px;margin-bottom:10px">
+              <span class="badge badge-update" style="font-size:10px">Outdated</span>
+            </div>
 
             <!-- Network parent down warning -->
             <div x-show="c.netParentDown && c.state === 'running'" style="font-size:12px;color:#f85149;margin-bottom:10px;display:flex;align-items:center;gap:6px">

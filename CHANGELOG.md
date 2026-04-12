@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.16
+
+### Improved
+
+- **Mobile view — update indicator** — Containers with available updates now show an orange container name in mobile view, with an "Outdated" badge in the expanded detail. Uses the same update check data as desktop view. No layout shift.
+
 ## v0.9.15
 
 ### Features

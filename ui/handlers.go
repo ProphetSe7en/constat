@@ -520,7 +520,7 @@ func sendDiscordMaintenance(title, description string, color int) {
 		}},
 	}
 	body, _ := json.Marshal(payload)
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := sharedNotifyClient
 	resp, err := client.Post(webhook, "application/json", bytes.NewReader(body))
 	if err != nil {
 		log.Printf("Discord maintenance: send failed: %v", err)
@@ -568,7 +568,7 @@ func sendGotifyMessage(title, message string, priority int) {
 		},
 	}
 	body, _ := json.Marshal(payload)
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := sharedNotifyClient
 	url := strings.TrimRight(cfg.GotifyURL, "/") + "/message?token=" + url.QueryEscape(cfg.GotifyToken)
 	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -611,7 +611,7 @@ func (app *App) handleTestGotify(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	body, _ := json.Marshal(payload)
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := sharedNotifyClient
 	gotifyURL := strings.TrimRight(req.URL, "/") + "/message?token=" + url.QueryEscape(req.Token)
 	resp, err := client.Post(gotifyURL, "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -1036,7 +1036,7 @@ func (app *App) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	body, _ := json.Marshal(payload)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := sharedNotifyClient
 	resp, err := client.Post(req.URL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		writeError(w, 502, fmt.Sprintf("Webhook request failed: %v", err))

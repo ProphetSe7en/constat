@@ -208,6 +208,11 @@ func main() {
 
 // Version is set at build time via -ldflags="-X main.Version=..."
 var Version = "dev"
+
+// sharedNotifyClient is a package-level HTTP client for Discord/Gotify
+// notifications. Reused across all notification calls to avoid leaking
+// idle connection pools from per-call http.Client creation.
+var sharedNotifyClient = &http.Client{Timeout: 10 * time.Second}
 const restartDisabledPath = "/config/restart_disabled.json"
 
 // App holds shared application state
