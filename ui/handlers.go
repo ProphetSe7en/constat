@@ -21,6 +21,9 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
+
+	"constat-ui/auth"
+	"constat-ui/netsec"
 )
 
 func networkListOptions() network.ListOptions {
@@ -46,13 +49,128 @@ type Summary struct {
 
 func writeJSON(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")
+	// No-store prevents shared browser caches + reverse-proxy caches from
+	// retaining /api/* responses. Even with masking, a 4+4 API-key reveal
+	// or config blob shouldn't live on a kiosk browser after logout.
+	w.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(w).Encode(data)
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+// Masking helpers for Discord webhook URLs + Gotify token returned via
+// /api/config. These live in `constat.conf` plaintext (file is 0600); the
+// HTTP response masks them so a session-hijack / XSS / local-bypass peer
+// cannot exfiltrate them in one GET. Same pattern as Clonarr uses.
+const (
+	maskedDiscordWebhook = "https://discord.com/api/webhooks/[MASKED]/[MASKED]"
+	maskedToken          = "••••••••••••••••" // 16 bullets — looks different from any real token
+)
+
+// maskSecret returns the placeholder if s is non-empty; otherwise empty.
+// Lets the UI see "field is populated" vs "field is empty" without
+// revealing the actual value.
+func maskSecret(s, placeholder string) string {
+	if s == "" {
+		return ""
+	}
+	return placeholder
+}
+
+// sanitizeLogField strips control characters (CR, LF, NUL, other < 0x20)
+// and caps length to 256 bytes. Prevents log-injection: a caller submitting
+// `"foo\n2026-04-19 XX:YY:ZZ AUTH: admin login from 10.0.0.1"` must not be
+// able to forge a legitimate-looking log line downstream. Applied to any
+// user-controlled string that reaches log.Printf / debug log files.
+func sanitizeLogField(s string) string {
+	const maxLen = 256
+	if len(s) > maxLen {
+		s = s[:maxLen]
+	}
+	b := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < 0x20 || c == 0x7f {
+			b = append(b, ' ')
+			continue
+		}
+		b = append(b, c)
+	}
+	return string(b)
+}
+
+// preserveIfMasked returns the existing stored value when the incoming
+// value equals the placeholder (UI round-trip of an unchanged masked
+// field). Otherwise returns the incoming value. Prevents the masked
+// placeholder from being persisted literally to disk when the user edits
+// unrelated fields.
+func preserveIfMasked(incoming, existing, placeholder string) string {
+	if incoming == placeholder {
+		return existing
+	}
+	return incoming
+}
+
+// trustedProxiesEqual returns true iff both CSV strings parse to the same
+// set of IPs (order- and whitespace- and IPv6-case-insensitive). Either
+// side failing to parse is treated as "empty" — matches only if BOTH sides
+// are empty/invalid, which for the env-lock equality check is the correct
+// conservative behaviour (reject if we can't prove they match).
+func trustedProxiesEqual(a, b string) bool {
+	as, _ := netsec.ParseTrustedProxies(a)
+	bs, _ := netsec.ParseTrustedProxies(b)
+	if len(as) != len(bs) {
+		return false
+	}
+	aStr := make([]string, len(as))
+	for i, ip := range as {
+		aStr[i] = ip.String()
+	}
+	bStr := make([]string, len(bs))
+	for i, ip := range bs {
+		bStr[i] = ip.String()
+	}
+	sort.Strings(aStr)
+	sort.Strings(bStr)
+	for i := range aStr {
+		if aStr[i] != bStr[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// trustedNetworksEqual returns true iff both CSV strings parse to the same
+// set of CIDR prefixes (order- and whitespace-insensitive, canonical IP
+// form). Net.IPNet.String() produces canonical output (e.g. lowercases IPv6
+// and normalizes leading zeros), so sorted string-compare is safe.
+func trustedNetworksEqual(a, b string) bool {
+	as, _ := netsec.ParseTrustedNetworks(a)
+	bs, _ := netsec.ParseTrustedNetworks(b)
+	if len(as) != len(bs) {
+		return false
+	}
+	aStr := make([]string, len(as))
+	for i, n := range as {
+		aStr[i] = n.String()
+	}
+	bStr := make([]string, len(bs))
+	for i, n := range bs {
+		bStr[i] = n.String()
+	}
+	sort.Strings(aStr)
+	sort.Strings(bStr)
+	for i := range aStr {
+		if aStr[i] != bStr[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (app *App) handleSummary(w http.ResponseWriter, r *http.Request) {
@@ -365,6 +483,18 @@ func (app *App) handlePostEvent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "container, type, and action are required")
 		return
 	}
+	// Reject container names that don't match Docker's container-name grammar.
+	// Prevents log-injection via embedded \r\n\x00 in req.Container poisoning
+	// the server log with forged auth/admin lines.
+	if !validContainerName.MatchString(req.Container) {
+		writeError(w, 400, "container: only letters, digits, dots, hyphens, underscores allowed")
+		return
+	}
+	// Type and Action are free-form in this endpoint (external scripts pick
+	// their own labels). Strip control chars + cap length so they can't forge
+	// newlines into the server log either.
+	req.Type = sanitizeLogField(req.Type)
+	req.Action = sanitizeLogField(req.Action)
 
 	event := Event{
 		Timestamp: time.Now(),
@@ -777,7 +907,7 @@ func ensureConfig() {
 		log.Printf("No config sample found at %s: %v", configSamplePath, err)
 		return
 	}
-	if err := os.WriteFile(configPath, data, 0664); err != nil {
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
 		log.Printf("Failed to create config from sample: %v", err)
 		return
 	}
@@ -794,6 +924,16 @@ func (app *App) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "Failed to read config")
 		return
 	}
+	// Mask credentials before returning. These fields contain bearer-equivalent
+	// secrets (Discord webhook URLs embed the auth token in the path; Gotify
+	// token is a raw bearer). Even on an auth-gated endpoint, returning them
+	// plaintext gives a session-hijack / XSS / local-bypass peer one call to
+	// exfiltrate every webhook and token. The UI ignores the placeholder on
+	// save via preserveIfMasked in handleUpdateConfig.
+	config.WebhookState = maskSecret(config.WebhookState, maskedDiscordWebhook)
+	config.WebhookHealth = maskSecret(config.WebhookHealth, maskedDiscordWebhook)
+	config.WebhookMaintenance = maskSecret(config.WebhookMaintenance, maskedDiscordWebhook)
+	config.GotifyToken = maskSecret(config.GotifyToken, maskedToken)
 	// Attach version to response (read-only, not saved to config file)
 	resp := struct {
 		ConfigData
@@ -804,10 +944,51 @@ func (app *App) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 
 func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 65536)
+	// Read body ONCE into memory so we can decode into two structs: the
+	// main ConfigData (persisted to disk) and a side struct that picks up
+	// `confirm_password` (never persisted, never logged by upstream proxies
+	// because it's in the body not headers).
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, 400, "Failed to read request body")
+		return
+	}
 	var config ConfigData
-	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+	if err := json.Unmarshal(bodyBytes, &config); err != nil {
 		writeError(w, 400, "Invalid JSON body")
 		return
+	}
+	var confirmBody struct {
+		ConfirmPassword string `json:"confirm_password"`
+	}
+	_ = json.Unmarshal(bodyBytes, &confirmBody) // optional field — decode errors ignored
+
+	// Preserve masked secrets BEFORE validation. handleGetConfig masks these
+	// four fields on read; if the UI round-trips a masked value back
+	// (user edited other fields and clicked Save), substitute the existing
+	// stored value so validation doesn't reject the placeholder and the save
+	// doesn't clobber the real secret with "[MASKED]".
+	//
+	// Defense-in-depth: if ReadConfig fails (disk error, corrupt file),
+	// reject any incoming placeholder value outright — we cannot safely
+	// round-trip it to disk without the existing value to fall back to,
+	// and the placeholder itself would pass URL validation (discord.com
+	// prefix) and clobber a real webhook silently. Hard-fail the request.
+	if existing, rerr := ReadConfig(configPath); rerr == nil {
+		config.WebhookState = preserveIfMasked(config.WebhookState, existing.WebhookState, maskedDiscordWebhook)
+		config.WebhookHealth = preserveIfMasked(config.WebhookHealth, existing.WebhookHealth, maskedDiscordWebhook)
+		config.WebhookMaintenance = preserveIfMasked(config.WebhookMaintenance, existing.WebhookMaintenance, maskedDiscordWebhook)
+		config.GotifyToken = preserveIfMasked(config.GotifyToken, existing.GotifyToken, maskedToken)
+	} else {
+		// Can't preserve — reject placeholders to avoid writing them to disk.
+		if config.WebhookState == maskedDiscordWebhook ||
+			config.WebhookHealth == maskedDiscordWebhook ||
+			config.WebhookMaintenance == maskedDiscordWebhook ||
+			config.GotifyToken == maskedToken {
+			log.Printf("handleUpdateConfig: ReadConfig failed (%v) AND request contains masked placeholder — rejecting to prevent writing the placeholder to disk", rerr)
+			writeError(w, 500, "cannot preserve existing secrets (config read failed); re-type the webhook/token fields or resolve the disk error before saving")
+			return
+		}
 	}
 
 	// Validate webhook URLs
@@ -986,6 +1167,158 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			if _, err := time.ParseDuration(entry.MaxWindow); err != nil {
 				writeError(w, 400, fmt.Sprintf("Invalid memory watch maxWindow '%s': must be a Go duration (e.g. 24h, 12h, 1h)", entry.MaxWindow))
 				return
+			}
+		}
+	}
+
+	// ==== Authentication settings validation =============================
+	// Must pass before we write the file — bad values would lock the admin
+	// out on the next middleware call if we persisted them.
+	if config.Authentication != "" {
+		switch config.Authentication {
+		case "forms", "basic", "none":
+			// ok — the UI confirmation modal is the guard against accidental "none"
+		default:
+			writeError(w, 400, "authentication must be one of: forms, basic, none")
+			return
+		}
+	}
+	if config.AuthenticationRequired != "" {
+		switch config.AuthenticationRequired {
+		case "enabled", "disabled_for_local_addresses":
+			// ok
+		default:
+			writeError(w, 400, "authenticationRequired must be one of: enabled, disabled_for_local_addresses")
+			return
+		}
+	}
+	if config.SessionTTLDays != "" {
+		n, err := strconv.Atoi(config.SessionTTLDays)
+		if err != nil || n <= 0 || n > 365 {
+			writeError(w, 400, "sessionTtlDays must be an integer 1..365")
+			return
+		}
+	}
+	// Reject UI attempts to change an env-locked trust-boundary field.
+	// Compare SEMANTICALLY (parse both sides, sort, set-equal) rather than
+	// byte-wise on the raw strings — whitespace, IPv6 casing, or reorder
+	// shouldn't trip the lock since they don't change the trust boundary.
+	// Match the real invariant, not string identity.
+	if app.authStore != nil && app.authStore.TrustedProxiesLocked() {
+		if !trustedProxiesEqual(config.TrustedProxies, app.authStore.TrustedProxiesRaw()) {
+			writeError(w, 403, "trustedProxies is locked by the TRUSTED_PROXIES environment variable. Edit the Unraid template / docker-compose file and restart the container to change it.")
+			return
+		}
+	}
+	if app.authStore != nil && app.authStore.TrustedNetworksLocked() {
+		if !trustedNetworksEqual(config.TrustedNetworks, app.authStore.TrustedNetworksRaw()) {
+			writeError(w, 403, "trustedNetworks is locked by the TRUSTED_NETWORKS environment variable. Edit the Unraid template / docker-compose file and restart the container to change it.")
+			return
+		}
+	}
+	if config.TrustedProxies != "" {
+		if _, err := netsec.ParseTrustedProxies(config.TrustedProxies); err != nil {
+			writeError(w, 400, fmt.Sprintf("trustedProxies: %v", err))
+			return
+		}
+	}
+	if config.TrustedNetworks != "" {
+		if _, err := netsec.ParseTrustedNetworks(config.TrustedNetworks); err != nil {
+			writeError(w, 400, fmt.Sprintf("trustedNetworks: %v", err))
+			return
+		}
+	}
+
+	// Build the new auth config in memory and validate it BEFORE writing
+	// to disk. If UpdateConfig would reject it, we must not land a bad
+	// file on disk that would refuse to boot on next restart.
+	var newAuthCfg auth.Config
+	if app.authStore != nil {
+		newAuthCfg = app.authStore.Config()
+		if config.Authentication != "" {
+			newAuthCfg.Mode = auth.AuthMode(config.Authentication)
+		}
+		if config.AuthenticationRequired != "" {
+			newAuthCfg.Requirement = auth.Requirement(config.AuthenticationRequired)
+		}
+		if config.SessionTTLDays != "" {
+			if days, perr := strconv.Atoi(config.SessionTTLDays); perr == nil && days > 0 {
+				newAuthCfg.SessionTTL = time.Duration(days) * 24 * time.Hour
+			}
+		}
+		// When env-locked, the newAuthCfg.Trusted{Proxies,Networks} already
+		// carry the env-derived values from Config(); don't re-parse the
+		// submitted string (even though compare-against-raw guaranteed they
+		// match, an empty submission would parse to nil and clobber the
+		// env lock — see Clonarr C1).
+		if !app.authStore.TrustedProxiesLocked() {
+			if ips, perr := netsec.ParseTrustedProxies(config.TrustedProxies); perr == nil {
+				newAuthCfg.TrustedProxies = ips
+			}
+		}
+		if !app.authStore.TrustedNetworksLocked() {
+			if nets, perr := netsec.ParseTrustedNetworks(config.TrustedNetworks); perr == nil {
+				newAuthCfg.TrustedNetworks = nets
+			}
+		}
+		// Pre-flight validation: would UpdateConfig accept this? If not,
+		// abort before touching the disk. (Enum values already validated
+		// by the switches above; this catches things like TTL bounds.)
+		if verr := auth.ValidateConfig(newAuthCfg); verr != nil {
+			writeError(w, 400, fmt.Sprintf("Auth config invalid: %v", verr))
+			return
+		}
+	}
+
+	// Password-confirm required for ANY save that has authentication=none.
+	// Not just the transition TO none: once in none-mode, a local-bypass
+	// peer could otherwise change trusted_networks / session_ttl / etc.
+	// without proving they know the admin password. Always-require closes
+	// that bypass. If the caller already has auth disabled they just
+	// re-enter their password — same friction, secure default.
+	if app.authStore != nil && config.Authentication == "none" {
+		if confirmBody.ConfirmPassword == "" {
+			writeError(w, 400, "Saving with authentication=none requires your current password in the confirm_password field of the request body.")
+			return
+		}
+		if !app.authStore.VerifyPassword(app.authStore.Username(), confirmBody.ConfirmPassword) {
+			writeError(w, 401, "Current password is incorrect. Authentication change aborted.")
+			return
+		}
+	}
+
+	// Apply live FIRST — now that validation has passed, UpdateConfig
+	// can only fail on something we didn't anticipate, and if that
+	// happens we want it BEFORE the file is on disk so the admin isn't
+	// locked out at next restart.
+	if app.authStore != nil {
+		if err := app.authStore.UpdateConfig(newAuthCfg); err != nil {
+			log.Printf("Error applying auth config live: %v", err)
+			writeError(w, 500, fmt.Sprintf("Live-apply failed: %v (config NOT written)", err))
+			return
+		}
+	}
+
+	// When env-locked, don't write the env-derived value into constat.conf
+	// — otherwise removing the env later would "stick" the env value as a
+	// new config-file default (operator never chose it). Preserve whatever
+	// was on disk for those keys, or empty-string on ANY read error (not
+	// just IsNotExist — a permission-denied or corrupt-parse error would
+	// otherwise silently fall through and persist the env-derived value,
+	// defeating the point of the C-M3 guard).
+	if app.authStore != nil {
+		if app.authStore.TrustedProxiesLocked() {
+			if existing, err := ReadConfig(configPath); err == nil {
+				config.TrustedProxies = existing.TrustedProxies
+			} else {
+				config.TrustedProxies = ""
+			}
+		}
+		if app.authStore.TrustedNetworksLocked() {
+			if existing, err := ReadConfig(configPath); err == nil {
+				config.TrustedNetworks = existing.TrustedNetworks
+			} else {
+				config.TrustedNetworks = ""
 			}
 		}
 	}
@@ -1347,7 +1680,52 @@ func (app *App) handleContainerHistory(w http.ResponseWriter, r *http.Request) {
 
 // --- Container Config Handler ---
 
-// secretEnvPatterns matches env var names that should be masked
+// secretEnvPatterns matches env var NAME tokens (underscore-delimited)
+// that should be redacted in /api/containers/{id}/config responses.
+//
+// Matching is whole-token: the env var name is split on underscore and we
+// look for exact token matches. This prevents false positives like
+// MONKEY (contains "KEY"), KEEPALIVE_INTERVAL (contains "KEY"),
+// COMPASS (contains "PASS"), AUTHOR (contains "AUTH"), BYPASS_CACHE
+// (contains "PASS").
+//
+// Keep this list conservative — every added name that only appears as a
+// substring of a common non-secret var creates false-positive redactions
+// that frustrate debugging.
+var secretEnvTokens = map[string]struct{}{
+	"KEY":         {},
+	"APIKEY":      {},
+	"TOKEN":       {},
+	"PASSWORD":    {},
+	"PASSWD":      {},
+	"SECRET":      {},
+	"PASS":        {},
+	"CREDENTIAL":  {},
+	"CREDENTIALS": {},
+	"AUTH":        {},
+	"COOKIE":      {},
+	"SALT":        {},
+	"HASH":        {},
+	"BEARER":      {},
+	"SIGNATURE":   {},
+	"DSN":         {},
+	"WEBHOOK":     {},
+	"PRIVATE":     {}, // catches PRIVATE_KEY even if KEY token overlaps
+}
+
+// isSecretEnvName reports whether any underscore-delimited token in name
+// is a known secret indicator. Matching is case-insensitive.
+func isSecretEnvName(name string) bool {
+	for _, tok := range strings.Split(strings.ToUpper(name), "_") {
+		if _, ok := secretEnvTokens[tok]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// secretEnvPatterns retained for any legacy code path still checking it.
+// New code should call isSecretEnvName.
 var secretEnvPatterns = []string{"KEY", "TOKEN", "PASSWORD", "SECRET", "PASS", "CREDENTIAL"}
 
 
@@ -1493,11 +1871,14 @@ func (app *App) handleContainerConfig(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		ev := EnvVar{Key: key, Value: val}
-		upperKey := strings.ToUpper(key)
-		for _, pat := range secretEnvPatterns {
-			if strings.Contains(upperKey, pat) {
-				ev.Secret = true
-				break
+		if isSecretEnvName(key) {
+			ev.Secret = true
+			// Replace the value itself with a redaction marker so that even if
+			// the UI / downstream consumer ignores the Secret flag, the secret
+			// never reaches them. Empty/unset values stay empty (no false
+			// signal that something is redacted when nothing was set).
+			if val != "" {
+				ev.Value = "[REDACTED]"
 			}
 		}
 		cfg.Env = append(cfg.Env, ev)

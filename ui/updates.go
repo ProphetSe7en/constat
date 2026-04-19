@@ -84,9 +84,13 @@ func (uc *UpdateChecker) Run(ctx context.Context) {
 func (uc *UpdateChecker) shouldRun() bool {
 	cfg, err := ReadConfig(configPath)
 	if err != nil || cfg.UpdateCheckEnabled != "true" {
+		uc.mu.Lock()
 		uc.wasEnabled = false
+		uc.mu.Unlock()
 		return false
 	}
+	uc.mu.Lock()
+	defer uc.mu.Unlock()
 	// Run immediately when first enabled (or re-enabled)
 	if !uc.wasEnabled {
 		uc.wasEnabled = true
@@ -538,7 +542,7 @@ func (uc *UpdateChecker) saveToDisk() {
 		log.Printf("Updates: failed to marshal: %v", err)
 		return
 	}
-	if err := os.WriteFile(updatesPersistPath, raw, 0664); err != nil {
+	if err := atomicWriteFile(updatesPersistPath, raw, 0664); err != nil {
 		log.Printf("Updates: failed to save: %v", err)
 		return
 	}
@@ -558,6 +562,8 @@ func (uc *UpdateChecker) loadFromDisk() {
 		log.Printf("Updates: failed to parse saved data: %v", err)
 		return
 	}
+	uc.mu.Lock()
+	defer uc.mu.Unlock()
 	if data.Results != nil {
 		uc.results = data.Results
 	}

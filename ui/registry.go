@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -15,7 +14,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"constat-ui/netsec"
 )
+
+// registryHTTPClient is a package-level SSRF-safe client used for all
+// registry probe/auth calls. Registries are public endpoints, so blocking
+// private/loopback IPs is correct: an attacker cannot configure a fake
+// "registry" on LAN to steal credentials via our /api/registry/login
+// handler.
+var registryHTTPClient = netsec.NewSafeHTTPClient(15*time.Second, nil)
 
 // Registry auth store for private container registries.
 //
@@ -353,13 +361,11 @@ func (rs *RegistryStore) Verify(ctx context.Context, host, username, password st
 	}
 	req.SetBasicAuth(username, password)
 	req.Header.Set("User-Agent", "constat/"+Version)
-	client := &http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
-		},
-	}
-	resp, err := client.Do(req)
+	// netsec-wrapped client: registry endpoints are public internet, so the
+	// SSRF blocklist correctly rejects any attempt to point Constat at an
+	// internal "registry" host (e.g. attacker-configured http://192.168.x.x).
+	// TLS ≥1.2 is enforced via the netsec transport's defaults.
+	resp, err := registryHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("connection failed: %w", err)
 	}
@@ -411,8 +417,7 @@ func verifyBearer(ctx context.Context, challenge, username, password string) err
 	}
 	req.SetBasicAuth(username, password)
 	req.Header.Set("User-Agent", "constat/"+Version)
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := registryHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("token endpoint unreachable: %w", err)
 	}

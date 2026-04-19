@@ -1,7 +1,7 @@
 # Stage 1: Build Go binary
 FROM golang:1.24-alpine AS builder
 
-ARG VERSION=0.9.16
+ARG VERSION=0.9.17
 
 WORKDIR /build
 COPY ui/ .
@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 go build -o constat-ui -ldflags="-s -w -X main.Version=${VERSI
 # Stage 2: Runtime
 FROM alpine:3.21
 
-ARG VERSION=0.9.16
+ARG VERSION=0.9.17
 ENV CONSTAT_VERSION=${VERSION}
 LABEL org.opencontainers.image.version=${VERSION}
 LABEL maintainer="ProphetSe7en" \
@@ -41,7 +41,7 @@ COPY --from=builder /build/constat-ui /constat-ui
 RUN chmod +x /constat.sh /entrypoint.sh /constat-ui
 
 HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
-    CMD wget -qO- http://localhost:7890/api/summary > /dev/null 2>&1 || exit 1
+    CMD wget -qO- http://localhost:7890/api/health > /dev/null 2>&1 || exit 1
 
 EXPOSE 7890
 
