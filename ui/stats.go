@@ -561,10 +561,11 @@ func (sc *StatsCollector) SetContainerStatus(name, status string) {
 	}
 	sc.mu.Unlock()
 
-	// Persist to disk (best-effort)
+	// Persist to disk (best-effort, atomic — power-loss mid-write shouldn't
+	// leave a truncated status file that poisons the next boot's stats).
 	data, err := json.Marshal(snapshot)
 	if err == nil {
-		_ = os.WriteFile("/config/container_status.json", data, 0644)
+		_ = atomicWriteFile("/config/container_status.json", data, 0644)
 	}
 }
 
@@ -808,7 +809,7 @@ func (sc *StatsCollector) saveToDisk() {
 		return
 	}
 
-	if err := os.WriteFile(statsPersistPath, bytes, 0664); err != nil {
+	if err := atomicWriteFile(statsPersistPath, bytes, 0664); err != nil {
 		log.Printf("StatsCollector: failed to save stats to disk: %v", err)
 		return
 	}

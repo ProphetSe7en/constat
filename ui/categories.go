@@ -50,7 +50,7 @@ func (cs *categoryStore) save() error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(categoriesPath, data, 0664); err != nil {
+	if err := atomicWriteFile(categoriesPath, data, 0664); err != nil {
 		return err
 	}
 	// Match ownership with other config files (nobody:users = 99:100)

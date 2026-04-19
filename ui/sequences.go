@@ -89,6 +89,8 @@ type SequenceExecutor struct {
 	subscribers map[chan SeqEvent]struct{}
 	subMu       sync.Mutex
 	saveCh      chan struct{} // debounced save channel
+	done        chan struct{} // closed by Close(); requestSave selects on this to avoid send-on-closed-channel panic
+	closeOnce   sync.Once     // guards close(saveCh) + close(done) against double-close
 }
 
 // NewSequenceExecutor creates and initializes a sequence executor
@@ -98,6 +100,7 @@ func NewSequenceExecutor(docker *client.Client) *SequenceExecutor {
 		sequences:   []Sequence{},
 		subscribers: make(map[chan SeqEvent]struct{}),
 		saveCh:      make(chan struct{}, 1),
+		done:        make(chan struct{}),
 	}
 	se.loadFromDisk()
 	go se.saveLoop()
@@ -111,19 +114,44 @@ func (se *SequenceExecutor) saveLoop() {
 	}
 }
 
-// requestSave signals the save loop (non-blocking, coalesces rapid saves)
+// requestSave signals the save loop (non-blocking, coalesces rapid saves).
+// Silently no-ops after Close() — an in-flight HTTP handler calling
+// requestSave between Close() and server.Shutdown would otherwise send on a
+// closed channel and panic the whole process.
+//
+// Uses the done channel (not an atomic.Bool) so the close-vs-send check is
+// race-free: `<-done` becomes observable atomically with any subsequent
+// close(saveCh), so the `select` can never observe done-still-open AND
+// send-on-closed-saveCh in the same scheduling slot. An atomic.Bool check
+// followed by a send has a sub-microsecond window where Close() can run
+// between the two instructions.
 func (se *SequenceExecutor) requestSave() {
 	select {
+	case <-se.done:
+		return // shut down
+	default:
+	}
+	select {
+	case <-se.done:
+		return
 	case se.saveCh <- struct{}{}:
 	default:
 		// save already pending
 	}
 }
 
-// Close shuts down the save loop and does a final flush to disk
+// Close shuts down the save loop and does a final flush to disk. Idempotent
+// via sync.Once — main.go calls this during shutdown; tests may call it
+// again during cleanup.
+//
+// Order matters: close(done) FIRST so any in-flight requestSave sees it
+// and bails out; close(saveCh) second to let saveLoop drain and exit.
 func (se *SequenceExecutor) Close() {
-	close(se.saveCh)
-	se.doSaveToDisk()
+	se.closeOnce.Do(func() {
+		close(se.done)
+		close(se.saveCh)
+		se.doSaveToDisk()
+	})
 }
 
 // --- CRUD ---

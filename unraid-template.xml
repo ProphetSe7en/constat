@@ -16,11 +16,20 @@
   <Privileged>false</Privileged>
   <Support>https://discordapp.com/channels/492590071455940612/1486391669384417300</Support>
   <Project>https://github.com/ProphetSe7en/constat</Project>
-  <Overview>Docker container monitor with web UI — live stats, health tracking, auto-restart, memory monitoring, log viewer, and container sequences. All configuration in /config/constat.conf.</Overview>
+  <Overview>Docker container monitor with web UI — live stats, health tracking, auto-restart, memory monitoring, log viewer, and container sequences. The Web UI requires first-run login setup (Radarr/Sonarr-style authentication); LAN devices bypass by default. Most configuration lives in /config/constat.conf.</Overview>
   <Category>Tools:</Category>
   <WebUI>http://[IP]:[PORT:7890]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/prophetse7en/unraid-templates/main/constat.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/prophetse7en/constat/main/icon.png</Icon>
+  <Date>2026-04-19</Date>
+  <Changes>
+### 2026-04-19
+- v0.9.17: **Breaking change** — authentication now required, first boot redirects to /setup. Login + password (bcrypt), API key for Homepage/scripts, CSRF, SSRF guards on outbound notifications, security headers, env-var lock for Trusted Networks/Proxies. Atomic writes for state files. Log-injection guards. Full changelog in GitHub repo.
+### 2026-04-15
+- v0.9.16: Private registry login for update checks (Docker Hub, GHCR, ghcr.io/prophetse7en, private registries).
+### 2026-04-12
+- v0.9.15: Mobile update indicator (orange name + Outdated badge in expanded detail).
+  </Changes>
   <ExtraParams/>
   <PostArgs/>
   <DonateText/>
@@ -32,4 +41,6 @@
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID for file ownership" Type="Variable" Display="always" Required="false" Mask="false">99</Config>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID for file ownership" Type="Variable" Display="always" Required="false" Mask="false">100</Config>
   <Config Name="UMASK" Target="UMASK" Default="002" Mode="" Description="File creation mask" Type="Variable" Display="always" Required="false" Mask="false">002</Config>
+  <Config Name="TRUSTED_NETWORKS" Target="TRUSTED_NETWORKS" Default="" Description="Optional: lock Trusted Networks at host level. Comma-separated IPs/CIDRs (e.g. 192.168.86.0/24, 10.66.0.0/24). When set, the UI field becomes read-only and can only be changed by editing this template and restarting. Leave empty to configure via the Security panel in the web UI. Loopback is always trusted regardless." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="TRUSTED_PROXIES" Target="TRUSTED_PROXIES" Default="" Description="Optional: lock Trusted Proxies at host level. Comma-separated reverse-proxy IPs (e.g. 172.17.0.1). Only needed when Constat sits behind SWAG, Authelia, Traefik, etc. When set, the UI field becomes read-only. Leave empty for direct access." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
 </Container>

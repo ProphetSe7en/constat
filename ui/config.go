@@ -59,6 +59,12 @@ type ConfigData struct {
 	DateFormat     string `json:"dateFormat"`     // "YYYY-MM-DD", "DD.MM.YYYY", "DD/MM/YYYY", "MM/DD/YYYY"
 	ShowStats      string `json:"showStats"`      // "true" or "false"
 	ShowCharts     string `json:"showCharts"`     // "true" or "false"
+	// Authentication (matches Radarr/Sonarr Security panel model)
+	Authentication         string `json:"authentication"`         // "forms" | "basic" | "none"
+	AuthenticationRequired string `json:"authenticationRequired"` // "enabled" | "disabled_for_local_addresses"
+	TrustedProxies         string `json:"trustedProxies"`         // comma-separated IPs (reverse-proxy deployments)
+	TrustedNetworks        string `json:"trustedNetworks"`        // comma-separated IPs/CIDRs for local-bypass; empty = Radarr-parity default
+	SessionTTLDays         string `json:"sessionTtlDays"`         // default 30
 	// Colors
 	ColorStarted    string `json:"colorStarted"`
 	ColorStopped    string `json:"colorStopped"`
@@ -129,6 +135,11 @@ var keyToField = map[string]string{
 	"DATE_FORMAT":             "dateFormat",
 	"SHOW_STATS":              "showStats",
 	"SHOW_CHARTS":             "showCharts",
+	"AUTHENTICATION":          "authentication",
+	"AUTHENTICATION_REQUIRED": "authenticationRequired",
+	"TRUSTED_PROXIES":         "trustedProxies",
+	"TRUSTED_NETWORKS":        "trustedNetworks",
+	"SESSION_TTL_DAYS":        "sessionTtlDays",
 }
 
 // fieldToKey is the reverse mapping
@@ -150,6 +161,24 @@ var shellSanitizer = strings.NewReplacer(
 	`$`, `\$`,
 	"`", "\\`",
 )
+
+// sanitizeConfValue prepares a value for writing inside double-quoted bash
+// context. In addition to shell metachar escaping, it strips CR/LF/NUL so a
+// newline in user-supplied input (e.g. a future TRUSTED_PROXIES UI edit)
+// cannot break out of the line and inject a new bash variable declaration
+// — since constat.sh sources this file, that would be code execution.
+func sanitizeConfValue(raw string) string {
+	// Drop control bytes first (no bypass opportunity via escaping).
+	b := make([]byte, 0, len(raw))
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if c == '\r' || c == '\n' || c == 0 {
+			continue
+		}
+		b = append(b, c)
+	}
+	return shellSanitizer.Replace(string(b))
+}
 
 // ReadConfig parses a constat.conf file into ConfigData
 func ReadConfig(path string) (*ConfigData, error) {
@@ -328,6 +357,24 @@ func ReadConfig(path string) (*ConfigData, error) {
 		data.ShowCharts = "true"
 	}
 
+	// Authentication defaults — match Radarr/Sonarr out-of-box behavior.
+	// Fresh install: forms + disabled_for_local_addresses → LAN devices
+	// keep working without login; external access requires the login page.
+	data.Authentication = values["AUTHENTICATION"]
+	if data.Authentication == "" {
+		data.Authentication = "forms"
+	}
+	data.AuthenticationRequired = values["AUTHENTICATION_REQUIRED"]
+	if data.AuthenticationRequired == "" {
+		data.AuthenticationRequired = "disabled_for_local_addresses"
+	}
+	data.TrustedProxies = values["TRUSTED_PROXIES"] // empty default — only relevant behind SWAG/etc.
+	data.TrustedNetworks = values["TRUSTED_NETWORKS"] // empty default — uses Radarr-parity built-in local ranges
+	data.SessionTTLDays = values["SESSION_TTL_DAYS"]
+	if data.SessionTTLDays == "" {
+		data.SessionTTLDays = "30"
+	}
+
 	if data.MemoryWatch == nil {
 		data.MemoryWatch = []MemoryWatchEntry{}
 	}
@@ -386,6 +433,11 @@ func WriteConfig(path string, data *ConfigData) error {
 		"UPDATE_CHECK_ENABLED":    data.UpdateCheckEnabled,
 		"UPDATE_CHECK_INTERVAL":   data.UpdateCheckInterval,
 		"UPDATE_EXCLUDE":          data.UpdateExclude,
+		"AUTHENTICATION":          data.Authentication,
+		"AUTHENTICATION_REQUIRED": data.AuthenticationRequired,
+		"TRUSTED_PROXIES":         data.TrustedProxies,
+		"TRUSTED_NETWORKS":        data.TrustedNetworks,
+		"SESSION_TTL_DAYS":        data.SessionTTLDays,
 	}
 
 	// Read existing file
@@ -436,7 +488,7 @@ func WriteConfig(path string, data *ConfigData) error {
 		if m != nil {
 			key := m[1]
 			if val, ok := newValues[key]; ok {
-				output = append(output, fmt.Sprintf(`%s="%s"`, key, shellSanitizer.Replace(val)))
+				output = append(output, fmt.Sprintf(`%s="%s"`, key, sanitizeConfValue(val)))
 				continue
 			}
 		}
@@ -461,7 +513,7 @@ func WriteConfig(path string, data *ConfigData) error {
 	var missing []string
 	for key, val := range newValues {
 		if !writtenKeys[key] {
-			missing = append(missing, fmt.Sprintf(`%s="%s"`, key, shellSanitizer.Replace(val)))
+			missing = append(missing, fmt.Sprintf(`%s="%s"`, key, sanitizeConfValue(val)))
 		}
 	}
 	if len(missing) > 0 {
@@ -470,9 +522,14 @@ func WriteConfig(path string, data *ConfigData) error {
 		output = append(output, missing...)
 	}
 
-	// Write back — preserve nobody:users (99:100) ownership for Unraid
+	// Write back — preserve nobody:users (99:100) ownership for Unraid.
+	// Mode 0600 — the conf file contains Discord webhooks, Gotify token,
+	// and bot/server identity config. Not readable by other UIDs on the
+	// host even when /config/ is group-readable.
+	// Atomic write (tmp + rename) — a SIGKILL mid-write would otherwise
+	// leave a truncated config and break auth on next boot.
 	content := strings.Join(output, "\n") + "\n"
-	if err := os.WriteFile(path, []byte(content), 0664); err != nil {
+	if err := atomicWriteFile(path, []byte(content), 0600); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	os.Chown(path, 99, 100)

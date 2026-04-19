@@ -18,6 +18,43 @@
   .header-left svg { width: 28px; height: 28px; }
   .header-left h1 { font-size: 20px; font-weight: 600; }
   .header-stats { display: flex; gap: 20px; font-size: 13px; color: #8b949e; margin-left: 20px; padding-left: 20px; border-left: 1px solid #30363d; }
+  .header-user { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #8b949e; }
+  /* Disable-auth modal — explicit top/right/bottom/left + flex centering.
+     Avoid "inset" shorthand which doesn't play well with some CSS frameworks
+     that override layout properties via class selectors.
+     NOTE: display:flex MUST NOT be !important — Alpine's x-show hides by
+     setting inline `display:none`; !important here prevents hiding and
+     leaves the modal permanently visible. */
+  .disable-auth-modal-overlay {
+    position: fixed;
+    top: 0; right: 0; bottom: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  .disable-auth-modal {
+    background: #1a1d24;
+    border: 2px solid #8b2d2d;
+    border-radius: 10px;
+    padding: 24px 28px;
+    width: min(520px, 100%);
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  }
+  .header-user-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .header-user-btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+  .header-user-btn:hover { background: #30363d; border-color: #8b949e; }
+  .header-user-local { background: #1a2f45; color: #58a6ff; padding: 3px 8px; border-radius: 10px; font-size: 10px; font-weight: 500; letter-spacing: 0.3px; border: 1px solid #1f3b5a; }
+  @media (max-width: 700px) {
+    .header-user-name { display: none; } /* keep icon/button only on narrow screens */
+    .header-user-btn { padding: 3px 8px; font-size: 10px; }
+  }
   .header-stats .stat { display: flex; align-items: center; gap: 6px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
   .dot-green { background: #3fb950; }
@@ -741,6 +778,38 @@
     <div class="header-live" x-show="mobileView && statsSSEConnected" style="border:none;margin:0;padding:0">
       <span class="live-dot-sm"></span> Live
     </div>
+    <!-- User menu (username + logout). Visible when authenticated via session.
+         LAN users on local-bypass see a muted "Local" badge instead. -->
+    <div class="header-user" x-show="authStatus.authenticated || authStatus.localBypass" x-cloak>
+      <template x-if="authStatus.authenticated">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="header-user-name" x-text="authStatus.username" :title="'Logged in as ' + authStatus.username"></span>
+          <form method="POST" action="/logout" style="margin:0">
+            <input type="hidden" name="csrf_token" :value="csrfToken()">
+            <button type="submit" class="header-user-btn" title="Log out">Logout</button>
+          </form>
+        </div>
+      </template>
+      <template x-if="!authStatus.authenticated && authStatus.localBypass">
+        <span class="header-user-local" title="Local network — authentication bypassed. External access still requires login.">Local</span>
+      </template>
+    </div>
+  </div>
+
+  <!-- No-auth warning banner — sticky under header whenever running mode=none.
+       Dismissible per-browser via localStorage for legitimate deployments
+       behind a reverse-proxy auth layer (Authelia, Cloudflare Access, etc.).
+       Server-side 60-second log warning continues regardless. -->
+  <div x-show="authStatus.authentication === 'none' && !noAuthBannerDismissed" x-cloak
+       style="background:#5a1f1f;border-bottom:2px solid #8b2d2d;color:#ffdada;padding:10px 16px;display:flex;align-items:center;gap:12px;font-size:13px;font-weight:500;letter-spacing:0.2px">
+    <span style="flex:1;text-align:center">
+      ⚠️ Authentication is disabled — anyone who reaches this URL is admin. Set Authentication to Forms or Basic in <strong>Config → Security</strong>, or make sure another auth layer (reverse proxy, firewall) is in front.
+    </span>
+    <button @click="dismissNoAuthBanner()"
+            title="Hide this banner on this device. The server still logs a warning every 60 seconds."
+            style="background:rgba(255,255,255,0.12);color:#ffdada;border:1px solid rgba(255,218,218,0.3);padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;flex-shrink:0">
+      Dismiss
+    </button>
   </div>
 
   <!-- Mobile summary bar -->
@@ -2980,7 +3049,126 @@
             </div>
           </div>
 
+          <!-- Security -->
+          <div class="config-section">
+            <div class="config-section-header" @click="configSections.security = !configSections.security">
+              Security
+              <span class="arrow" x-text="configSections.security ? '&#9660;' : '&#9654;'"></span>
+            </div>
+            <div class="config-section-body" x-show="configSections.security" x-transition>
+              <div style="font-size:11px;color:#8b949e;margin-bottom:10px">Authentication, API key, and password. Same model as Radarr/Sonarr — Local Addresses (127.x, 10.x, 172.16–31.x, 192.168.x) can skip login by default, external traffic always requires authentication.</div>
 
+              <div class="config-field">
+                <span class="config-label">Authentication</span>
+                <select class="config-input" style="max-width:200px" x-model="config.authentication" @change="configDirty = true">
+                  <option value="forms">Forms (login page)</option>
+                  <option value="basic">Basic (browser popup)</option>
+                  <option value="none">None (disabled — unsafe)</option>
+                </select>
+              </div>
+              <div class="config-hint">How users log in. <strong>Forms</strong> for most homelab users, <strong>Basic</strong> behind a reverse proxy that handles login. <strong>None</strong> turns off authentication entirely — anyone who reaches the UI becomes admin, including anyone on your LAN who guesses the port. Only pick None if you have another auth layer in front (Authelia, Cloudflare Access, etc.) or bind to 127.0.0.1.</div>
+
+              <div class="config-field">
+                <span class="config-label">Authentication Required</span>
+                <select class="config-input" style="max-width:280px" x-model="config.authenticationRequired" @change="configDirty = true">
+                  <option value="disabled_for_local_addresses">Disabled for Trusted Networks</option>
+                  <option value="enabled">Enabled (all traffic)</option>
+                </select>
+              </div>
+              <div class="config-hint">Who must log in. <strong>Enabled (all traffic)</strong> requires a password from every request, including your own LAN. <strong>Disabled for Trusted Networks</strong> lets devices on the networks listed below skip the login page.</div>
+
+              <div class="config-field">
+                <span class="config-label">Trusted Networks</span>
+                <input type="text" class="config-input" placeholder="e.g. 192.168.86.0/24, 10.66.0.0/24" x-model="config.trustedNetworks" @input="configDirty = true" :disabled="authStatus.trustedNetworksLocked">
+              </div>
+              <div class="config-hint" x-show="authStatus.trustedNetworksLocked" x-cloak style="color:#d29922">
+                <strong>Locked by <code>TRUSTED_NETWORKS</code> environment variable.</strong> To change the value, edit the Unraid template (or <code>docker-compose.yml</code>) and restart the container. Unsetting the env var unlocks this field.
+              </div>
+              <div class="config-hint" x-show="!authStatus.trustedNetworksLocked">
+                Comma-separated IPs or CIDR subnets that skip login when <em>Authentication Required</em> is set to <em>Disabled for Trusted Networks</em>. Every address in this list gets full admin access without a password — that includes whatever device happens to be on those networks: guests on your WiFi, smart TV, printer, compromised IoT, and any Docker container if its bridge is in scope.
+                <br><br>
+                <strong>What to enter:</strong> IPs (<code>192.168.86.22</code>) or CIDR subnets (<code>192.168.86.0/24</code>, <code>10.66.0.0/24</code>), separated by commas. Narrower lists expose less — <code>192.168.86.10/32</code> trusts just one device; <code>192.168.86.0/24</code> trusts the whole home subnet; <code>10.66.0.0/24</code> could be your WireGuard tunnel.
+                <br><br>
+                <strong>Empty</strong> falls back to every private network (<code>10.x</code>, <code>172.16-31.x</code> incl. Docker bridges, <code>192.168.x</code>, link-local, IPv6 ULA). This is convenient but treats anything with a private IP as admin — including every other container on your Docker host and every device on your home WiFi.
+                <br><br>
+                Loopback (<code>127.x</code>) is always trusted regardless, so Docker healthchecks don't require this list.
+                <br><br>
+                <strong>Lock via env var</strong> <code>TRUSTED_NETWORKS</code> (comma-separated CIDRs) in the Unraid template to prevent this field from being changed through the UI — useful if you want host-level control over the trust boundary.
+              </div>
+
+              <div class="config-field">
+                <span class="config-label">Trusted Proxies</span>
+                <input type="text" class="config-input" placeholder="e.g. 172.17.0.1, 192.168.86.5" x-model="config.trustedProxies" @input="configDirty = true" :disabled="authStatus.trustedProxiesLocked">
+              </div>
+              <div class="config-hint" x-show="authStatus.trustedProxiesLocked" x-cloak style="color:#d29922">
+                <strong>Locked by <code>TRUSTED_PROXIES</code> environment variable.</strong> To change the value, edit the Unraid template (or <code>docker-compose.yml</code>) and restart the container.
+              </div>
+              <div class="config-hint" x-show="!authStatus.trustedProxiesLocked">Only needed if Constat sits behind a reverse proxy (SWAG, Authelia, etc.). List the proxy's IP so Constat will read the real client IP from <code>X-Forwarded-For</code>. Leave empty if you access Constat directly. Lock via env var <code>TRUSTED_PROXIES</code> in the Unraid template for host-level control.</div>
+
+              <div class="config-field">
+                <span class="config-label">Session lifetime (days)</span>
+                <input type="text" class="config-input" style="max-width:100px" x-model="config.sessionTtlDays" @input="configDirty = true">
+              </div>
+              <div class="config-hint">How long a login stays valid before you have to log in again. Default 30 days. Max 365.</div>
+
+              <div style="border-top:1px solid #2a2e38;margin:16px 0"></div>
+
+              <!-- API Key -->
+              <div class="config-field">
+                <span class="config-label">API Key</span>
+                <div style="display:flex;gap:6px;flex:1;align-items:center">
+                  <input type="text" class="config-input" style="flex:1;font-family:monospace;font-size:12px" readonly
+                         :value="securityApiKeyVisible ? securityApiKey : (securityApiKey ? '••••••••••••••••••••••••••••••••' : 'Loading...')">
+                  <button class="save-btn" style="padding:6px 10px" @click="securityApiKeyVisible = !securityApiKeyVisible" x-text="securityApiKeyVisible ? 'Hide' : 'Show'"></button>
+                  <button class="save-btn" style="padding:6px 10px" @click="copyApiKey()" x-text="securityApiKeyCopied ? 'Copied!' : 'Copy'"></button>
+                </div>
+              </div>
+              <div class="config-hint">For scripts and Homepage widgets. Send as HTTP header <code>X-Api-Key: &lt;key&gt;</code>. Prefer the header over <code>?apikey=</code> query param — query params leak to access logs and browser history.</div>
+              <div class="config-field" x-show="!securityRegenConfirm">
+                <span class="config-label"></span>
+                <button class="save-btn" style="background:#a14a4a" @click="securityRegenConfirm = true">Regenerate API Key</button>
+              </div>
+              <div class="config-field" x-show="securityRegenConfirm">
+                <span class="config-label" style="color:#f85149">⚠️ Confirm regenerate</span>
+                <div style="display:flex;gap:8px;flex:1">
+                  <button class="save-btn" style="background:#a14a4a" @click="regenerateApiKey()" :disabled="securityRegenerating">
+                    <span x-show="!securityRegenerating">Yes, regenerate — old key stops working immediately</span>
+                    <span x-show="securityRegenerating">Regenerating...</span>
+                  </button>
+                  <button class="save-btn" style="background:#586069" @click="securityRegenConfirm = false">Cancel</button>
+                </div>
+              </div>
+
+              <div style="border-top:1px solid #2a2e38;margin:16px 0"></div>
+
+              <!-- Password change -->
+              <div style="font-size:13px;color:#c3c7cc;margin-bottom:8px;font-weight:500">Change password</div>
+              <div class="config-field">
+                <span class="config-label">Current password</span>
+                <input type="password" class="config-input" autocomplete="current-password" x-model="pwChange.current">
+              </div>
+              <div class="config-field">
+                <span class="config-label">New password</span>
+                <input type="password" class="config-input" autocomplete="new-password" x-model="pwChange.next">
+              </div>
+              <div class="config-hint">At least 10 characters, with at least 2 of: uppercase, lowercase, digit, symbol.</div>
+              <div class="config-field">
+                <span class="config-label">Confirm new password</span>
+                <input type="password" class="config-input" autocomplete="new-password" x-model="pwChange.confirm">
+              </div>
+              <div class="config-field">
+                <span class="config-label"></span>
+                <div style="display:flex;gap:8px;flex:1;align-items:center">
+                  <button class="save-btn" @click="changePassword()" :disabled="pwChangeSaving || !pwChange.current || !pwChange.next || !pwChange.confirm">
+                    <span x-show="!pwChangeSaving">Change password</span>
+                    <span x-show="pwChangeSaving">Saving...</span>
+                  </button>
+                  <span class="save-msg" :class="pwChangeOk ? 'success' : 'error'" x-show="pwChangeMsg" x-text="pwChangeMsg" x-transition></span>
+                </div>
+              </div>
+              <div class="config-hint">Changing your password signs out other sessions. You will remain logged in on this browser.</div>
+            </div>
+          </div>
 
           <!-- Save bar -->
           <div class="save-bar">
@@ -3408,9 +3596,64 @@
     </div>
   </div>
 
+  <!-- Disable-auth confirmation modal — requires current password -->
+  <div x-show="disableAuthModalOpen" x-cloak class="disable-auth-modal-overlay"
+       @keydown.escape.window="disableAuthModalOpen = false; disableAuthError = ''">
+    <div class="disable-auth-modal" @click.outside="disableAuthModalOpen = false; disableAuthError = ''">
+      <h2 style="margin:0 0 10px;font-size:20px;color:#ff7a7a">⚠️ Disable authentication?</h2>
+      <p style="font-size:13px;line-height:1.5;color:#d4d4d4;margin:10px 0 8px">
+        You are about to turn off login for <strong>Constat</strong>. After this change, anyone who reaches this UI will be admin — they can start or kill any container, reconfigure webhooks to their own server, and read environment variables from other containers (including passwords).
+      </p>
+      <p style="font-size:13px;line-height:1.5;color:#d4d4d4;margin:8px 0">
+        Pick this only if you have <em>another</em> authentication layer in front (Authelia, Cloudflare Access, an ACL on your reverse proxy) or you are running on a machine that is not reachable from other devices.
+      </p>
+      <div style="background:#281818;border:1px solid #5a2d2d;border-radius:6px;padding:10px 12px;margin:12px 0;font-size:12px;color:#ffcaca">
+        A persistent red warning banner will be shown at the top of every page while authentication is disabled, and the server logs a warning every 60 seconds.
+      </div>
+      <label style="display:block;font-size:12px;color:#c3c7cc;margin:12px 0 6px">
+        Enter your <strong>current admin password</strong> to confirm:
+      </label>
+      <input type="password" class="config-input" x-model="disableAuthPassword" autocomplete="current-password"
+             placeholder="current password"
+             @keydown.enter="disableAuthPassword && !configSaving && (disableAuthModalOpen = false, saveConfig(true))"
+             style="width:100%;margin-bottom:8px">
+      <div x-show="disableAuthError" x-text="disableAuthError"
+           style="color:#ff9a9a;font-size:12px;margin:0 0 10px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="save-btn" style="background:#30363d"
+                @click="disableAuthModalOpen = false; disableAuthError = ''; disableAuthPassword = ''; config.authentication = authStatus.authentication || 'forms'">Cancel</button>
+        <button class="save-btn" style="background:#8b2d2d"
+                :disabled="!disableAuthPassword || configSaving"
+                @click="disableAuthModalOpen = false; saveConfig(true)">
+          Yes, disable authentication
+        </button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
+// CSRF protection: automatically attach X-CSRF-Token header to every
+// mutating fetch the UI makes. Server sets constat_csrf cookie on every
+// GET; this helper reads the cookie and echoes the value back as a
+// header on POST/PUT/DELETE/PATCH. Handles all current fetches plus any
+// added later without per-call changes.
+(function() {
+  const origFetch = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    init = init || {};
+    const method = (init.method || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+      const m = document.cookie.match(/(?:^|; )constat_csrf=([^;]+)/);
+      if (m) {
+        init.headers = Object.assign({}, init.headers || {}, { 'X-CSRF-Token': m[1] });
+      }
+    }
+    return origFetch(input, init);
+  };
+})();
+
 function app() {
   return {
     mobileView: false,
@@ -3443,13 +3686,34 @@ function app() {
     eventsPage: 0,
 
     // Config tab
-    config: { memoryWatch: [], memoryPaused: 'false', memoryPollInterval: '30', memoryDefaultDuration: '300', imageCleanupEnabled: 'false', imageCleanupTime: '03:00', imageCleanupDryRun: 'false', cleanupOrphanImages: 'false', cleanupUnusedImages: 'false', cleanupVolumes: 'false', enableDiscord: 'false', webhookState: '', webhookHealth: '', botName: 'Constat', serverLabel: '', batchWindow: '5', excludeContainers: '', summaryInterval: '21600', restartLabel: 'constat.restart', restartCooldown: '300', maxRestarts: '3', timezone: '', timeFormat: '24h', dateFormat: 'YYYY-MM-DD', showStats: 'true', showCharts: 'true', colorStarted: '2ecc71', colorStopped: '95a5a6', colorDied: 'ed4245', colorUnhealthy: 'e74c3c', colorRecovered: '3498db' },
+    config: { memoryWatch: [], memoryPaused: 'false', memoryPollInterval: '30', memoryDefaultDuration: '300', imageCleanupEnabled: 'false', imageCleanupTime: '03:00', imageCleanupDryRun: 'false', cleanupOrphanImages: 'false', cleanupUnusedImages: 'false', cleanupVolumes: 'false', enableDiscord: 'false', webhookState: '', webhookHealth: '', botName: 'Constat', serverLabel: '', batchWindow: '5', excludeContainers: '', summaryInterval: '21600', restartLabel: 'constat.restart', restartCooldown: '300', maxRestarts: '3', timezone: '', timeFormat: '24h', dateFormat: 'YYYY-MM-DD', showStats: 'true', showCharts: 'true', colorStarted: '2ecc71', colorStopped: '95a5a6', colorDied: 'ed4245', colorUnhealthy: 'e74c3c', colorRecovered: '3498db', authentication: 'forms', authenticationRequired: 'disabled_for_local_addresses', trustedProxies: '', trustedNetworks: '', sessionTtlDays: '30' },
     configLoading: false,
     configSaving: false,
     configDirty: false,
     configError: '',
     configSuccess: '',
-    configSections: { discord: false, gotify: false, behavior: false, display: false, restart: false },
+    configSections: { discord: false, gotify: false, behavior: false, display: false, restart: false, security: false },
+    // Security section state
+    securityApiKey: '',
+    securityApiKeyVisible: false,
+    securityApiKeyCopied: false,
+    securityRegenerating: false,
+    securityRegenConfirm: false,
+    pwChange: { current: '', next: '', confirm: '' },
+    pwChangeSaving: false,
+    authStatusLoadError: false, // true after 2 fetchAuthStatus retries fail → block save of locked fields
+    pwChangeMsg: '',
+    pwChangeOk: false,
+    // Disable-auth confirmation modal state (requires password re-entry).
+    disableAuthModalOpen: false,
+    disableAuthPassword: '',
+    disableAuthError: '',
+    // Persisted per-browser dismissal of the "auth disabled" banner.
+    // Read at init; cleared if user ever re-enables auth (so banner comes
+    // back the next time auth is disabled — no stale "remembered" dismiss).
+    noAuthBannerDismissed: false,
+    // Header auth-status state (for the user menu + logout button)
+    authStatus: { configured: false, authenticated: false, username: '', localBypass: false, authentication: '', authenticationRequired: '', trustedNetworksLocked: false, trustedProxiesLocked: false, trustedNetworksEffective: '', trustedProxiesEffective: '' },
     categories: [],
     showCategoryModal: false,
     categoryEditIdx: -2,
@@ -3629,6 +3893,7 @@ function app() {
 
     async init() {
       this.initMobileView();
+      this.fetchAuthStatus(); // render header user menu as soon as we know auth state
       await this.fetchContainers();
       this.fetchSuggestions();
       this.fetchConfig();
@@ -5777,6 +6042,19 @@ function app() {
         this.config = await resp.json();
         this.mwatchExceededSince = {};
         this.configDirty = false;
+        // If auth status has already loaded AND the trust-boundary fields
+        // are env-locked, overwrite the config-file values with the
+        // effective env values so the disabled input shows what's actually
+        // enforced and Save-without-edit doesn't 403.
+        if (this.authStatus.trustedNetworksLocked) {
+          this.config.trustedNetworks = this.authStatus.trustedNetworksEffective;
+        }
+        if (this.authStatus.trustedProxiesLocked) {
+          this.config.trustedProxies = this.authStatus.trustedProxiesEffective;
+        }
+        // Load API key in the Security section. If the call fails (e.g. auth
+        // disabled or server error) we still render the rest of the config.
+        this.fetchApiKey();
       } catch (e) {
         console.error('Failed to fetch config:', e);
       } finally {
@@ -5784,27 +6062,231 @@ function app() {
       }
     },
 
-    async saveConfig() {
+    // CSRF token helper — reads the constat_csrf cookie set by the server
+    // on the first GET. Used inside <form :value="csrfToken()"> bindings
+    // for HTML form POSTs (logout); AJAX fetches get the header added
+    // automatically by the window.fetch wrapper at the top of this file.
+    csrfToken() {
+      const m = document.cookie.match(/(?:^|; )constat_csrf=([^;]+)/);
+      return m ? m[1] : '';
+    },
+
+    async fetchAuthStatus(retriesLeft = 2) {
+      try {
+        const resp = await fetch('/api/auth/status');
+        if (!resp.ok) {
+          // Retry on transient failures — if we fail silently, the user
+          // sees stale defaults (all locks=false) and the Save button can
+          // 403 on a locked field. Better to block Save briefly than to
+          // render an inconsistent UI.
+          if (retriesLeft > 0) {
+            setTimeout(() => this.fetchAuthStatus(retriesLeft - 1), 1000);
+          } else {
+            this.authStatusLoadError = true;
+          }
+          return;
+        }
+        this.authStatusLoadError = false;
+        const data = await resp.json();
+        // If we're reaching the app but NOT carrying a session cookie, we
+        // must be on local-bypass (or mode=none). Distinguish so the header
+        // can show "Local" badge instead of a logout button.
+        const localBypass = data.configured && !data.authenticated && data.authentication !== 'none';
+        const wasNone = this.authStatus.authentication === 'none';
+        this.authStatus = {
+          configured: data.configured,
+          authenticated: data.authenticated,
+          username: data.username || '',
+          localBypass: localBypass,
+          authentication: data.authentication || '',
+          authenticationRequired: data.authentication_required || '',
+          trustedNetworksLocked: !!data.trusted_networks_locked,
+          trustedProxiesLocked: !!data.trusted_proxies_locked,
+          trustedNetworksEffective: data.trusted_networks_effective || '',
+          trustedProxiesEffective: data.trusted_proxies_effective || '',
+        };
+        // When env-locked, reflect the effective value in the disabled input
+        // so the user sees what's actually enforced (config-file value may
+        // differ from the env var).
+        if (this.authStatus.trustedNetworksLocked && this.config) {
+          this.config.trustedNetworks = this.authStatus.trustedNetworksEffective;
+        }
+        if (this.authStatus.trustedProxiesLocked && this.config) {
+          this.config.trustedProxies = this.authStatus.trustedProxiesEffective;
+        }
+        // Pick up per-browser banner dismissal only while we're actually in
+        // none mode. Clear it whenever we leave none so next time we enter
+        // none mode the banner comes back fresh.
+        if (this.authStatus.authentication === 'none') {
+          this.noAuthBannerDismissed = localStorage.getItem('constat_noauth_banner_dismissed') === '1';
+        } else {
+          this.noAuthBannerDismissed = false;
+          if (wasNone) {
+            // Transitioned OUT of none — clear the persisted dismiss so it's
+            // not "remembered" if auth is later disabled again.
+            localStorage.removeItem('constat_noauth_banner_dismissed');
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch auth status:', e);
+        if (retriesLeft > 0) {
+          setTimeout(() => this.fetchAuthStatus(retriesLeft - 1), 1000);
+        } else {
+          this.authStatusLoadError = true;
+        }
+      }
+    },
+
+    dismissNoAuthBanner() {
+      this.noAuthBannerDismissed = true;
+      localStorage.setItem('constat_noauth_banner_dismissed', '1');
+    },
+
+    async fetchApiKey() {
+      try {
+        const resp = await fetch('/api/auth/api-key');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        this.securityApiKey = data.api_key || '';
+      } catch (e) {
+        console.error('Failed to fetch api key:', e);
+      }
+    },
+
+    async copyApiKey() {
+      if (!this.securityApiKey) return;
+      try {
+        await navigator.clipboard.writeText(this.securityApiKey);
+        this.securityApiKeyCopied = true;
+        setTimeout(() => { this.securityApiKeyCopied = false; }, 2000);
+      } catch (e) {
+        console.error('Clipboard write failed:', e);
+      }
+    },
+
+    async regenerateApiKey() {
+      this.securityRegenerating = true;
+      try {
+        const resp = await fetch('/api/auth/regenerate-api-key', { method: 'POST' });
+        if (!resp.ok) {
+          alert('Failed to regenerate API key');
+          return;
+        }
+        const data = await resp.json();
+        this.securityApiKey = data.api_key || '';
+        this.securityApiKeyVisible = true;
+        this.securityRegenConfirm = false;
+      } catch (e) {
+        console.error('Regenerate API key failed:', e);
+      } finally {
+        this.securityRegenerating = false;
+      }
+    },
+
+    async changePassword() {
+      if (!this.pwChange.current || !this.pwChange.next || !this.pwChange.confirm) return;
+      if (this.pwChange.next !== this.pwChange.confirm) {
+        this.pwChangeOk = false;
+        this.pwChangeMsg = 'New passwords do not match';
+        return;
+      }
+      this.pwChangeSaving = true;
+      this.pwChangeMsg = '';
+      try {
+        const resp = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            current_password: this.pwChange.current,
+            new_password: this.pwChange.next,
+            new_password_confirm: this.pwChange.confirm,
+          }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          this.pwChangeOk = false;
+          this.pwChangeMsg = data.error || 'Failed to change password';
+          return;
+        }
+        this.pwChangeOk = true;
+        this.pwChangeMsg = data.reauth_required
+          ? 'Password changed. Please log in again.'
+          : 'Password changed.';
+        this.pwChange = { current: '', next: '', confirm: '' };
+        setTimeout(() => { this.pwChangeMsg = ''; }, 5000);
+      } catch (e) {
+        this.pwChangeOk = false;
+        this.pwChangeMsg = e.message || 'Network error';
+      } finally {
+        this.pwChangeSaving = false;
+      }
+    },
+
+    async saveConfig(confirmedNone) {
+      // Intercept the dangerous transition: user is trying to save with
+      // authentication=none but we're NOT currently in none mode. Show
+      // the password-confirm modal first. On successful confirmation
+      // the modal calls saveConfig(true) with disableAuthPassword set.
+      //
+      // Fresh-read authStatus before deciding — the cached value can be
+      // stale if auth was changed from another tab or a previous save
+      // within this session.
+      if (this.config.authentication === 'none' && !confirmedNone) {
+        try {
+          const resp = await fetch('/api/auth/status');
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.authentication !== 'none') {
+              // Real transition — show modal.
+              this.disableAuthModalOpen = true;
+              this.disableAuthPassword = '';
+              this.disableAuthError = '';
+              return;
+            }
+            // Already in none — no-op transition, fall through and save normally.
+          }
+        } catch (_) { /* network error: fall through to normal save */ }
+      }
       this.configSaving = true;
       this.configError = '';
       this.configSuccess = '';
+      // When disabling auth, server requires confirm_password IN THE BODY
+      // (not a header — reverse proxies often log headers but rarely log
+      // bodies, so this avoids leaking the password to access logs).
+      const body = Object.assign({}, this.config);
+      if (confirmedNone && this.disableAuthPassword) {
+        body.confirm_password = this.disableAuthPassword;
+      }
       try {
         const resp = await fetch('/api/config', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.config),
+          body: JSON.stringify(body),
         });
         if (!resp.ok) {
-          const err = await resp.json();
-          this.configError = err.error || 'Failed to save';
+          const err = await resp.json().catch(() => ({}));
+          const msg = err.error || 'Failed to save';
+          // Wrong-password case: re-open the modal so user can retry.
+          if (resp.status === 401 && confirmedNone) {
+            this.disableAuthError = msg;
+            this.disableAuthModalOpen = true;
+            this.disableAuthPassword = '';
+            return;
+          }
+          this.configError = msg;
           return;
         }
+        // Clear the one-time password buffer as soon as it's no longer needed.
+        this.disableAuthPassword = '';
         this.configSuccess = 'Saved successfully';
         this.configDirty = false;
         setTimeout(() => { this.configSuccess = ''; }, 3000);
         // Refresh updates list immediately so newly-excluded containers
         // disappear without waiting for the next 60s poll.
         this.fetchUpdates();
+        // Refresh auth-status so the "Local" badge, logout button, and
+        // no-auth banner all reflect the new mode immediately (live reload).
+        this.fetchAuthStatus();
       } catch (e) {
         this.configError = e.message;
       } finally {

@@ -34,6 +34,7 @@ A Docker container monitor with a built-in web UI. Track container health, view 
 - **Healthcheck suggestions** — built-in database of recommended healthchecks for common images
 - **Config inspector** — view ports, volumes, networks, env vars, and labels per container
 - **Discord notifications** — state changes, health events, new updates with colored embeds
+- **Authentication** — Forms / Basic / None modes with configurable "disabled for trusted networks" bypass, session persistence across restarts, CSRF protection, and a single API key for scripts and Homepage widgets
 - **Docker-native** — PUID/PGID/UMASK, healthcheck, Alpine-based (~46 MB)
 
 ## Quick Start
@@ -57,8 +58,8 @@ On first start, a default `constat.conf` is created in the config directory. Ope
 
 ### 2. Initial Setup
 
-1. Open `http://your-host:7890` — the Web UI is available immediately
-2. Your containers appear automatically with live stats (CPU, RAM, network)
+1. Open `http://your-host:7890` — on first run you'll be redirected to `/setup` to create an admin account (see [Authentication](#authentication))
+2. After login, your containers appear automatically with live stats (CPU, RAM, network)
 3. Click any container row to expand details, charts, and quick actions
 4. To enable auto-restart, add the Docker label `constat.restart=true` to containers you want restarted when unhealthy (see [Auto-Restart](#auto-restart))
 5. To set up Discord notifications, go to the **Config** tab and add your webhook URLs (see [Discord Webhooks](#discord-webhooks))
@@ -247,6 +248,8 @@ Note: you'll need read/write access for container restart and start/stop functio
 | `UMASK` | No | `002` | File creation mask |
 | `DOCKER_HOST` | No | — | Docker socket proxy URL (optional) |
 | `UI_ENABLED` | No | `true` | Set to `false` to disable the web UI |
+| `TRUSTED_NETWORKS` | No | *(empty — uses Radarr-parity defaults)* | Lock **Trusted Networks** at host level. Comma-separated IPs/CIDRs (`192.168.86.0/24, 10.66.0.0/24`). When set, the UI field is disabled and cannot be changed via the web interface — only by editing the template and restarting. Useful for defense-in-depth against UI-takeover attackers expanding the trust boundary. |
+| `TRUSTED_PROXIES` | No | *(empty)* | Lock **Trusted Proxies** at host level. Comma-separated IPs. Same UI-disabled behavior as `TRUSTED_NETWORKS`. Only needed when Constat sits behind a reverse proxy that terminates TLS (SWAG, Authelia, Traefik). |
 
 ### Volumes
 
@@ -334,15 +337,80 @@ Docker Engine
 
 **Frontend:** Alpine.js single-page app with Tailwind-inspired styling. No build step — single `index.html` embedded in the Go binary.
 
+## Authentication
+
+As of **v0.9.17**, the Web UI requires authentication. The model follows Radarr/Sonarr's convention — familiar if you're coming from that ecosystem.
+
+### First-run setup
+
+On first access after install or upgrade, you'll be redirected to `/setup`:
+
+1. Create an admin **username** (1–64 chars, no control chars)
+2. Create a **password** (minimum 10 characters, at least 2 of: uppercase, lowercase, digit, symbol)
+3. Confirm the password and submit
+
+You're automatically logged in and land in the app. Existing config is preserved — only credentials are new.
+
+### Two settings you control
+
+**Settings → Security:**
+
+| Setting | Choices | What it does |
+|---|---|---|
+| **Authentication** | `Forms` (default) / `Basic` / `None` | *How* the user authenticates. Forms shows a login page; Basic uses the browser's built-in popup (best behind a reverse proxy); None disables auth entirely (requires typed confirmation and shows a persistent warning banner) |
+| **Authentication Required** | `Disabled for Trusted Networks` (default) / `Enabled` | *When* login is required. Default lets LAN devices skip login; Enabled requires login from every IP including localhost |
+
+### Trusted Networks
+
+When `Authentication Required = Disabled for Trusted Networks`, devices on the listed networks skip the login page. Two modes:
+
+- **Leave empty** (default) — matches Radarr: trusts all private network ranges (`10.x`, `172.16–31.x` incl. Docker bridges, `192.168.x`, link-local, IPv6 ULA) plus loopback. Convenient but trusts anything with a private IP, including every Docker container on the host.
+- **Set a custom list** — trusts only specific IPs or CIDR subnets you enter. Example: `192.168.86.0/24, 10.66.0.0/24` trusts your home VLAN + your WireGuard tunnel, nothing else. Devices on Docker bridges (172.17.x, 172.19.x) then need to log in or use the API key.
+
+Loopback (`127.0.0.1`) is always trusted regardless, so Docker healthchecks and localhost admin tools don't need to authenticate.
+
+### API key
+
+For scripts, Homepage widgets, and other programmatic integrations, use the API key from **Settings → Security**:
+
+```bash
+curl -H "X-Api-Key: <key>" http://your-host:7890/api/summary
+```
+
+The key is also accepted as a `?apikey=<key>` query parameter, but the header form is preferred (query parameters leak to access logs and browser history).
+
+Click **Regenerate API Key** to rotate. The old key stops working immediately — update any scripts or widgets that use it.
+
+### Reverse-proxy deployments (SWAG, Traefik, Authelia)
+
+If Constat runs behind a reverse proxy:
+
+1. Set `AUTHENTICATION` to `basic` or `forms` depending on what your proxy handles
+2. Set `TRUSTED_PROXIES` in `/config/constat.conf` to the proxy's IP (e.g. `TRUSTED_PROXIES="172.17.0.1"`) so Constat reads the real client IP from `X-Forwarded-For` and respects `X-Forwarded-Proto` for Secure-cookie flag
+3. If the proxy handles auth (Authelia, Cloudflare Access) and you don't want Constat to prompt as well, set `AUTHENTICATION=none`
+
+### Protection layers in place
+
+- **CSRF** (double-submit cookie) blocks cross-site request forgery on all write endpoints
+- **SSRF** (outbound HTTP validation) blocks Constat from being used to probe your internal network via the webhook-test / Gotify-test / registry-login endpoints
+- **Sensitive data redaction** — environment variables with names like `*_KEY`, `*_TOKEN`, `*_PASSWORD`, `*_SECRET` etc. are replaced with `[REDACTED]` in the container-config endpoint, so Constat can't be used to leak credentials from *other* containers on the host
+- **Session persistence** — once logged in, your session survives container restarts within its TTL (30 days default)
+- **Security headers** — `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` on every response
+
+### External exposure
+
+Constat deliberately does **not** include rate limiting or a dedicated audit log. If you expose the port beyond your LAN:
+
+- Use a reverse proxy (SWAG, Traefik) with `fail2ban` or `CrowdSec` in front for brute-force protection
+- Set `Authentication Required = Enabled` so even LAN requires login
+- Consider Authelia or Cloudflare Access for 2FA/SSO
+
 ## Security Notes
 
-The Web UI has no authentication — anyone with network access to port 7890 can view and control containers. This is standard for homelab tools (Sonarr, Radarr, etc.) but you should:
-
-- Only expose port 7890 on your local network
-- Use a reverse proxy with authentication if exposing externally
 - Docker socket access grants full container control — use a socket proxy for read-only if you don't need restart/start/stop
-- Config can contain Discord webhook URLs — treat port 7890 as a trusted interface
 - Registry credentials (if you use Private registry login) are stored at `/config/.docker/config.json` in the standard Docker format with 600 permissions — the same as `docker login` on the host. Back up or restrict your `/config` mount accordingly
+- Admin credentials live in `/config/auth.json` (mode 600) — bcrypt-hashed passwords, never plaintext. Do not commit this file or ship it in images
+- If you forget your password and can't log in, delete `/config/auth.json` and restart the container — it will show the setup wizard again. **Existing configuration is preserved** (only the credentials file is touched)
 
 ## Support
 

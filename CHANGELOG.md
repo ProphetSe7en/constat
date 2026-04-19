@@ -1,5 +1,54 @@
 # Changelog
 
+## v0.9.17
+
+### ⚠️ Breaking changes
+
+- **Authentication is now required.** First time you open the UI after upgrade you'll be redirected to a setup wizard to create an admin username + password. All existing config is preserved — only credentials are new. See the [Security section of the README](README.md#authentication) for the three auth modes and how to configure reverse-proxy deployments.
+
+### Features (security hardening)
+
+- **Forms / Basic / None authentication modes** — same model as Radarr/Sonarr. Forms (login page) is the default. Basic for browsers behind a reverse proxy that handles login separately. None disables auth entirely (requires typing `DISABLE` + password confirmation to prevent accidental lockout) and shows a persistent warning banner.
+- **"Disabled for Trusted Networks"** — a subset of IPs/CIDRs can skip login. Default is all RFC1918 private networks + loopback (matches Radarr's behavior). Can be narrowed to a custom list (`192.168.86.0/24, 10.66.0.0/24`) so only specific subnets bypass auth — useful if you want your home VLAN and WireGuard tunnel trusted but not every random device on another VLAN.
+- **Session persistence across container restarts** — once logged in, your session survives container updates and reboots within the 30-day TTL (configurable). Sessions are stored to `/config/sessions.json` (mode 0600) and reloaded on startup, dropping expired entries.
+- **Password change in Settings → Security** — old password verified before rotation; other sessions on other browsers are invalidated on success; current browser gets a fresh session cookie automatically so you stay logged in.
+- **API key for scripts and Homepage widgets** — single key per instance, visible in Settings → Security. Send as `X-Api-Key` header (preferred) or `?apikey=` query parameter. Regenerate button with confirmation if you need to rotate.
+- **CSRF protection** via double-submit cookie pattern. Prevents malicious websites from tricking your browser into making authenticated requests to Constat. Valid API-key requests bypass CSRF (programmatic callers aren't browser-driven). HTML forms (/login, /setup, /logout) include a hidden `csrf_token` field; AJAX fetches include the header automatically via a global fetch wrapper.
+- **Security headers** on every response: `X-Frame-Options: DENY` (clickjacking defense), `X-Content-Type-Options: nosniff` (MIME sniffing defense), `Referrer-Policy: same-origin` (URL leakage in cross-origin navigations).
+- **SSRF protection on all outbound HTTP** — every webhook test, Gotify ping, registry auth probe, and notification call runs through a shared client that rejects destinations in RFC1918, link-local, IPv6 ULA, loopback, cloud metadata, carrier-grade NAT, and documentation ranges. Per-request IP revalidation defeats DNS rebinding. Explicit `Proxy: nil` prevents `HTTP_PROXY` env var from routing around the check. `DisableKeepAlives: true` prevents IP pinning across requests.
+- **Sensitive data redaction in responses:**
+  - Environment variable names containing `KEY`, `APIKEY`, `TOKEN`, `PASSWORD`, `PASSWD`, `PASS`, `SECRET`, `CREDENTIAL`, `CREDENTIALS`, `AUTH`, `COOKIE`, `SALT`, `HASH`, `BEARER`, `SIGNATURE`, `DSN`, `WEBHOOK`, or `PRIVATE` are redacted as `[REDACTED]` in `/api/containers/{id}/config`. Whole-token matching (splitting on underscore) prevents false positives on names like `MONKEY_BUSINESS` or `KEEPALIVE_INTERVAL`.
+  - Registry credentials never returned by `/api/registry`; only masked username + host.
+- **Public `/api/health` endpoint** returns `{"ok":true}` without auth so Docker healthchecks, Uptime Kuma probes, and Homepage connectivity checks work regardless of auth mode.
+- **Reverse-proxy aware Secure-flag** — both session and CSRF cookies set the Secure flag correctly when Constat runs behind SWAG/nginx with TLS termination, not just on direct-TLS deployments. Requires configuring `TRUSTED_PROXIES` with the proxy's IP.
+- **Live-reload of auth config** — changing Authentication, Authentication Required, Trusted Networks, Trusted Proxies, or Session TTL takes effect immediately on Save; no container restart needed. Password-confirm required when disabling auth entirely.
+
+### Internal
+
+- New `internal/auth` package (~900 LOC incl. tests): Store with bcrypt-hashed credentials (cost 12), in-memory session map with disk persistence, API-key verification via `crypto/subtle.ConstantTimeCompare`, pluggable auth modes, middleware chain, CSRF with both header and form-field support.
+- New `internal/netsec` package (~500 LOC incl. tests): `IsBlockedIP` for SSRF, `IsLocalAddress` for local-bypass, `ParseTrustedNetworks` with minimum CIDR prefix enforcement (rejects `/0` and other catastrophically-wide masks), `NewSafeHTTPClient` with pre-dial IP validation, `ValidateURL` for save-time checks, right-most-non-trusted `X-Forwarded-For` parsing that defeats the classic spoofed-leftmost CSRF-pivot attack.
+- 80+ tests covering auth modes, CSRF, SSRF, trusted-proxy scenarios, timing-equalized password comparison, session expiry, session cap eviction, race safety under `-race`.
+
+### Deployment guidance for external exposure
+
+Constat does not include rate-limiting or a dedicated audit log — those are delegated to the reverse-proxy layer. If you expose Constat beyond your LAN:
+- Use a reverse proxy (SWAG, Traefik, nginx) with `fail2ban` or `CrowdSec` for brute-force protection
+- Set `AUTHENTICATION_REQUIRED="enabled"` to require login from every IP
+- Configure `TRUSTED_PROXIES` with your reverse proxy's IP so `X-Forwarded-For` client-IP detection and `X-Forwarded-Proto` Secure-flag work correctly
+- Consider Authelia or Cloudflare Access for 2FA/SSO in front
+
+### Migration
+
+No manual migration needed. On first access after the upgrade:
+
+1. You'll be redirected to `/setup`
+2. Create an admin username and password (min 10 chars, at least 2 of: uppercase, lowercase, digit, symbol)
+3. Continue to the app normally — your existing configuration, Memory Watch rules, sequences, and registry credentials are all preserved
+
+Existing scripts or Homepage widgets calling the API:
+- From a LAN IP (RFC1918 private) → no change, local-bypass covers them
+- From an external IP or when `AUTHENTICATION_REQUIRED="enabled"` → send `X-Api-Key: <key>` header, with the key from Settings → Security
+
 ## v0.9.16
 
 ### Improved
