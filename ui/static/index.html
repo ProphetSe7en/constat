@@ -3634,23 +3634,51 @@
 </div>
 
 <script>
-// CSRF protection: automatically attach X-CSRF-Token header to every
-// mutating fetch the UI makes. Server sets constat_csrf cookie on every
-// GET; this helper reads the cookie and echoes the value back as a
-// header on POST/PUT/DELETE/PATCH. Handles all current fetches plus any
-// added later without per-call changes.
+// Global fetch wrapper. Handles two cross-cutting concerns so call sites
+// don't have to:
+//
+// (1) CSRF — attach X-CSRF-Token header to every mutating fetch. Server
+//     sets a constat_csrf cookie on every GET; the wrapper reads the
+//     cookie and echoes it as a header on POST/PUT/DELETE/PATCH. AJAX
+//     only — HTML <form> POSTs use a hidden csrf_token field.
+//
+// (2) 401 → /login redirect — if any auth-gated endpoint returns 401
+//     (session expired, logged out elsewhere, cookie cleared), bounce
+//     the user to the login page. Centralized so every fetch call site
+//     doesn't need `if (resp.status === 401) window.location...` boiler-
+//     plate. A never-resolving promise is returned on redirect so
+//     callers don't try to .json() a body that won't arrive before the
+//     navigation completes.
+//
+//     Skip the redirect when:
+//       - Already on /login or /setup (avoid loop — these pages probe
+//         /api/auth/status as a public endpoint).
+//       - Caller opts out via X-Skip-Login-Redirect header. The only
+//         legitimate use is the disable-auth modal, where 401 means
+//         "confirm_password incorrect" not "session expired".
 (function() {
   const origFetch = window.fetch.bind(window);
-  window.fetch = function(input, init) {
+  window.fetch = async function(input, init) {
     init = init || {};
     const method = (init.method || 'GET').toUpperCase();
+    const headers = Object.assign({}, init.headers || {});
     if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
       const m = document.cookie.match(/(?:^|; )constat_csrf=([^;]+)/);
-      if (m) {
-        init.headers = Object.assign({}, init.headers || {}, { 'X-CSRF-Token': m[1] });
+      if (m) headers['X-CSRF-Token'] = m[1];
+    }
+    const skipLoginRedirect = headers['X-Skip-Login-Redirect'] === '1';
+    // Client-side hint only — strip before sending to server.
+    delete headers['X-Skip-Login-Redirect'];
+    init.headers = headers;
+    const resp = await origFetch(input, init);
+    if (resp.status === 401 && !skipLoginRedirect) {
+      const path = window.location.pathname;
+      if (path !== '/login' && path !== '/setup') {
+        window.location.href = '/login';
+        return new Promise(() => {});
       }
     }
-    return origFetch(input, init);
+    return resp;
   };
 })();
 
@@ -6183,11 +6211,32 @@ function app() {
       }
     },
 
+    // pwComplexityError mirrors the server rule in auth.ValidateConfig:
+    // ≥10 chars + ≥2 of {upper, lower, digit, symbol}. Client-side check
+    // saves a round-trip and gives immediate feedback. Server re-validates
+    // unconditionally — this is UX-only, not a trust boundary. T80 parity.
+    pwComplexityError(pw) {
+      if (!pw || pw.length < 10) return 'password must be at least 10 characters';
+      let classes = 0;
+      if (/[A-Z]/.test(pw)) classes++;
+      if (/[a-z]/.test(pw)) classes++;
+      if (/[0-9]/.test(pw)) classes++;
+      if (/[^A-Za-z0-9]/.test(pw)) classes++;
+      if (classes < 2) return 'password must contain at least 2 of: uppercase, lowercase, digit, symbol';
+      return '';
+    },
+
     async changePassword() {
       if (!this.pwChange.current || !this.pwChange.next || !this.pwChange.confirm) return;
       if (this.pwChange.next !== this.pwChange.confirm) {
         this.pwChangeOk = false;
         this.pwChangeMsg = 'New passwords do not match';
+        return;
+      }
+      const complexityErr = this.pwComplexityError(this.pwChange.next);
+      if (complexityErr) {
+        this.pwChangeOk = false;
+        this.pwChangeMsg = complexityErr;
         return;
       }
       this.pwChangeSaving = true;
@@ -6258,9 +6307,15 @@ function app() {
         body.confirm_password = this.disableAuthPassword;
       }
       try {
+        // Opt out of the central 401→/login redirect for confirmedNone:
+        // here a 401 means "confirm_password incorrect", not "session
+        // expired", and must surface to the modal handler below. Session
+        // expiry on every other path is handled by the wrapper.
+        const headers = { 'Content-Type': 'application/json' };
+        if (confirmedNone) headers['X-Skip-Login-Redirect'] = '1';
         const resp = await fetch('/api/config', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(body),
         });
         if (!resp.ok) {

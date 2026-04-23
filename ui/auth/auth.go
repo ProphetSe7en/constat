@@ -30,6 +30,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,21 @@ import (
 
 	"constat-ui/netsec"
 )
+
+// safeGoAuth runs fn in a new goroutine with panic recovery. Kept local
+// to the auth package so this self-contained security core stays import-
+// compatible across containers. Duplicate of ui/safego.go's safeGo by design.
+func safeGoAuth(name string, fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("auth: panic in %s: %v\n%s", name, r, debug.Stack())
+			}
+		}()
+		fn()
+	}()
+}
+
 
 // AuthMode controls HOW a user authenticates.
 type AuthMode string
@@ -243,7 +259,9 @@ func (s *Store) persistSessionsLocked() {
 	// Write off the critical path. Don't wait for it to finish — eventual
 	// consistency is fine; worst case a restart drops the last few seconds
 	// of sessions (user re-logs in).
-	go s.writeSessionsSnapshot(path, entries)
+	safeGoAuth("writeSessionsSnapshot", func() {
+		s.writeSessionsSnapshot(path, entries)
+	})
 }
 
 // writeSessionsSnapshot is a method (not a free function) so it can take

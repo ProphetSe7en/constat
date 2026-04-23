@@ -410,6 +410,11 @@ type App struct {
 	authStore       *auth.Store // exposed so handleUpdateConfig can live-reload auth settings
 	restartDisabled map[string]bool
 	restartMu       sync.RWMutex
+	// configMu serialises PUT /api/config (handleUpdateConfig). H4 fleet-drift
+	// fix: without this, two concurrent saves can both ReadConfig → mutate →
+	// WriteConfig and the second write clobbers the first. One save at a time
+	// closes the race.
+	configMu sync.Mutex
 }
 
 func (app *App) loadRestartDisabled() {
