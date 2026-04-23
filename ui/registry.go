@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -367,7 +368,13 @@ func (rs *RegistryStore) Verify(ctx context.Context, host, username, password st
 	// TLS ≥1.2 is enforced via the netsec transport's defaults.
 	resp, err := registryHTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("connection failed: %w", err)
+		// T76: don't wrap the raw net/http error — it includes DNS/TLS/syscall
+		// detail (host, resolver, cipher) that handleRegistryLogin would
+		// surface to the client. Log the full error server-side here so
+		// operational debugging (is it DNS? TLS? routing?) is still possible
+		// without leaking detail to authenticated callers.
+		log.Printf("registry.verifyV2: transport error to %s: %v", probeHost, err)
+		return errors.New("connection failed")
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
@@ -419,7 +426,11 @@ func verifyBearer(ctx context.Context, challenge, username, password string) err
 	req.Header.Set("User-Agent", "constat/"+Version)
 	resp, err := registryHTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("token endpoint unreachable: %w", err)
+		// T76: same reason as the /v2/ probe above — don't wrap the raw
+		// net/http error since it surfaces via handleRegistryLogin.
+		// Log server-side so ops can still diagnose DNS/TLS/routing issues.
+		log.Printf("registry.verifyBearer: transport error to %s: %v", tokenURL, err)
+		return errors.New("token endpoint unreachable")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {

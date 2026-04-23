@@ -267,7 +267,7 @@ func (app *App) handleStartContainer(w http.ResponseWriter, r *http.Request) {
 
 	if err := app.docker.ContainerStart(ctx, id, container.StartOptions{}); err != nil {
 		log.Printf("Error starting container %s: %v", id, err)
-		writeError(w, 500, fmt.Sprintf("Failed to start container: %v", err))
+		writeError(w, 500, "Failed to start container")
 		return
 	}
 
@@ -288,7 +288,7 @@ func (app *App) handleStopContainer(w http.ResponseWriter, r *http.Request) {
 	options := containerStopOptions(timeout)
 	if err := app.docker.ContainerStop(ctx, id, options); err != nil {
 		log.Printf("Error stopping container %s: %v", id, err)
-		writeError(w, 500, fmt.Sprintf("Failed to stop container: %v", err))
+		writeError(w, 500, "Failed to stop container")
 		return
 	}
 
@@ -309,7 +309,7 @@ func (app *App) handleRestartContainer(w http.ResponseWriter, r *http.Request) {
 	options := containerStopOptions(timeout)
 	if err := app.docker.ContainerRestart(ctx, id, options); err != nil {
 		log.Printf("Error restarting container %s: %v", id, err)
-		writeError(w, 500, fmt.Sprintf("Failed to restart container: %v", err))
+		writeError(w, 500, "Failed to restart container")
 		return
 	}
 
@@ -328,7 +328,7 @@ func (app *App) handlePauseContainer(w http.ResponseWriter, r *http.Request) {
 
 	if err := app.docker.ContainerPause(ctx, id); err != nil {
 		log.Printf("Error pausing container %s: %v", id, err)
-		writeError(w, 500, fmt.Sprintf("Failed to pause container: %v", err))
+		writeError(w, 500, "Failed to pause container")
 		return
 	}
 
@@ -347,7 +347,7 @@ func (app *App) handleUnpauseContainer(w http.ResponseWriter, r *http.Request) {
 
 	if err := app.docker.ContainerUnpause(ctx, id); err != nil {
 		log.Printf("Error unpausing container %s: %v", id, err)
-		writeError(w, 500, fmt.Sprintf("Failed to unpause container: %v", err))
+		writeError(w, 500, "Failed to unpause container")
 		return
 	}
 
@@ -366,7 +366,7 @@ func (app *App) handleKillContainer(w http.ResponseWriter, r *http.Request) {
 
 	if err := app.docker.ContainerKill(ctx, id, "SIGKILL"); err != nil {
 		log.Printf("Error killing container %s: %v", id, err)
-		writeError(w, 500, fmt.Sprintf("Failed to force stop container: %v", err))
+		writeError(w, 500, "Failed to force stop container")
 		return
 	}
 
@@ -389,7 +389,8 @@ func (app *App) handleLogsTail(w http.ResponseWriter, r *http.Request) {
 		Tail:       "10",
 	})
 	if err != nil {
-		writeError(w, 500, fmt.Sprintf("Failed to get logs: %v", err))
+		log.Printf("Error getting logs for container %s: %v", id, err)
+		writeError(w, 500, "Failed to get container logs")
 		return
 	}
 	defer logReader.Close()
@@ -745,7 +746,8 @@ func (app *App) handleTestGotify(w http.ResponseWriter, r *http.Request) {
 	gotifyURL := strings.TrimRight(req.URL, "/") + "/message?token=" + url.QueryEscape(req.Token)
 	resp, err := client.Post(gotifyURL, "application/json", bytes.NewReader(body))
 	if err != nil {
-		writeError(w, 502, fmt.Sprintf("Failed to reach Gotify: %v", err))
+		log.Printf("handleTestGotify: POST failed: %v", err)
+		writeError(w, 502, "Failed to reach Gotify")
 		return
 	}
 	defer resp.Body.Close()
@@ -811,7 +813,8 @@ func (app *App) handleListRegistry(w http.ResponseWriter, r *http.Request) {
 	}
 	list, err := app.registryStore.List()
 	if err != nil {
-		writeError(w, 500, fmt.Sprintf("Failed to read registry config: %v", err))
+		log.Printf("handleListRegistry: List failed: %v", err)
+		writeError(w, 500, "Failed to read registry config")
 		return
 	}
 	if list == nil {
@@ -846,11 +849,16 @@ func (app *App) handleRegistryLogin(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	if err := app.registryStore.Verify(ctx, req.Registry, req.Username, req.Password); err != nil {
+		// User-facing validator message from registry.Verify — safe surface
+		// (e.g. "invalid credentials", "registry unreachable"). Domain-specific,
+		// no Go-internal detail.
+		log.Printf("handleRegistryLogin: Verify failed for %s: %v", req.Registry, err)
 		writeError(w, 401, err.Error())
 		return
 	}
 	if err := app.registryStore.Save(req.Registry, req.Username, req.Password); err != nil {
-		writeError(w, 500, fmt.Sprintf("Failed to save credentials: %v", err))
+		log.Printf("handleRegistryLogin: Save failed for %s: %v", req.Registry, err)
+		writeError(w, 500, "Failed to save credentials")
 		return
 	}
 	if app.updateChecker != nil {
@@ -878,7 +886,8 @@ func (app *App) handleRegistryLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := app.registryStore.Remove(host); err != nil {
-		writeError(w, 500, fmt.Sprintf("Failed to remove credentials: %v", err))
+		log.Printf("handleRegistryLogout: Remove failed for %s: %v", host, err)
+		writeError(w, 500, "Failed to remove credentials")
 		return
 	}
 	if app.updateChecker != nil {
@@ -944,15 +953,23 @@ func (app *App) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 
 func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 65536)
-	// Read body ONCE into memory so we can decode into two structs: the
-	// main ConfigData (persisted to disk) and a side struct that picks up
-	// `confirm_password` (never persisted, never logged by upstream proxies
-	// because it's in the body not headers).
+	// H4: serialize the whole read-modify-write cycle so two concurrent
+	// PUTs cannot both ReadConfig → mutate → WriteConfig with the second
+	// write clobbering the first. The body read above is cheap; take the
+	// lock right after so we fail fast on malformed bodies without blocking
+	// other saves.
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeError(w, 400, "Failed to read request body")
 		return
 	}
+	app.configMu.Lock()
+	defer app.configMu.Unlock()
+
+	// Read body ONCE into memory so we can decode into two structs: the
+	// main ConfigData (persisted to disk) and a side struct that picks up
+	// `confirm_password` (never persisted, never logged by upstream proxies
+	// because it's in the body not headers).
 	var config ConfigData
 	if err := json.Unmarshal(bodyBytes, &config); err != nil {
 		writeError(w, 400, "Invalid JSON body")
@@ -974,7 +991,12 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	// round-trip it to disk without the existing value to fall back to,
 	// and the placeholder itself would pass URL validation (discord.com
 	// prefix) and clobber a real webhook silently. Hard-fail the request.
-	if existing, rerr := ReadConfig(configPath); rerr == nil {
+	//
+	// The `existing` value is lifted to function scope so the T77 env-lock
+	// check below can also compare against it (accept a partial PUT whose
+	// submitted value equals the on-disk value even when env-locked).
+	existing, existingErr := ReadConfig(configPath)
+	if existingErr == nil {
 		config.WebhookState = preserveIfMasked(config.WebhookState, existing.WebhookState, maskedDiscordWebhook)
 		config.WebhookHealth = preserveIfMasked(config.WebhookHealth, existing.WebhookHealth, maskedDiscordWebhook)
 		config.WebhookMaintenance = preserveIfMasked(config.WebhookMaintenance, existing.WebhookMaintenance, maskedDiscordWebhook)
@@ -985,7 +1007,7 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			config.WebhookHealth == maskedDiscordWebhook ||
 			config.WebhookMaintenance == maskedDiscordWebhook ||
 			config.GotifyToken == maskedToken {
-			log.Printf("handleUpdateConfig: ReadConfig failed (%v) AND request contains masked placeholder — rejecting to prevent writing the placeholder to disk", rerr)
+			log.Printf("handleUpdateConfig: ReadConfig failed (%v) AND request contains masked placeholder — rejecting to prevent writing the placeholder to disk", existingErr)
 			writeError(w, 500, "cannot preserve existing secrets (config read failed); re-type the webhook/token fields or resolve the disk error before saving")
 			return
 		}
@@ -1204,26 +1226,48 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	// byte-wise on the raw strings — whitespace, IPv6 casing, or reorder
 	// shouldn't trip the lock since they don't change the trust boundary.
 	// Match the real invariant, not string identity.
+	// T77 env-lock no-change guard: accept the submission if it matches
+	// EITHER the env-locked effective value OR the existing on-disk value.
+	// initAuth does not persist env-locked values to disk so the two legitimately
+	// diverge — a bare `submitted != effective` check rejects every partial PUT
+	// (Settings save that doesn't touch Trusted Networks/Proxies) forever once
+	// env-lock is set. Only reject when the user is actually trying to change
+	// the field away from both the effective and the stored value.
 	if app.authStore != nil && app.authStore.TrustedProxiesLocked() {
-		if !trustedProxiesEqual(config.TrustedProxies, app.authStore.TrustedProxiesRaw()) {
+		effective := app.authStore.TrustedProxiesRaw()
+		var onDisk string
+		if existingErr == nil && existing != nil {
+			onDisk = existing.TrustedProxies
+		}
+		if !trustedProxiesEqual(config.TrustedProxies, effective) &&
+			!trustedProxiesEqual(config.TrustedProxies, onDisk) {
 			writeError(w, 403, "trustedProxies is locked by the TRUSTED_PROXIES environment variable. Edit the Unraid template / docker-compose file and restart the container to change it.")
 			return
 		}
 	}
 	if app.authStore != nil && app.authStore.TrustedNetworksLocked() {
-		if !trustedNetworksEqual(config.TrustedNetworks, app.authStore.TrustedNetworksRaw()) {
+		effective := app.authStore.TrustedNetworksRaw()
+		var onDisk string
+		if existingErr == nil && existing != nil {
+			onDisk = existing.TrustedNetworks
+		}
+		if !trustedNetworksEqual(config.TrustedNetworks, effective) &&
+			!trustedNetworksEqual(config.TrustedNetworks, onDisk) {
 			writeError(w, 403, "trustedNetworks is locked by the TRUSTED_NETWORKS environment variable. Edit the Unraid template / docker-compose file and restart the container to change it.")
 			return
 		}
 	}
 	if config.TrustedProxies != "" {
 		if _, err := netsec.ParseTrustedProxies(config.TrustedProxies); err != nil {
+			// T76 exception: netsec validator messages are user-facing and
+			// implementation-free ("invalid IP in trusted_proxies: ...").
 			writeError(w, 400, fmt.Sprintf("trustedProxies: %v", err))
 			return
 		}
 	}
 	if config.TrustedNetworks != "" {
 		if _, err := netsec.ParseTrustedNetworks(config.TrustedNetworks); err != nil {
+			// T76 exception: netsec validator messages are user-facing.
 			writeError(w, 400, fmt.Sprintf("trustedNetworks: %v", err))
 			return
 		}
@@ -1265,6 +1309,8 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		// abort before touching the disk. (Enum values already validated
 		// by the switches above; this catches things like TTL bounds.)
 		if verr := auth.ValidateConfig(newAuthCfg); verr != nil {
+			// T76 exception: auth validator messages are user-facing
+			// ("session_ttl_days must be 1-365", "invalid mode", etc.).
 			writeError(w, 400, fmt.Sprintf("Auth config invalid: %v", verr))
 			return
 		}
@@ -1294,7 +1340,7 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	if app.authStore != nil {
 		if err := app.authStore.UpdateConfig(newAuthCfg); err != nil {
 			log.Printf("Error applying auth config live: %v", err)
-			writeError(w, 500, fmt.Sprintf("Live-apply failed: %v (config NOT written)", err))
+			writeError(w, 500, "Failed to apply auth config — changes NOT written to disk")
 			return
 		}
 	}
@@ -1372,7 +1418,8 @@ func (app *App) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
 	client := sharedNotifyClient
 	resp, err := client.Post(req.URL, "application/json", bytes.NewReader(body))
 	if err != nil {
-		writeError(w, 502, fmt.Sprintf("Webhook request failed: %v", err))
+		log.Printf("handleTestWebhook: POST failed: %v", err)
+		writeError(w, 502, "Webhook request failed")
 		return
 	}
 	defer resp.Body.Close()
@@ -1454,7 +1501,8 @@ func (app *App) handleLogsSSE(w http.ResponseWriter, r *http.Request) {
 		Timestamps: true,
 	})
 	if err != nil {
-		writeError(w, 500, fmt.Sprintf("Failed to open logs: %v", err))
+		log.Printf("handleLogsSSE: ContainerLogs failed for %s: %v", id, err)
+		writeError(w, 500, "Failed to open container logs")
 		return
 	}
 	defer logReader.Close()
@@ -2185,6 +2233,8 @@ func (app *App) handleCreateSequence(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := app.sequences.Create(seq)
 	if err != nil {
+		// T76 exception: sequences.Create returns only validator messages
+		// ("name is required", "duplicate container: X", etc.) — safe surface.
 		writeError(w, 400, err.Error())
 		return
 	}
@@ -2206,6 +2256,8 @@ func (app *App) handleUpdateSequence(w http.ResponseWriter, r *http.Request) {
 	}
 	updated, err := app.sequences.Update(id, seq)
 	if err != nil {
+		// T76 exception: sequences.Update returns ErrSeqNotFound or validator
+		// messages only — safe surface.
 		if errors.Is(err, ErrSeqNotFound) {
 			writeError(w, 404, err.Error())
 		} else {
@@ -2223,16 +2275,22 @@ func (app *App) handleDeleteSequence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := app.sequences.Delete(id); err != nil {
+		// T76 exception: sequences.Delete returns only ErrSeqNotFound — safe.
 		if errors.Is(err, ErrSeqNotFound) {
 			writeError(w, 404, err.Error())
 		} else {
-			writeError(w, 500, err.Error())
+			log.Printf("handleDeleteSequence: Delete %s: %v", id, err)
+			writeError(w, 500, "Failed to delete sequence")
 		}
 		return
 	}
 	writeJSON(w, map[string]string{"status": "deleted"})
 }
 
+// writeSeqExecError maps sequence execution errors to HTTP responses.
+// T76 exception: all sentinel errors (ErrAlreadyRunning / ErrSeqNotFound /
+// ErrNotRunning) are safe domain messages. The default branch logs the
+// raw error server-side and returns a generic message to the client.
 func writeSeqExecError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrAlreadyRunning):
@@ -2242,7 +2300,8 @@ func writeSeqExecError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrNotRunning):
 		writeError(w, 409, err.Error())
 	default:
-		writeError(w, 500, err.Error())
+		log.Printf("writeSeqExecError: unexpected error: %v", err)
+		writeError(w, 500, "Sequence execution failed")
 	}
 }
 
@@ -2290,6 +2349,7 @@ func (app *App) handleRestartSequence(w http.ResponseWriter, r *http.Request) {
 
 func (app *App) handleAbortSequence(w http.ResponseWriter, r *http.Request) {
 	if err := app.sequences.AbortExecution(); err != nil {
+		// T76 exception: AbortExecution returns only ErrNotRunning — safe.
 		writeError(w, 409, err.Error())
 		return
 	}

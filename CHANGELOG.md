@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.9.18
+
+Fleet-drift closeout release. No new features, no breaking changes — closes the five security-baseline traps (T76, T77, T79, T80, H4) that the vpn-gateway v1.4.0 5-agent review surfaced across the hardened fleet.
+
+### Security
+
+- **T76 — raw `err.Error()` no longer leaks from API responses.** Go's stdlib error strings include file paths, JSON offsets, and field names — useful as a structure oracle for authenticated attackers poking at the API. Every container-action / registry / webhook / Gotify / logs / auth-apply handler in `handlers.go` now logs the raw error server-side via `log.Printf(...)` and returns a generic implementation-free message (`"Failed to start container"`, `"Failed to reach Gotify"`, etc.). Registry-login now returns a plain `"connection failed"` / `"token endpoint unreachable"` when the registry is unreachable (no more DNS/TLS/syscall detail surfaced to the client via `fmt.Errorf("...: %w", err)` wrapping). Exceptions — validator paths with user-facing messages (`netsec.ParseTrustedProxies`, `auth.ValidateConfig`, `sequences.Create/Update/Delete/Start`) are marked with inline `// T76 exception` comments and continue to surface their safe domain strings.
+- **T77 — env-lock reject-on-no-change closed.** When `TRUSTED_NETWORKS` or `TRUSTED_PROXIES` are pinned by env var, `initAuth` does NOT persist the env-locked value back to disk, so on-disk and effective legitimately diverge. The previous check `submitted != effective → 403` rejected every partial PUT (any Settings save that didn't touch Trusted Networks/Proxies) forever once env-lock was set — because the UI round-trips whatever the GET returned, and a partial-merge pulls the disk value. Fixed by accepting submissions where the value matches EITHER the effective env-value OR the existing on-disk value. Only actual changes away from both are blocked.
+- **T79 — UI save flows now redirect to `/login` on 401.** Session expiry mid-edit previously showed a generic "Failed to save" toast with no guidance — user would reload, lose their changes, and *then* see the login page. The existing CSRF fetch wrapper is extended to also handle 401 centrally so every PUT / POST / DELETE to an auth-gated endpoint inherits the redirect without per-call boilerplate. (Already landed on master in commit 7edbd84, shipped here.)
+- **T80 — client-side password-complexity parity on `changePassword()`.** The server enforces ≥10 chars + ≥2 of {upper, lower, digit, symbol}. UI now mirrors the rule via a `pwComplexityError(pw)` helper called before POST, so users get immediate in-form feedback instead of an error toast after a round-trip. Server-side validation stays the trust boundary and re-validates unconditionally.
+- **H4 — `handleUpdateConfig` serialized to close a lost-update race.** Two concurrent PUT `/api/config` calls could both `ReadConfig → mutate → WriteConfig` and the later write would clobber the earlier one — losing whichever field the first save touched but the second didn't (including webhook secrets re-preserved from `********`). New `configMu sync.Mutex` on the `App` struct serialises the whole read-modify-write cycle so one save completes before the next starts. Body read happens before lock acquisition so malformed bodies fail fast without blocking other saves.
+
+Full baseline audit trail: `docs/security-implementation-baseline.md` T1–T80.
+
 ## v0.9.17
 
 ### ⚠️ Breaking changes
