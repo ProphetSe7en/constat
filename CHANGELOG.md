@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.9.19
+
+Memory-leak fix. Constat kept a ring-buffer + aggregated-history + averages entry for every container name it ever saw, forever — including transient one-shots (`docker run` without `--name` → auto-generated names like `admiring_hofstadter`, `angry_dirac`). On prod systems that ran many one-shots over time, 60%+ of in-memory stats was phantoms. Observed: 232 MiB vs 123 MiB between a prod instance (151 tracked names, 93 phantoms) and a dev instance on the same Docker daemon.
+
+### Fixed
+
+- **Phantom-container accumulation in stats history.** Added three cleanup mechanisms:
+  1. **`destroy` event handler** — when Docker emits `destroy` for a container (explicit `docker rm` or `--rm` auto-cleanup), the event stream now calls `StatsCollector.RemoveContainer(name)` which drops the entry from `history`, `aggregated`, `averages`, `latest`, `meta`, `status`, `prevNet`, `streams`, and reverse-maps `idToName`. Previously `destroy` was silently ignored.
+  2. **Startup prune** — 30 s after boot (once `syncStreams` has populated current-state), `StatsCollector.PruneStale` runs one pass against `docker ps -a` and removes any tracked name Docker no longer knows about. Flushes accumulated backlog from prior versions. 30 s delay avoids racing against the initial stream-setup loop.
+  3. **Hourly safety-net scan** — same `PruneStale` runs every hour thereafter to catch destroys that the event stream missed (reconnect gaps, Docker daemon restarts, constat-startup windows).
+- History is keyed by container name, not ID — stats for your real containers survive Unraid Force Update / image upgrades / ID changes intact. The cleanup only removes names that Docker itself has forgotten about.
+
+### Notes
+
+- No config knobs. Keeping stats for containers Docker no longer knows about was a bug, not a feature.
+- Logs `StatsCleanup: pruned N stale container(s) from stats history` on every non-zero prune so you can see it working.
+- Expect a one-time RAM drop on first boot after upgrade: prod will go from ~230 MiB to ~125 MiB within the first minute. Steady state from then on.
+
 ## v0.9.18
 
 Fleet-drift closeout release. No new features, no breaking changes — closes the five security-baseline traps (T76, T77, T79, T80, H4) that the vpn-gateway v1.4.0 5-agent review surfaced across the hardened fleet.

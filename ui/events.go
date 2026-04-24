@@ -287,6 +287,20 @@ func (app *App) processDockerEvent(msg events.Message) {
 			Type:   "state",
 			Action: "unpaused",
 		}
+	case "destroy":
+		// Container fully removed (explicit `docker rm` or `--rm` auto-
+		// cleanup for one-shots). Purge its in-memory stats so we don't
+		// leak ring-buffer + map entries. See StatsCollector.RemoveContainer
+		// for the rationale and the phantom-accumulation backstory.
+		//
+		// No event surfaced to the UI — destroys happen constantly for
+		// transient one-shots and would flood the event feed. Real-name
+		// containers the user cares about emit `die` + `stop` first,
+		// which ARE surfaced.
+		if app.stats != nil {
+			app.stats.RemoveContainer(name)
+		}
+		return
 	case events.ActionHealthStatusUnhealthy:
 		hasLabel := false
 		inspect, err := app.docker.ContainerInspect(context.Background(), msg.Actor.ID)
