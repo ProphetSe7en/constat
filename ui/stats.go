@@ -576,6 +576,124 @@ func (sc *StatsCollector) GetContainerStatus(name string) string {
 	return sc.status[name]
 }
 
+// RemoveContainer drops all in-memory state for a container name. Called
+// when Docker emits a `destroy` event (container fully removed: `docker
+// rm`, or `--rm` auto-cleanup for one-shots) and from PruneStale as a
+// safety net. Without this, every transient Docker one-shot with an
+// auto-generated name (`admiring_hofstadter` etc.) leaked ~112 KiB of
+// ring-buffer plus map entries forever — ~62% of prod's stats-history
+// was phantoms at the time this was added.
+//
+// Removing a name that isn't in the maps is a no-op.
+func (sc *StatsCollector) RemoveContainer(name string) {
+	if name == "" {
+		return
+	}
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	// Stop any active stats stream first so the goroutine can exit cleanly
+	// before we drop the map it writes into.
+	if cancel, ok := sc.streams[name]; ok {
+		cancel()
+		delete(sc.streams, name)
+	}
+
+	delete(sc.history, name)
+	delete(sc.aggregated, name)
+	delete(sc.averages, name)
+	delete(sc.latest, name)
+	delete(sc.meta, name)
+	delete(sc.status, name)
+	delete(sc.prevNet, name)
+
+	// idToName is ID → name; drop any reverse entries that pointed here.
+	for id, n := range sc.idToName {
+		if n == name {
+			delete(sc.idToName, id)
+		}
+	}
+}
+
+// PruneStale removes in-memory state for any tracked container name that
+// no longer appears in `docker ps -a`. Runs on startup (to flush
+// accumulated phantom entries from prior constat versions that didn't
+// listen for destroy events) and every STATS_CLEANUP_INTERVAL
+// thereafter as a safety net for events the stream might miss
+// (reconnect gaps, docker daemon restarts, container destroys that
+// arrive during constat's own startup window).
+//
+// Returns the number of entries pruned so the caller can log it.
+func (sc *StatsCollector) PruneStale(ctx context.Context) int {
+	listCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	containers, err := sc.docker.ContainerList(listCtx, container.ListOptions{All: true})
+	if err != nil {
+		log.Printf("StatsCollector: PruneStale list failed: %v", err)
+		return 0
+	}
+
+	// Build the set of names Docker still knows about.
+	alive := make(map[string]struct{}, len(containers))
+	for _, c := range containers {
+		name := c.ID[:12]
+		if len(c.Names) > 0 {
+			name = strings.TrimPrefix(c.Names[0], "/")
+		}
+		alive[name] = struct{}{}
+	}
+
+	// Snapshot the tracked names under read lock. Don't mutate during
+	// iteration — RemoveContainer takes the write lock. Collect from each
+	// map since a partial-write or transient rename could leave a name in
+	// one map but not another.
+	sc.mu.RLock()
+	tracked := make([]string, 0, len(sc.history)+len(sc.aggregated)+len(sc.averages))
+	seen := make(map[string]struct{})
+	for name := range sc.history {
+		if _, ok := seen[name]; !ok {
+			seen[name] = struct{}{}
+			tracked = append(tracked, name)
+		}
+	}
+	for name := range sc.aggregated {
+		if _, ok := seen[name]; !ok {
+			seen[name] = struct{}{}
+			tracked = append(tracked, name)
+		}
+	}
+	for name := range sc.averages {
+		if _, ok := seen[name]; !ok {
+			seen[name] = struct{}{}
+			tracked = append(tracked, name)
+		}
+	}
+	for name := range sc.latest {
+		if _, ok := seen[name]; !ok {
+			seen[name] = struct{}{}
+			tracked = append(tracked, name)
+		}
+	}
+	for name := range sc.meta {
+		if _, ok := seen[name]; !ok {
+			seen[name] = struct{}{}
+			tracked = append(tracked, name)
+		}
+	}
+	sc.mu.RUnlock()
+
+	pruned := 0
+	for _, name := range tracked {
+		if _, ok := alive[name]; ok {
+			continue
+		}
+		sc.RemoveContainer(name)
+		pruned++
+	}
+	return pruned
+}
+
 // loadContainerStatus restores persisted container status from disk
 func (sc *StatsCollector) loadContainerStatus() {
 	data, err := os.ReadFile("/config/container_status.json")

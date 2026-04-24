@@ -91,6 +91,41 @@ func main() {
 	// Start Docker event watcher
 	go app.WatchEvents(ctx)
 
+	// Stats-history cleanup: phantom containers (transient one-shots with
+	// auto-generated names like `admiring_hofstadter`, left behind when
+	// their stats leaked into history maps forever) are purged reactively
+	// via the `destroy` event handler in WatchEvents. This goroutine is
+	// the safety net: one immediate pass 30 s after startup to flush the
+	// backlog from prior constat versions + pre-destroy-handler uptime,
+	// then hourly passes to catch any destroys the event stream might
+	// have missed (reconnect gaps, daemon restarts).
+	safeGo("stats-cleanup", func() {
+		// Initial scan — wait for syncStreams to have run at least once so
+		// we don't race against it and drop entries that are about to be
+		// populated for currently-running containers.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(30 * time.Second):
+		}
+		if n := statsCollector.PruneStale(ctx); n > 0 {
+			log.Printf("StatsCleanup: pruned %d stale container(s) from stats history on startup", n)
+		}
+
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if n := statsCollector.PruneStale(ctx); n > 0 {
+					log.Printf("StatsCleanup: pruned %d stale container(s) from stats history", n)
+				}
+			}
+		}
+	})
+
 	// Start image cleanup scheduler
 	imageCleaner := &ImageCleaner{docker: cli, app: app}
 	app.imageCleaner = imageCleaner

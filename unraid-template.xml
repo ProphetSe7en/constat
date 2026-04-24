@@ -21,8 +21,12 @@
   <WebUI>http://[IP]:[PORT:7890]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/prophetse7en/unraid-templates/main/constat.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/prophetse7en/constat/main/icon.png</Icon>
-  <Date>2026-04-19</Date>
+  <Date>2026-04-24</Date>
   <Changes>
+### 2026-04-24
+- v0.9.19: Memory-leak fix — phantom containers (Docker one-shots with auto-generated names like `admiring_hofstadter`) were kept in stats history forever. On systems that run many one-shots, this was 60%+ of Constat's RAM. Fixed via `destroy` event handler + startup prune + hourly safety-net scan. Expect a one-time RAM drop of ~100 MiB on first boot after upgrade.
+### 2026-04-23
+- v0.9.18: Fleet-drift closeout — T76/T77/T79/T80/H4 security-baseline fixes surfaced by vpn-gateway v1.4.0 review. No new features, no breaking changes.
 ### 2026-04-19
 - v0.9.17: **Breaking change** — authentication now required, first boot redirects to /setup. Login + password (bcrypt), API key for Homepage/scripts, CSRF, SSRF guards on outbound notifications, security headers, env-var lock for Trusted Networks/Proxies. Atomic writes for state files. Log-injection guards. Full changelog in GitHub repo.
 ### 2026-04-15
