@@ -23,6 +23,10 @@ type Event struct {
 	ExitCode    string    `json:"exitCode,omitempty"`
 	Detail      string    `json:"detail,omitempty"`
 	AutoRestart bool      `json:"autoRestart"`
+	// SequenceRunID ties events emitted during a single sequence run
+	// (lifecycle + per-step transitions) together so the UI can render them
+	// as one expandable group in the events feed. Empty for non-sequence events.
+	SequenceRunID string `json:"sequenceRunId,omitempty"`
 }
 
 // EventBuffer is a thread-safe ring buffer for events
@@ -317,6 +321,13 @@ func (app *App) processDockerEvent(msg events.Message) {
 			Action:      "unhealthy",
 			AutoRestart: hasLabel,
 		}
+		// Hand off to the auto-restart manager. It owns the attempts-in-window
+		// state machine and emits the auto-restart-attempted /
+		// auto-restart-recovered / auto-restart-exhausted events that
+		// SequenceExecutor watches.
+		if hasLabel && app.restartManager != nil {
+			app.restartManager.OnUnhealthy(name, msg.Actor.ID)
+		}
 	case events.ActionHealthStatusHealthy:
 		event = &Event{
 			Type:   "health",
@@ -325,6 +336,9 @@ func (app *App) processDockerEvent(msg events.Message) {
 		// Clear stopped-health status on recovery
 		if app.stats != nil {
 			app.stats.SetContainerStatus(name, "")
+		}
+		if app.restartManager != nil {
+			app.restartManager.OnHealthy(name)
 		}
 	}
 

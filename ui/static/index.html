@@ -337,6 +337,20 @@
   .event-badge-recovered { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
   .event-badge-net-down { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
   .event-badge-net-up { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
+  /* Sequence event badges */
+  .event-badge-completed { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
+  .event-badge-failed { background: #3d1117; color: #f85149; border: 1px solid #5a1e24; }
+  .event-badge-aborted { background: #1c1c1c; color: #8b949e; border: 1px solid #30363d; }
+  .event-badge-skipped { background: #1c1c1c; color: #636e7b; border: 1px solid #30363d; }
+  .event-badge-starting { background: #0d1f3c; color: #58a6ff; border: 1px solid #1f4080; }
+  .event-badge-stopping { background: #2a1f00; color: #d29922; border: 1px solid #4b3a12; }
+  .event-badge-delaying { background: #0d1f3c; color: #79c0ff; border: 1px solid #1f4080; }
+  .event-badge-waiting-healthy { background: #0d1f3c; color: #79c0ff; border: 1px solid #1f4080; }
+  .event-badge-done { background: #0d2818; color: #3fb950; border: 1px solid #1b4721; }
+  /* Sequence-run group styling */
+  .event-seq-row { background: #0d1f3c11; }
+  .event-seq-row:hover { background: #0d1f3c22; }
+  .event-seq-icon { color: #79c0ff; font-size: 11px; flex-shrink: 0; }
   .event-detail { font-size: 11px; color: #8b949e; }
   .event-detail-inline { font-size: 11px; color: #6e7681; margin-left: 2px; }
   .event-exit { color: #f85149; }
@@ -487,7 +501,27 @@
   .seq-count { font-size: 13px; color: #8b949e; margin-left: 8px; }
   .seq-new-btn { padding: 4px 12px; border-radius: 6px; background: #21262d; border: 1px solid #30363d; color: #8b949e; font-size: 12px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 4px; }
   .seq-new-btn:hover { border-color: #238636; color: #3fb950; }
-  .seq-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; margin-bottom: 8px; overflow: visible; }
+  .seq-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; margin-bottom: 8px; overflow: visible; transition: border-color 0.2s; }
+  .seq-card-active { border-color: #1f4080; box-shadow: 0 0 0 1px #1f4080 inset; }
+  .seq-card-meta { font-size: 11px; color: #8b949e; margin-top: 3px; }
+  /* Sequences table reuses the containers/groups col-* widths so cells line up identically. */
+  .seq-table tbody tr.seq-row-active { background: #0d1f3c33; }
+  .seq-table tbody tr.seq-row-active td:first-child { border-left: 3px solid #58a6ff; padding-left: 9px; }
+  .seq-row-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: 8px; }
+  .seq-cancel-btn { padding: 5px 12px; border-radius: 6px; background: #da3633; border: 1px solid #f85149; color: #fff; font-size: 12px; font-weight: 500; cursor: pointer; height: 28px; display: flex; align-items: center; gap: 4px; }
+  .seq-cancel-btn:hover { background: #f85149; }
+  .seq-close-btn-inline { padding: 5px 12px; border-radius: 6px; background: #21262d; border: 1px solid #30363d; color: #c9d1d9; font-size: 12px; font-weight: 500; cursor: pointer; height: 28px; display: flex; align-items: center; }
+  .seq-close-btn-inline:hover { background: #30363d; }
+  .seq-pill-trigger { background: #2a1f3c; color: #bc8cff; border: 1px solid #4a3877; }
+  .seq-step-num { color: #484f58; font-size: 11px; font-variant-numeric: tabular-nums; margin-right: 4px; }
+  .seq-live { padding-top: 8px; }
+  .seq-live-progress-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .seq-live-progress-text { font-size: 12px; color: #8b949e; }
+  .seq-live-elapsed { font-size: 12px; color: #8b949e; font-variant-numeric: tabular-nums; }
+  .seq-live-footer { margin-top: 12px; padding-top: 10px; border-top: 1px solid #21262d; font-size: 12px; }
+  .seq-trigger-summary { margin-top: 12px; padding-top: 10px; border-top: 1px solid #21262d; font-size: 12px; color: #8b949e; line-height: 1.6; }
+  .seq-trigger-summary strong { color: #c9d1d9; font-weight: 600; }
+  .seq-trigger-summary em { color: #79c0ff; font-style: normal; font-weight: 600; }
   .seq-card-header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; }
   .seq-card-header:hover { background: #1c2128; }
   .seq-icon { font-size: 20px; flex-shrink: 0; width: 28px; text-align: center; }
@@ -536,6 +570,11 @@
   .seq-form-field input { width: 100%; max-width: 400px; padding: 6px 12px; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; font-size: 13px; outline: none; }
   .seq-form-field input:focus { border-color: #58a6ff; }
   .seq-form-field input.icon-input { width: 60px; font-size: 20px; text-align: center; }
+  .seq-trigger-select { width: 100%; max-width: 400px; padding: 6px 12px; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; font-size: 13px; outline: none; }
+  .seq-trigger-select:focus { border-color: #58a6ff; }
+  .seq-trigger-hint { font-size: 11px; color: #8b949e; margin-top: 4px; max-width: 600px; line-height: 1.5; }
+  .seq-trigger-hint strong { color: #c9d1d9; font-weight: 600; }
+  .seq-trigger-hint code { font-family: ui-monospace, monospace; font-size: 11px; color: #79c0ff; background: rgba(56,139,253,.1); padding: 1px 4px; border-radius: 3px; }
   /* Emoji picker */
   .seq-emoji-trigger { width: 48px; height: 36px; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: border-color 0.15s; }
   .seq-emoji-trigger:hover { border-color: #58a6ff; }
@@ -574,7 +613,9 @@
   .seq-search-item:hover { background: #21262d; }
   .seq-search-empty { padding: 8px 10px; font-size: 12px; color: #484f58; font-style: italic; }
   /* Delay input */
-  .seq-delay-input { width: 48px; padding: 4px 4px; border-radius: 4px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; font-size: 12px; outline: none; text-align: center; }
+  .seq-delay-input { width: 48px; padding: 4px 4px; border-radius: 4px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; font-size: 12px; outline: none; text-align: center; -moz-appearance: textfield; appearance: textfield; }
+  .seq-delay-input::-webkit-outer-spin-button,
+  .seq-delay-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .seq-delay-input:focus { border-color: #58a6ff; }
   .seq-delay-label { font-size: 11px; color: #484f58; white-space: nowrap; }
   .seq-step-check { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #8b949e; cursor: pointer; user-select: none; white-space: nowrap; }
@@ -2171,6 +2212,7 @@
         <option value="health">Health</option>
         <option value="memory">Memory</option>
         <option value="network">Network</option>
+        <option value="sequence">Sequence</option>
       </select>
       <input type="text" class="search" style="max-width:200px" placeholder="Filter by container..." x-model="eventsFilter.container" @input.debounce.300ms="fetchEvents(true)">
       <div style="flex:1"></div>
@@ -2189,8 +2231,35 @@
 
       <template x-for="(g, gi) in groupedEvents" :key="'g' + gi">
         <div>
+          <!-- Sequence-run group: expandable parent with all lifecycle + per-step events as children -->
+          <template x-if="g.isSequenceRun">
+            <div>
+              <div class="event-group-header event-seq-row" @click="g.expanded = !g.expanded">
+                <span class="event-group-chevron" x-text="g.expanded ? '\u25bc' : '\u25b6'"></span>
+                <span class="event-time" :title="new Date(g.firstTime).toLocaleString()" x-text="formatEventTime(g.firstTime)"></span>
+                <span class="event-seq-icon" title="Sequence run">&#9658;&#9658;</span>
+                <span class="event-container" x-text="g.container"></span>
+                <span class="event-badge event-badge-started">sequence</span>
+                <span class="event-badge" :class="'event-badge-' + seqGroupLifecycleAction(g)" x-text="seqGroupLifecycleAction(g)"></span>
+                <span style="font-size:11px;color:#8b949e" x-text="seqGroupModeText(g)"></span>
+                <span class="event-group-count" x-text="'(' + g.events.length + ' event' + (g.events.length !== 1 ? 's' : '') + ')'"></span>
+              </div>
+              <div class="event-group-children" x-show="g.expanded" x-transition>
+                <template x-for="(e, ei) in g.events" :key="'gse' + gi + '-' + ei">
+                  <div class="event-row">
+                    <span class="event-time" :title="new Date(e.timestamp).toLocaleString()" x-text="formatEventTime(e.timestamp)"></span>
+                    <span class="event-container" x-text="e.container"></span>
+                    <span class="event-badge" :class="'event-badge-' + e.action" x-text="e.action"></span>
+                    <span class="event-detail">
+                      <span x-show="e.detail" class="event-detail-inline" x-text="e.detail"></span>
+                    </span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
           <!-- Single event (no group) -->
-          <template x-if="g.events.length === 1">
+          <template x-if="!g.isSequenceRun && g.events.length === 1">
             <div class="event-row">
               <span style="min-width:12px"></span>
               <span class="event-time" :title="new Date(g.events[0].timestamp).toLocaleString()" x-text="formatEventTime(g.events[0].timestamp)"></span>
@@ -2205,7 +2274,7 @@
             </div>
           </template>
           <!-- Grouped events (2+) -->
-          <template x-if="g.events.length > 1">
+          <template x-if="!g.isSequenceRun && g.events.length > 1">
             <div>
               <div class="event-group-header" @click="g.expanded = !g.expanded">
                 <span class="event-group-chevron" x-text="g.expanded ? '\u25BC' : '\u25B6'"></span>
@@ -3188,70 +3257,6 @@
   <div x-show="activeTab === 'sequences'" x-cloak>
     <div class="seq-wrap">
 
-      <!-- Execution View -->
-      <template x-if="seqView === 'execution' && seqExecution">
-        <div class="seq-exec">
-          <div class="seq-exec-header">
-            <span class="seq-icon" x-text="seqExecSequence()?.icon || '&#9654;'"></span>
-            <span class="seq-exec-name" x-text="seqExecSequence()?.name || seqExecution.sequenceId"></span>
-            <span class="seq-exec-badge" :class="seqExecBadgeClass()" x-text="seqExecBadgeText()"></span>
-            <span class="seq-exec-progress-text" x-text="'step ' + seqExecution.currentStep + ' of ' + seqExecution.totalSteps"></span>
-          </div>
-          <div class="seq-exec-bar">
-            <div class="seq-exec-bar-fill" :class="seqExecBarClass()" :style="'width:' + seqExecProgress() + '%'"></div>
-          </div>
-          <!-- Steps chain -->
-          <template x-for="(step, i) in seqExecution.steps" :key="step.container">
-            <div class="seq-exec-step" :class="'st-' + step.status">
-              <div class="seq-chain-dot" :class="seqExecDotClass(step)">
-                <span x-show="step.status === 'done'">&#10003;</span>
-                <span x-show="step.status === 'starting'">&#9658;</span>
-                <span x-show="step.status === 'stopping'">&#9632;</span>
-                <span x-show="step.status === 'delaying'">&#9208;</span>
-                <span x-show="step.status === 'failed'">&#10007;</span>
-                <span x-show="step.status === 'skipped'">-</span>
-              </div>
-              <div class="seq-exec-info">
-                <div class="seq-exec-step-name" x-text="step.container"></div>
-                <div class="seq-chain-tags">
-                  <span class="seq-chain-tag required" x-show="step.required">required</span>
-                </div>
-                <div class="seq-exec-step-log" :class="{ error: step.status === 'failed' }" x-show="step.log" x-text="step.log"></div>
-                <div class="seq-exec-step-elapsed" x-show="step.elapsed > 0" x-text="(step.elapsed || 0).toFixed(1) + 's'"></div>
-              </div>
-            </div>
-          </template>
-          <!-- Footer -->
-          <div class="seq-exec-footer">
-            <template x-if="seqExecution.status === 'running'">
-              <div style="display:flex;align-items:center;gap:12px;width:100%">
-                <span class="seq-exec-elapsed" x-text="'Elapsed: ' + seqExecElapsed()"></span>
-                <button class="seq-abort-btn" @click="seqAbort()">Abort</button>
-              </div>
-            </template>
-            <template x-if="seqExecution.status === 'complete'">
-              <div style="display:flex;align-items:center;gap:12px;width:100%">
-                <span class="seq-summary" x-text="seqCompleteSummary()"></span>
-                <button class="seq-close-btn" @click="seqDismissExecution()">Close</button>
-              </div>
-            </template>
-            <template x-if="seqExecution.status === 'failed'">
-              <div style="display:flex;align-items:center;gap:12px;width:100%">
-                <span class="seq-exec-error" x-text="seqExecution.error"></span>
-                <button class="seq-retry-btn" @click="seqRetry()">Retry</button>
-                <button class="seq-close-btn" @click="seqDismissExecution()">Dismiss</button>
-              </div>
-            </template>
-            <template x-if="seqExecution.status === 'aborted'">
-              <div style="display:flex;align-items:center;gap:12px;width:100%">
-                <span class="seq-exec-elapsed" style="color:#636e7b">Aborted</span>
-                <button class="seq-close-btn" @click="seqDismissExecution()">Dismiss</button>
-              </div>
-            </template>
-          </div>
-        </div>
-      </template>
-
       <!-- Editor View -->
       <template x-if="seqView === 'editor'">
         <div class="seq-editor">
@@ -3308,24 +3313,52 @@
                 </div>
               </div>
               <label class="seq-step-check">
-                <input type="checkbox" x-model="step.required" @change="if(!step.required){ step.waitHealthy = false; step.delaySeconds = 0; } seqFormDirty = true"> Required
+                <input type="checkbox" x-model="step.required" @change="if(step.required){ step.skipRequired = false; } else { step.waitHealthy = false; } seqFormDirty = true"> Required
               </label>
               <label class="seq-step-check" :style="'color:' + (step.required ? '#58a6ff' : '#484f58')">
                 <input type="checkbox" x-model="step.waitHealthy" :disabled="!step.required" @change="seqFormDirty = true"> Wait healthy
               </label>
-              <template x-if="step.required">
-                <label class="seq-step-check" style="gap: 2px">
-                  <span class="seq-delay-label">Delay</span>
-                  <input type="number" class="seq-delay-input" min="0" max="300" x-model.number="step.delaySeconds" @input="seqFormDirty = true">
-                  <span class="seq-delay-label">s</span>
-                </label>
-              </template>
+              <label class="seq-step-check" :style="'color:' + (step.required || !seqHasPriorRequired(i) ? '#484f58' : '#c9d1d9')" :title="step.required ? 'A Required step IS the dependency — it cannot also skip itself.' : (!seqHasPriorRequired(i) ? 'Only available when an earlier step in this sequence is marked Required — there is nothing to skip otherwise.' : 'Start this step even if a previous Required step failed. Use it for steps that come after a Required one but don’t actually depend on it.')">
+                <input type="checkbox" x-model="step.skipRequired" :disabled="step.required || !seqHasPriorRequired(i)" @change="seqFormDirty = true"> Skip required
+              </label>
+              <label class="seq-step-check" style="gap: 2px" title="Wait this many seconds after the container starts before treating this step as done. For Required steps, this gates the next group; for ordinary steps, it just extends how long the parallel group runs.">
+                <span class="seq-delay-label">Delay</span>
+                <input type="number" class="seq-delay-input" min="0" max="300" x-model.number="step.delaySeconds" @input="seqFormDirty = true">
+                <span class="seq-delay-label">s</span>
+              </label>
               <button class="seq-step-remove" @click="seqRemoveStep(i)" title="Remove step">&times;</button>
             </div>
           </template>
           <button class="seq-add-step" @click="seqAddStep()">+ Add step</button>
+          <div class="seq-steps-header" style="margin-top: 18px">Auto-trigger</div>
+          <div class="seq-form-field">
+            <label>When a Required container comes back up</label>
+            <select x-model="seqForm.onRequiredRecovery" @change="seqFormDirty = true" class="seq-trigger-select">
+              <option value="">Do nothing</option>
+              <option value="restart">Restart steps after it</option>
+            </select>
+            <div class="seq-trigger-hint">
+              Stop and restart the steps after it. Useful when those steps share a folder or mount with the Required one (like rclone or mergerfs) and need a fresh start to see the files again.
+            </div>
+          </div>
+          <div class="seq-form-field">
+            <label>When a Required container goes down</label>
+            <select x-model="seqForm.onRequiredFailure" @change="seqFormDirty = true" class="seq-trigger-select">
+              <option value="">Do nothing</option>
+              <option value="stop">Stop steps after it</option>
+            </select>
+            <div class="seq-trigger-hint">
+              Stop the steps after it. Useful when those steps can't do anything without it — for example, *arr apps after Plex.
+            </div>
+          </div>
           <div class="seq-help">
-            <strong>How dependencies work:</strong> Steps run top to bottom. When a step is marked <strong>Required</strong>, the sequence pauses until that container is running (or healthy if <strong>Wait healthy</strong> is checked) before continuing. Non-required steps between two required steps run <strong>in parallel</strong>. If a required step fails, remaining steps are skipped. <strong>Delay</strong> adds a wait (in seconds) after a required step completes — useful for containers without a healthcheck that need time to initialize.
+            <strong>How dependencies work:</strong> Steps run top to bottom. When a step is marked <strong>Required</strong>, the sequence pauses until that container is running (or healthy if <strong>Wait healthy</strong> is checked) before continuing. Non-required steps between two Required steps run <strong>in parallel</strong>. If a Required step fails, the steps that come after it are skipped — except steps marked <strong>Skip required</strong>, which run in their declared position regardless.
+            <br><br>
+            <strong>Delay</strong> waits the given number of seconds after the container starts before treating the step as done. For Required steps, this gates the next group; for ordinary steps it just extends how long the parallel group runs. Useful when a container reports running or healthy but still needs a few seconds to fully initialize.
+            <br><br>
+            <strong>When to use Skip required:</strong> mark a step Skip required if it comes after a Required step in the order you want them to run, but doesn't actually depend on it. Example: <code>qBittorrent (Required) &rarr; Plex (Skip required) &rarr; Radarr</code>. If qBit fails, Plex still starts; Radarr is skipped because it depends on the broken Required chain. Skip required is only available when an earlier step in the sequence is Required — there's nothing to skip otherwise. Required and Skip required are mutually exclusive on the same step (a Required step <em>is</em> the dependency).
+            <br><br>
+            <strong>How the auto-triggers fire:</strong> only steps marked <strong>Required</strong> can fire triggers, and only the steps after them are affected. Steps marked <strong>Skip required</strong> are always left alone. The <em>back up</em> trigger fires on ANY down&rarr;up transition of the Required container, regardless of cause &mdash; auto-restart, the Restart button, <code>docker restart</code>, watchtower, Unraid Apply, or a manual stop&nbsp;+&nbsp;start. The <em>down</em> trigger fires when the container has been continuously down for at least 30 seconds, OR immediately when constat's auto-restart loop gives up after the configured Max restarts. Quick restarts that complete inside the 30-second window only fire the <em>back up</em> trigger (the dependents only need to be cycled once). If <strong>Wait healthy</strong> is set on the Required step, the back-up cascade waits for it to become healthy before starting the dependents &mdash; this is what makes the rclone&rarr;Plex pattern work cleanly: rclone gets restarted, Plex waits for the fresh mount, then starts. Settings &rarr; Auto-restart controls how many retries constat attempts and how long it waits between them.
           </div>
           <div class="seq-form-error" x-show="seqFormError" x-text="seqFormError"></div>
           <div class="seq-editor-footer">
@@ -3353,52 +3386,404 @@
             </div>
           </template>
 
-          <template x-for="seq in sequences" :key="seq.id">
-            <div class="seq-card">
-              <div class="seq-card-header" @click="seqToggleExpand(seq.id)">
-                <div class="seq-card-actions" @click.stop>
-                  <button class="seq-action-btn seq-action-start" @click="seqRunStart(seq.id)" :disabled="seqIsRunning() || seqActionPending" title="Start sequence">&#9654;</button>
-                  <button class="seq-action-btn seq-action-stop" @click="seqRunStop(seq.id)" :disabled="seqIsRunning() || seqActionPending" title="Stop sequence">&#9632;</button>
-                  <button class="seq-action-btn seq-action-restart" @click="seqRunRestart(seq.id)" :disabled="seqIsRunning() || seqActionPending" title="Restart sequence">&#8635;</button>
-                  <button class="seq-action-btn seq-action-edit" @click="seqEditSequence(seq)" title="Edit">&#9998;</button>
-                  <button class="seq-action-btn seq-action-delete" @click="seqConfirmDeleteId = seq.id" title="Delete">&times;</button>
-                </div>
-                <span class="seq-icon" x-text="seq.icon || '&#9654;'"></span>
-                <div class="seq-card-info">
-                  <div class="seq-card-name">
-                    <span x-text="seq.name"></span>
-                    <span class="seq-pill seq-pill-steps" x-text="seq.steps.length + ' steps'"></span>
-                    <span class="seq-pill" :class="seqStatusPillClass(seq)" x-text="seqStatusText(seq)"></span>
-                  </div>
-                  <div class="seq-card-desc" x-show="seq.description" x-text="seq.description"></div>
-                </div>
-              </div>
-              <!-- Expanded chain view -->
-              <div class="seq-expanded" x-show="seqExpandedId === seq.id" x-transition>
-                <div class="seq-chain">
-                  <template x-for="(step, i) in seq.steps" :key="i">
-                    <div class="seq-chain-step">
-                      <div class="seq-chain-dot" :class="seqStepDotClass(step)"></div>
-                      <div class="seq-chain-info">
-                        <div class="seq-chain-name" x-text="step.container"></div>
-                        <div class="seq-chain-tags">
-                          <span class="seq-chain-tag required" x-show="step.required">required</span>
-                          <span class="seq-chain-tag healthy" x-show="step.waitHealthy">wait healthy</span>
-                          <span class="seq-chain-tag optional" x-show="!step.required">optional</span>
-                          <span class="seq-chain-tag" style="background:#0d1f3c;color:#58a6ff" x-show="step.delaySeconds > 0" x-text="'delay ' + step.delaySeconds + 's'"></span>
+          <div class="table-wrap" x-show="sequences.length > 0">
+            <table class="seq-table" :class="config && config.showStats === 'true' ? 'has-stats' : 'no-stats'">
+              <colgroup>
+                <col class="col-name">
+                <col class="col-health">
+                <template x-if="config && config.updateCheckEnabled === 'true'"><col style="width:7%"></template>
+                <col class="col-restart">
+                <template x-if="config && config.showStats === 'true'"><col class="col-cpu"></template>
+                <template x-if="config && config.showStats === 'true'"><col class="col-ram"></template>
+                <col class="col-networks">
+                <template x-if="config && config.showStats === 'true'"><col class="col-net"></template>
+                <col class="col-uptime">
+              </colgroup>
+              <thead><tr>
+                <th>Sequence</th>
+                <th>Health</th>
+                <template x-if="config && config.updateCheckEnabled === 'true'"><th>Update</th></template>
+                <th>Restart</th>
+                <template x-if="config && config.showStats === 'true'"><th>CPU</th></template>
+                <template x-if="config && config.showStats === 'true'"><th>RAM</th></template>
+                <th>Networks</th>
+                <template x-if="config && config.showStats === 'true'"><th>Network I/O</th></template>
+                <th>Last run</th>
+              </tr></thead>
+              <template x-for="seq in sequences" :key="seq.id">
+                <tbody x-data="{ agg: seqAggregates(seq) }" x-effect="agg = seqAggregates(seq)">
+                  <!-- Spacer between sequences -->
+                  <tr><td :colspan="99" style="padding:0;border:none;height:8px;background:#0f1117;border-bottom:1px solid #30363d"></td></tr>
+                  <!-- Header row -->
+                  <tr style="cursor:pointer;background:#0d1117" @click="seqToggleExpand(seq.id)" :class="{ 'seq-row-active': seqCardActive(seq.id) }">
+                    <td style="font-weight:600">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <span style="color:#484f58;font-size:10px;transition:transform 0.15s;display:inline-block;flex-shrink:0" :style="seqIsCardExpanded(seq.id) ? 'transform:rotate(90deg)' : ''">&#9656;</span>
+                        <span x-show="seq.icon" x-text="seq.icon" style="font-size:14px;flex-shrink:0"></span>
+                        <div style="min-width:0;flex:1">
+                          <div style="color:#e1e4e8;font-size:13px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                            <span x-text="seq.name"></span>
+                            <span class="seq-pill seq-pill-steps" style="font-weight:400" x-text="seq.steps.length + ' step' + (seq.steps.length !== 1 ? 's' : '')"></span>
+                            <template x-if="seq.onRequiredFailure || seq.onRequiredRecovery">
+                              <span class="seq-pill seq-pill-trigger" style="font-weight:400" :title="'Auto-trigger: ' + (seq.onRequiredFailure === 'stop' ? 'down→stop' : '') + (seq.onRequiredFailure && seq.onRequiredRecovery ? ' · ' : '') + (seq.onRequiredRecovery === 'restart' ? 'up→restart' : '')">auto-trigger</span>
+                            </template>
+                            <template x-if="seqCardActive(seq.id)">
+                              <span class="seq-pill seq-exec-badge" :class="seqExecBadgeClass()" x-text="seqExecBadgeText()" style="font-weight:500"></span>
+                            </template>
+                          </div>
+                          <div x-show="seq.description" style="font-size:10px;color:#8b949e;font-weight:400" x-text="seq.description"></div>
+                          <div x-show="seqIsLingering(seq.id)" style="font-size:10px;color:#8b949e;font-weight:400">Auto-closing in <span x-text="seqLingerSecondsRemaining()"></span>s</div>
                         </div>
-                        <div class="seq-chain-status" x-text="seqContainerStatus(step.container)"></div>
+                        <span class="seq-row-actions" @click.stop>
+                          <template x-if="!seqCardActive(seq.id)">
+                            <span style="display:inline-flex;align-items:center;gap:4px">
+                              <button class="seq-action-btn seq-action-start" @click="seqRunStart(seq.id)" :disabled="seqAnyRunning() || seqActionPending" title="Start sequence">&#9654;</button>
+                              <button class="seq-action-btn seq-action-stop" @click="seqRunStop(seq.id)" :disabled="seqAnyRunning() || seqActionPending" title="Stop sequence">&#9632;</button>
+                              <button class="seq-action-btn seq-action-restart" @click="seqRunRestart(seq.id)" :disabled="seqAnyRunning() || seqActionPending" title="Restart sequence">&#8635;</button>
+                              <button class="seq-action-btn seq-action-edit" @click="seqEditSequence(seq)" :disabled="seqAnyRunning()" title="Edit">&#9998;</button>
+                              <button class="seq-action-btn seq-action-delete" @click="seqConfirmDeleteId = seq.id" :disabled="seqAnyRunning()" title="Delete">&times;</button>
+                            </span>
+                          </template>
+                          <template x-if="seqCardActive(seq.id)">
+                            <span style="display:inline-flex;align-items:center;gap:4px">
+                              <button class="seq-cancel-btn" x-show="seqIsRunningSeq(seq.id)" @click="seqAbort()" title="Cancel run">&times; Cancel</button>
+                              <button class="seq-close-btn-inline" x-show="!seqIsRunningSeq(seq.id)" @click="seqDismissExecution()" title="Close">Close</button>
+                              <button class="seq-action-btn seq-action-edit" disabled title="Edit (disabled during run)">&#9998;</button>
+                              <button class="seq-action-btn seq-action-delete" disabled title="Delete (disabled during run)">&times;</button>
+                            </span>
+                          </template>
+                        </span>
                       </div>
-                    </div>
+                    </td>
+                    <td>
+                      <span style="font-size:11px"><span :style="agg._running > 0 ? 'color:#3fb950' : 'color:#8b949e'" x-text="agg._running"></span><span style="color:#8b949e" x-text="'/' + agg._total + ' running'"></span></span>
+                      <span x-show="agg._unhealthy > 0" style="font-size:10px;padding:1px 6px;border-radius:3px;background:#3d1f1f;color:#f85149;margin-left:4px" x-text="agg._unhealthy + ' unhealthy'"></span>
+                    </td>
+                    <template x-if="config && config.updateCheckEnabled === 'true'"><td>
+                      <span x-show="agg._hasUpdates > 0" class="badge badge-update" x-text="agg._hasUpdates + ' update' + (agg._hasUpdates !== 1 ? 's' : '')"></span>
+                      <span x-show="Object.keys(updateResults || {}).length > 0 && agg._hasUpdates === 0 && agg._total > 0" class="badge badge-uptodate">Up to date</span>
+                    </td></template>
+                    <!-- RESTART column — sequence-level row leaves this empty
+                         (auto-restart is a per-container concept, shown on step rows). -->
+                    <td>
+                      <span style="color:#484f58">&mdash;</span>
+                    </td>
+                    <template x-if="config && config.showStats === 'true'"><td>
+                      <div class="sparkline-wrap">
+                        <div>
+                          <div class="metric" x-text="agg._cpuTotal"></div>
+                          <div class="metric-avg" x-show="agg._avgCpu > 0" x-text="'avg ' + agg._avgCpu.toFixed(1) + '%'"></div>
+                        </div>
+                        <span x-show="agg._stats && agg._stats.length > 1">
+                          <svg width="60" height="16" viewBox="0 0 60 16" style="flex-shrink:0"><polyline :points="sparklinePoints(agg._stats, 'c', 0, Math.max(100, ...agg._stats.map(p => p.c || 0)))" fill="none" stroke="#58a6ff" stroke-width="1.2"/></svg>
+                        </span>
+                      </div>
+                    </td></template>
+                    <template x-if="config && config.showStats === 'true'"><td>
+                      <div class="sparkline-wrap">
+                        <div>
+                          <div class="metric" x-text="agg._ramTotal"></div>
+                          <div class="metric-avg" x-show="agg._avgMem > 0" x-text="'avg ' + formatBytes(agg._avgMem)"></div>
+                        </div>
+                        <span x-show="agg._stats && agg._stats.length > 1">
+                          <svg width="60" height="16" viewBox="0 0 60 16" style="flex-shrink:0"><polyline :points="sparklinePoints(agg._stats, 'm', 0, agg._maxMem)" fill="none" stroke="#bc8cff" stroke-width="1.2"/></svg>
+                        </span>
+                      </div>
+                    </td></template>
+                    <td>
+                      <div style="font-size:11px;line-height:1.6">
+                        <template x-for="n in agg._networks" :key="'sn_'+seq.id+'_'+n"><span :class="netBadgeClass(n)" x-text="n"></span></template>
+                        <span x-show="agg._networks.length === 0" style="color:#484f58">&mdash;</span>
+                      </div>
+                    </td>
+                    <template x-if="config && config.showStats === 'true'"><td>
+                      <div style="white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums">
+                        <span style="color:#3fb950">&#8593;</span> <span x-text="agg._netTx"></span>
+                        <span style="color:#d29922;margin-left:4px">&#8595;</span> <span x-text="agg._netRx"></span>
+                      </div>
+                    </td></template>
+                    <!-- UPTIME column (last-run for sequence rows) -->
+                    <td>
+                      <span x-show="seq.lastRun" style="font-size:11px">
+                        <span style="color:#c9d1d9" x-text="seqFormatTimeShort(seq.lastRun)"></span>
+                        <span x-show="seq.lastResult" :style="'display:block;font-size:10px;color:' + (seq.lastResult === 'complete' ? '#3fb950' : seq.lastResult === 'failed' ? '#f85149' : '#8b949e')" x-text="seq.lastResult"></span>
+                      </span>
+                      <span x-show="!seq.lastRun" style="color:#484f58">&mdash;</span>
+                    </td>
+                  </tr>
+
+                  <!-- Per-step container rows (mirrors Groups: each step gets a full container row, same colgroup) -->
+                  <template x-if="seqIsCardExpanded(seq.id)">
+                    <template x-for="(step, i) in seq.steps" :key="'sr_' + seq.id + '_' + i">
+                      <tr class="seq-tbl-step" style="cursor:default" x-data="{ ct: seqStepContainer(step), live: seqStepLiveState(seq, i) }" x-effect="ct = seqStepContainer(step); live = seqStepLiveState(seq, i)">
+                        <td style="padding-left:36px">
+                          <div style="display:flex;align-items:flex-start;gap:8px">
+                            <span style="color:#484f58;font-size:11px;font-variant-numeric:tabular-nums;flex-shrink:0;padding-top:2px" x-text="(i + 1) + '.'"></span>
+                            <img x-show="ct && ct.icon" :src="ct?.icon" style="width:18px;height:18px;border-radius:3px;flex-shrink:0;margin-top:1px" loading="lazy">
+                            <div style="min-width:0">
+                              <div class="container-name"><span x-text="step.container"></span> <span x-show="ct && ct.netParentDown && ct.state === 'running'" style="color:#f85149;cursor:help" :title="'Network parent ' + ct.netParent + ' is down'">&#9888;</span></div>
+                              <div class="container-meta">
+                                <template x-if="!live && ct">
+                                  <span>
+                                    <span x-show="ct.state === 'running'" class="label-running">&#9654; running</span>
+                                    <span x-show="ct.state !== 'running'" class="label-stopped">&#9632; <span x-text="ct.state"></span></span>
+                                    <span x-text="ct.image" style="color:#484f58"></span>
+                                  </span>
+                                </template>
+                                <template x-if="!live && !ct">
+                                  <span class="label-stopped">&#9632; not found</span>
+                                </template>
+                                <template x-if="live">
+                                  <span>
+                                    <span x-show="live.status === 'done'" class="label-running">&#10003; done</span>
+                                    <span x-show="live.status === 'starting'" style="color:#58a6ff">&#9658; starting</span>
+                                    <span x-show="live.status === 'stopping'" style="color:#f85149">&#9632; stopping</span>
+                                    <span x-show="live.status === 'delaying'" style="color:#58a6ff" x-text="seqLiveStepLog(live, i)"></span>
+                                    <span x-show="live.status === 'failed'" style="color:#f85149">&#10007; failed</span>
+                                    <span x-show="live.status === 'skipped'" style="color:#8b949e">&mdash; skipped</span>
+                                    <span x-show="live.status === 'waiting'" style="color:#484f58">&#9866; waiting</span>
+                                    <span x-show="live.elapsed > 0" style="color:#484f58;margin-left:4px" x-text="'(' + live.elapsed.toFixed(1) + 's)'"></span>
+                                  </span>
+                                </template>
+                              </div>
+                              <!-- Step-specific tags below the meta line -->
+                              <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">
+                                <span class="seq-chain-tag required" x-show="step.required">required</span>
+                                <span class="seq-chain-tag healthy" x-show="step.waitHealthy">wait healthy</span>
+                                <span class="seq-chain-tag" style="background:#1d2d2f;color:#79c0ff" x-show="step.skipRequired" title="Runs even if a previous Required step failed">skip required</span>
+                                <span class="seq-chain-tag" style="background:#0d1f3c;color:#58a6ff" x-show="step.delaySeconds > 0" x-text="'delay ' + step.delaySeconds + 's'"></span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <template x-if="ct && ct.state === 'running'">
+                            <span>
+                              <span x-show="ct.health === 'healthy'" class="badge badge-healthy">Healthy</span>
+                              <span x-show="ct.health === 'unhealthy'" class="badge badge-unhealthy">Unhealthy</span>
+                              <span x-show="ct.health === 'starting'" class="badge badge-starting">Checking</span>
+                              <span x-show="ct.health === 'none'" class="badge badge-nocheck">No HC</span>
+                            </span>
+                          </template>
+                          <template x-if="ct && ct.state !== 'running'">
+                            <span class="label-stopped">stopped</span>
+                          </template>
+                          <template x-if="!ct">
+                            <span style="color:#484f58">&mdash;</span>
+                          </template>
+                        </td>
+                        <template x-if="config && config.updateCheckEnabled === 'true'"><td>
+                          <template x-if="ct">
+                            <span class="badge" :class="updateBadgeClass(ct)" x-text="updateLabel(ct)" :title="updateTooltip(ct)"></span>
+                          </template>
+                          <template x-if="!ct">
+                            <span style="color:#484f58">&mdash;</span>
+                          </template>
+                        </td></template>
+                        <!-- RESTART column (Yes/No like Groups container row) -->
+                        <td>
+                          <span x-show="ct && ct.state === 'running' && ct.hasRestartLabel" class="label-yes">Yes</span>
+                          <span x-show="ct && ct.state === 'running' && !ct.hasRestartLabel" class="label-no">No</span>
+                          <span x-show="!ct || ct.state !== 'running'" class="label-no">&mdash;</span>
+                        </td>
+                        <template x-if="config && config.showStats === 'true'"><td>
+                          <template x-if="ct && ct.state === 'running'">
+                            <div class="sparkline-wrap">
+                              <div><div class="metric" x-text="ct.cpu.toFixed(1) + '%'"></div><div class="metric-avg" x-show="ct.avgCpu > 0" x-text="'avg ' + ct.avgCpu.toFixed(1) + '%'"></div></div>
+                              <span x-show="ct.recentStats && ct.recentStats.length > 1">
+                                <svg width="60" height="16" viewBox="0 0 60 16" style="flex-shrink:0"><polyline :points="sparklinePoints(ct.recentStats, 'c', 0, 100)" fill="none" stroke="#58a6ff" stroke-width="1.2"/></svg>
+                              </span>
+                            </div>
+                          </template>
+                          <template x-if="!ct || ct.state !== 'running'"><div class="metric" style="color:#484f58">&mdash;</div></template>
+                        </td></template>
+                        <template x-if="config && config.showStats === 'true'"><td>
+                          <template x-if="ct && ct.state === 'running'">
+                            <div class="sparkline-wrap">
+                              <div><div class="metric" x-text="formatBytes(ct.memory)"></div><div class="metric-avg" x-show="ct.avgMemory > 0" x-text="'avg ' + formatBytes(ct.avgMemory)"></div></div>
+                              <span x-show="ct.recentStats && ct.recentStats.length > 1">
+                                <svg width="60" height="16" viewBox="0 0 60 16" style="flex-shrink:0"><polyline :points="sparklinePoints(ct.recentStats, 'm', 0, ct.memoryLimit)" fill="none" stroke="#bc8cff" stroke-width="1.2"/></svg>
+                              </span>
+                            </div>
+                          </template>
+                          <template x-if="!ct || ct.state !== 'running'"><div class="metric" style="color:#484f58">&mdash;</div></template>
+                        </td></template>
+                        <td>
+                          <div style="font-size:11px;line-height:1.6">
+                            <template x-for="n in (ct ? (ct.networks || []) : [])" :key="'snn_'+seq.id+'_'+i+'_'+n"><span :class="netBadgeClass(n, ct)" x-text="n"></span></template>
+                            <span x-show="!ct || !ct.networks || ct.networks.length === 0" style="color:#484f58">&mdash;</span>
+                          </div>
+                        </td>
+                        <template x-if="config && config.showStats === 'true'"><td>
+                          <template x-if="ct && ct.state === 'running'">
+                            <div style="white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums">
+                              <span style="color:#3fb950">&#8593;</span> <span x-text="formatRate(ct.netTxRate)"></span>
+                              <span style="color:#d29922;margin-left:4px">&#8595;</span> <span x-text="formatRate(ct.netRxRate)"></span>
+                              <span x-show="ct.netParent" style="font-size:9px;color:#484f58;margin-left:3px">(shared)</span>
+                            </div>
+                          </template>
+                          <template x-if="!ct || ct.state !== 'running'"><div style="color:#484f58">&mdash;</div></template>
+                        </td></template>
+                        <!-- UPTIME column -->
+                        <td>
+                          <span x-show="ct && ct.state === 'running'" style="font-size:11px;color:#8b949e" x-text="seqStepUptime(ct)"></span>
+                          <span x-show="!ct || ct.state !== 'running'" style="color:#484f58">&mdash;</span>
+                        </td>
+                      </tr>
+                    </template>
                   </template>
-                </div>
-                <div class="seq-last-run" x-show="seq.lastRun">
-                  Last run: <span x-text="seqFormatTime(seq.lastRun)"></span>
-                  <span x-show="seq.lastResult" :style="'color:' + (seq.lastResult === 'complete' ? '#3fb950' : seq.lastResult === 'failed' ? '#f85149' : '#8b949e')" x-text="'(' + seq.lastResult + ')'"></span>
-                </div>
-              </div>
-            </div>
-          </template>
+
+                  <!-- Final detail row: live progress (when running) + chart + auto-trigger summary -->
+                  <tr x-show="seqIsCardExpanded(seq.id)" x-transition>
+                    <td :colspan="99" style="padding:0;border:none">
+                      <div class="detail-panel">
+                        <!-- Compact info pills (mirrors Groups expanded detail) -->
+                        <div class="compact-info">
+                          <span><span class="il">Sequence</span> <span class="pill-val" x-text="seq.name"></span></span>
+                          <span><span class="il">Steps</span> <span class="pill-val" x-text="seq.steps.length"></span></span>
+                          <span><span class="il">Running</span> <span class="pill-val"><span style="color:#3fb950" x-text="agg._running"></span><span style="color:#8b949e" x-text="'/' + agg._total"></span></span></span>
+                          <span x-show="agg._unhealthy > 0"><span class="il">Unhealthy</span> <span class="pill-val state-unhealthy" x-text="agg._unhealthy"></span></span>
+                          <span x-show="agg._total - agg._running > 0"><span class="il">Stopped</span> <span class="pill-val" style="color:#8b949e" x-text="agg._total - agg._running"></span></span>
+                          <span><span class="il">CPU</span> <span class="pill-val" x-text="agg._cpuTotal"></span></span>
+                          <span><span class="il">RAM</span> <span class="pill-val" x-text="agg._ramTotal"></span></span>
+                          <span><span class="il">Net</span> <span class="pill-val"><span style="color:#3fb950">&#8593;</span> <span x-text="agg._netTx"></span> <span style="color:#d29922">&#8595;</span> <span x-text="agg._netRx"></span></span></span>
+                          <span x-show="seq.onRequiredFailure || seq.onRequiredRecovery"><span class="il">Auto-trigger</span> <span class="pill-val" x-html="seqTriggerSummary(seq)"></span></span>
+                        </div>
+
+                        <!-- Live progress bar + summary (only when running OR lingering) -->
+                        <template x-if="seqCardActive(seq.id) && seqExecution">
+                          <div class="seq-live" style="margin-top:14px">
+                            <div class="seq-live-progress-row">
+                              <span class="seq-live-progress-text" x-text="seqLiveProgressText()"></span>
+                              <span class="seq-live-elapsed" x-text="'elapsed ' + seqExecElapsed()"></span>
+                            </div>
+                            <div class="seq-exec-bar">
+                              <div class="seq-exec-bar-fill" :class="seqExecBarClass()" :style="'width:' + seqExecProgress() + '%'"></div>
+                            </div>
+                            <div class="seq-live-footer">
+                              <template x-if="seqExecution.status === 'failed' && seqExecution.error">
+                                <span class="seq-exec-error" x-text="seqExecution.error"></span>
+                              </template>
+                              <template x-if="seqExecution.status === 'complete'">
+                                <span class="seq-summary" x-text="seqCompleteSummary()"></span>
+                              </template>
+                              <template x-if="seqExecution.status === 'aborted'">
+                                <span style="color:#636e7b">Aborted</span>
+                              </template>
+                            </div>
+                          </div>
+                        </template>
+
+                        <!-- CHART SECTION (mirrors Groups expanded detail) -->
+                        <div style="border-top:1px solid #21262d;margin-top:14px;padding-top:10px">
+                          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+                            <button class="metric-toggle" :class="{ 'active-cpu': seqChartIsActiveCpu(seq) }" @click.stop="toggleSeqChart(seq, 'cpu')">
+                              <span class="toggle-dot cpu-dot"></span> CPU
+                            </button>
+                            <button class="metric-toggle" :class="{ 'active-ram': seqChartIsActiveRam(seq) }" @click.stop="toggleSeqChart(seq, 'ram')">
+                              <span class="toggle-dot ram-dot"></span> RAM
+                            </button>
+                            <div class="chart-range-btns" style="margin-bottom:0;margin-left:4px" x-show="seqChartIsActive(seq)">
+                              <template x-for="r in ['1h','6h','24h','3d','7d']" :key="'sr_'+seq.id+'_'+r">
+                                <button class="chart-range-btn" :class="{ active: groupChartRange === r }" @click.stop="groupChartRange = r; fetchSeqChartData(seq, r)" x-text="r"></button>
+                              </template>
+                            </div>
+                            <div style="flex:1"></div>
+                            <span class="toggle-stat" x-show="seqChartIsActiveCpu(seq) && groupChartData && groupChartData.length > 1" x-text="'CPU avg ' + groupChartAvg('c').toFixed(1) + '% · peak ' + groupChartPeak('c').toFixed(1) + '%'" style="color:#c9d1d9"></span>
+                            <span class="toggle-stat" x-show="seqChartIsActiveRam(seq) && groupChartData && groupChartData.length > 1" x-text="'RAM avg ' + formatBytes(groupChartAvg('m')) + ' · peak ' + formatBytes(groupChartPeak('m'))" style="color:#c9d1d9"></span>
+                          </div>
+                          <template x-if="seqChartIsActive(seq)">
+                            <div class="chart-container" @mouseleave="groupChartHoverIdx = -1">
+                              <div x-show="groupChartLoading" style="text-align:center;padding:20px;color:#484f58;font-size:12px">Loading chart data...</div>
+                              <div x-show="!groupChartLoading && (!groupChartData || groupChartData.length === 0)" style="text-align:center;padding:20px;color:#484f58;font-size:12px">No data yet</div>
+                              <template x-if="!groupChartLoading && groupChartData && groupChartData.length > 1">
+                                <div>
+                                  <div style="display:flex;align-items:stretch;height:160px">
+                                    <div x-show="groupChartShowCpu" style="width:44px;flex-shrink:0;position:relative">
+                                      <template x-for="tick in groupChartScaleFor('cpu').ticks" :key="'scpuY-'+seq.id+'-'+tick.label">
+                                        <span class="y-label" style="color:#58a6ff" :style="'top:' + chartTickTop(tick.fraction) + '%'" x-text="tick.label"></span>
+                                      </template>
+                                    </div>
+                                    <div style="flex:1;min-width:0">
+                                      <svg width="100%" height="100%" viewBox="0 0 300 140" preserveAspectRatio="none" style="display:block;cursor:crosshair"
+                                        @mousemove.prevent="groupChartHandleHover($event)"
+                                        @touchmove.prevent="groupChartHandleHover($event)">
+                                        <path :d="groupChartGridLinesFor(groupChartShowCpu ? 'cpu' : 'ram')" stroke="#21262d" stroke-width="0.5" fill="none" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowCpu" :d="groupChartSmoothAreaPathFor('c', 300, 140)" fill="rgba(201,209,217,0.06)" stroke="none"/>
+                                        <path x-show="groupChartShowCpu" :d="groupChartSmoothPathFor('c', 300, 140)" fill="none" stroke="#c9d1d9" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+                                        <path x-show="groupChartShowRam" :d="groupChartSmoothAreaPathFor('m', 300, 140)" fill="rgba(201,209,217,0.06)" stroke="none"/>
+                                        <path x-show="groupChartShowRam" :d="groupChartSmoothPathFor('m', 300, 140)" fill="none" stroke="#c9d1d9" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+                                        <template x-for="(mem, mi) in enabledGroupMembers" :key="'sm-'+seq.id+'-'+mem.name">
+                                          <g>
+                                            <path x-show="groupChartShowCpu" :d="groupMemberPathFor('c', mem.name, 300, 140)" fill="none" :stroke="mem.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                            <path x-show="groupChartShowRam" :d="groupMemberPathFor('m', mem.name, 300, 140)" fill="none" :stroke="mem.color" stroke-width="1.2" stroke-opacity="0.8" vector-effect="non-scaling-stroke"/>
+                                          </g>
+                                        </template>
+                                        <line x-show="groupChartHoverIdx >= 0" :x1="groupChartHoverX" :x2="groupChartHoverX" y1="0" y2="140" stroke="#484f58" stroke-width="0.5" stroke-dasharray="2,2" vector-effect="non-scaling-stroke"/>
+                                      </svg>
+                                    </div>
+                                    <div x-show="groupChartShowRam" style="width:52px;flex-shrink:0;position:relative">
+                                      <template x-for="tick in groupChartScaleFor('ram').ticks" :key="'sramY-'+seq.id+'-'+tick.label">
+                                        <span class="y-label-right" style="color:#bc8cff" :style="'top:' + chartTickTop(tick.fraction) + '%'" x-text="tick.label"></span>
+                                      </template>
+                                    </div>
+                                  </div>
+                                  <div style="display:flex;justify-content:space-between;font-size:10px;color:#484f58;margin-top:4px" :style="{ marginLeft: groupChartShowCpu ? '44px' : '0', marginRight: groupChartShowRam ? '52px' : '0' }">
+                                    <template x-for="idx in groupChartTimeLabelIndices()" :key="'stl-'+seq.id+'-'+idx">
+                                      <span x-text="chartTimeLabel(groupChartData[idx])"></span>
+                                    </template>
+                                  </div>
+                                </div>
+                              </template>
+                              <template x-if="groupChartHoverIdx >= 0 && groupChartData && groupChartData[groupChartHoverIdx]">
+                                <div class="chart-tooltip" :style="'top: 8px; left: ' + (groupChartHoverPixelX > groupChartHoverContainerWidth - 250 ? (groupChartHoverPixelX - 240) : (groupChartHoverPixelX + 15)) + 'px'">
+                                  <div class="chart-tooltip-time" x-text="chartTimeLabelFull(groupChartData[groupChartHoverIdx])"></div>
+                                  <div class="chart-tooltip-row" x-show="groupChartShowCpu">
+                                    <span class="chart-tooltip-dot" style="background:#c9d1d9"></span>
+                                    <span>Sequence CPU:</span>
+                                    <span style="font-weight:600" x-text="(groupChartData[groupChartHoverIdx].c || 0).toFixed(1) + '%'"></span>
+                                  </div>
+                                  <div class="chart-tooltip-row" x-show="groupChartShowRam">
+                                    <span class="chart-tooltip-dot" style="background:#c9d1d9"></span>
+                                    <span>Sequence RAM:</span>
+                                    <span style="font-weight:600" x-text="formatBytes(groupChartData[groupChartHoverIdx].m || 0)"></span>
+                                  </div>
+                                  <template x-for="mem in enabledGroupMembers" :key="'stip-'+seq.id+'-'+mem.name">
+                                    <div>
+                                      <div class="chart-tooltip-row" x-show="groupChartShowCpu">
+                                        <span class="chart-tooltip-dot" :style="'background:' + mem.color"></span>
+                                        <span x-text="mem.name + ' CPU:'"></span>
+                                        <span style="font-weight:600" x-text="groupMemberHoverVal(mem.name, 'c')"></span>
+                                      </div>
+                                      <div class="chart-tooltip-row" x-show="groupChartShowRam">
+                                        <span class="chart-tooltip-dot" :style="'background:' + mem.color"></span>
+                                        <span x-text="mem.name + ' RAM:'"></span>
+                                        <span style="font-weight:600" x-text="groupMemberHoverVal(mem.name, 'm')"></span>
+                                      </div>
+                                    </div>
+                                  </template>
+                                </div>
+                              </template>
+                            </div>
+                          </template>
+                          <!-- Member toggles (per-step containers) -->
+                          <div class="compare-bar" x-show="seqChartIsActive(seq)" style="margin-top:8px">
+                            <span style="font-size:11px;color:#8b949e">Steps:</span>
+                            <template x-for="(name, idx) in Object.keys(groupMemberCharts)" :key="'smt_'+seq.id+'_'+name">
+                              <span class="compare-pill" style="cursor:pointer" :style="groupMemberEnabled[name] ? 'border-color:' + groupMemberColor(idx) : 'opacity:0.5'" @click.stop="toggleGroupMember(name)">
+                                <span class="cpill-dot" :style="'background:' + groupMemberColor(idx)"></span>
+                                <span x-text="name"></span>
+                              </span>
+                            </template>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </template>
+            </table>
+          </div>
         </div>
       </template>
     </div>
@@ -3872,7 +4257,7 @@ function app() {
     // Sequences tab
     sequences: [],
     seqStepIdCounter: 0,
-    seqView: 'list', // list, editor, execution
+    seqView: 'list', // list, editor — execution is now inline in the card
     seqExpandedId: null,
     seqEditing: null, // sequence ID being edited, or null for new
     seqForm: { name: '', description: '', icon: '', steps: [] },
@@ -5528,10 +5913,43 @@ function app() {
     // ---- Event Grouping ----
     get groupedEvents() {
       const groups = [];
+      const seqGroups = {}; // runId -> group ref
       let current = null;
       for (const e of this.events) {
+        // Sequence-run events (tagged with sequenceRunId) get their own
+        // group keyed by run ID, regardless of position or container, so
+        // a sequence run's lifecycle + per-step events render as a single
+        // expandable parent in the feed.
+        if (e.sequenceRunId) {
+          let g = seqGroups[e.sequenceRunId];
+          if (!g) {
+            g = {
+              isSequenceRun: true,
+              sequenceRunId: e.sequenceRunId,
+              container: e.container,
+              events: [e],
+              firstTime: new Date(e.timestamp).getTime(),
+              lastTime: new Date(e.timestamp).getTime(),
+              expanded: false,
+            };
+            seqGroups[e.sequenceRunId] = g;
+            groups.push(g);
+          } else {
+            g.events.push(e);
+            g.lastTime = new Date(e.timestamp).getTime();
+            // Use the lifecycle "started" event's container (= sequence
+            // name) as the group's display container. Per-step events
+            // carry the step container name, not the sequence name.
+            if (e.type === 'sequence' && (e.action === 'started' || e.action === 'completed' || e.action === 'failed' || e.action === 'aborted')) {
+              g.container = e.container;
+            }
+          }
+          current = null; // sequence-run group breaks the regular streak
+          continue;
+        }
+        // Regular grouping: by container + 10-second window
         const ts = new Date(e.timestamp).getTime();
-        if (current && e.container === current.container &&
+        if (current && !current.isSequenceRun && e.container === current.container &&
             Math.abs(ts - current.lastTime) < 10000) {
           current.events.push(e);
           current.lastTime = ts;
@@ -5547,7 +5965,6 @@ function app() {
         }
       }
       // Sort events within each group by timestamp (oldest first), with logical tiebreaker
-      // Events within the same second use action priority instead of millisecond differences
       const actionOrder = { 'restart': 0, 'warn': 1, 'notify': 1, 'blocked': 2, 'restarted': 3, 'started': 4, 'stopped': 5, 'died': 6, 'paused': 7, 'unpaused': 8, 'unhealthy': 9, 'healthy': 10, 'recovered': 11 };
       for (const g of groups) {
         g.events.sort((a, b) => {
@@ -5556,22 +5973,42 @@ function app() {
           if (ta !== tb) return ta - tb;
           return (actionOrder[a.action] ?? 50) - (actionOrder[b.action] ?? 50);
         });
+        // Skip the intermediate-event filtering for sequence-run groups —
+        // the per-step events ARE the value of expanding the group.
+        if (g.isSequenceRun) continue;
         const actions = g.events.map(e => e.action);
         if (actions.includes('restarted')) {
-          // Restart sequence: died, stopped, started are all intermediate — keep restarted as the action
           g.events = g.events.filter(e => e.action !== 'died' && e.action !== 'stopped' && e.action !== 'started');
         } else if (actions.includes('started')) {
-          // Start sequence (no restart): died + stopped are intermediate
           g.events = g.events.filter(e => e.action !== 'died' && e.action !== 'stopped');
         } else if (actions.includes('died') && actions.includes('stopped')) {
-          // Planned stop: died is just a signal exit, drop it
           g.events = g.events.filter(e => e.action !== 'died');
         } else if (actions.includes('paused') && actions.includes('unpaused')) {
-          // Pause+unpause: keep unpaused only (the resolution)
           g.events = g.events.filter(e => e.action !== 'paused');
         }
       }
       return groups;
+    },
+
+    // Returns the most-recent lifecycle action ('started' / 'completed' /
+    // 'failed' / 'aborted') for a sequence-run group. Used by the events
+    // feed to show the run's overall status in the parent row's badge.
+    seqGroupLifecycleAction(g) {
+      let lifecycle = 'started';
+      for (const e of g.events) {
+        if (e.type !== 'sequence') continue;
+        if (e.action === 'completed' || e.action === 'failed' || e.action === 'aborted') {
+          lifecycle = e.action;
+        }
+      }
+      return lifecycle;
+    },
+
+    // Returns a human-readable mode/detail summary for the sequence-run's
+    // parent row, derived from the "started" lifecycle event's detail.
+    seqGroupModeText(g) {
+      const startEvent = g.events.find(e => e.type === 'sequence' && e.action === 'started');
+      return startEvent ? (startEvent.detail || 'run') : 'run';
     },
 
     groupBadges(g) {
@@ -6715,6 +7152,99 @@ function app() {
       return c && c.state === 'running' ? 'green' : 'grey';
     },
 
+    // Look up the live container object for a step. Returns null when the
+    // step references a container that no longer exists in Docker.
+    seqStepContainer(step) {
+      if (!step || !step.container) return null;
+      return this.containers.find(c => c.name === step.container) || null;
+    },
+
+    // Returns the live execution state for step idx in seq, OR null when
+    // no run is in progress for this sequence.
+    seqStepLiveState(seq, idx) {
+      if (!this.seqExecution) return null;
+      if (this.seqExecution.sequenceId !== seq.id) return null;
+      const arr = this.seqExecution.steps || [];
+      return arr[idx] || null;
+    },
+
+    // Descriptive progress sentence for the live execution view. Builds a
+    // human-readable phrase that tells the user exactly what's happening
+    // right now, e.g.:
+    //   "Step 1 of 4 — starting adminer"
+    //   "Step 2 of 4 — starting audiobookshelf, waiting for healthy"
+    //   "Step 2 of 4 — audiobookshelf started, waiting 24s of 30s delay"
+    //
+    // Reads seqExecution.elapsed inside so Alpine re-renders this every
+    // 500ms while the elapsed timer ticks (needed for the delay countdown).
+    seqLiveProgressText() {
+      // eslint-disable-next-line no-unused-vars
+      const _tick = this.seqExecution && this.seqExecution.elapsed;
+      if (!this.seqExecution || !this.seqExecution.steps) return '';
+      const total = this.seqExecution.totalSteps || 0;
+      const steps = this.seqExecution.steps;
+      // Find the lowest-index step that is currently doing something.
+      // (Parallel groups can have multiple active simultaneously — we
+      // surface the first one to keep the line readable.)
+      const activeIdx = steps.findIndex(s =>
+        s && (s.status === 'starting' || s.status === 'stopping' || s.status === 'delaying'));
+      if (activeIdx < 0) {
+        // No step is currently transitioning. Show overall status if
+        // the run is in a terminal state, otherwise fall back to the
+        // simple counter.
+        const status = this.seqExecution.status;
+        if (status === 'complete') return 'Complete — ' + total + ' of ' + total + ' steps finished';
+        if (status === 'failed') return 'Failed at step ' + (this.seqExecution.currentStep || 0) + ' of ' + total;
+        if (status === 'aborted') return 'Aborted at step ' + (this.seqExecution.currentStep || 0) + ' of ' + total;
+        return 'Step ' + (this.seqExecution.currentStep || 0) + ' of ' + total;
+      }
+      const step = steps[activeIdx];
+      const head = 'Step ' + (activeIdx + 1) + ' of ' + total + ' — ';
+      if (step.status === 'starting') {
+        // The executor sets log = "Started — waiting for healthy..." once
+        // the container is up and we're polling for the healthcheck. Use
+        // that string to tell the user we're now in the healthy-wait phase.
+        const isWaitingHealthy = step.log && /waiting for healthy/i.test(step.log);
+        if (isWaitingHealthy) {
+          return head + 'starting ' + step.container + ', waiting for healthy';
+        }
+        return head + 'starting ' + step.container;
+      }
+      if (step.status === 'stopping') {
+        return head + 'stopping ' + step.container;
+      }
+      if (step.status === 'delaying') {
+        const seq = this.seqExecSequence();
+        const cfg = seq && seq.steps && seq.steps[activeIdx];
+        const totalDelay = cfg ? (cfg.delaySeconds || 0) : 0;
+        const startedAt = this._seqDelayStarts && this._seqDelayStarts[activeIdx];
+        if (startedAt && totalDelay > 0) {
+          const remaining = Math.max(0, totalDelay - (Date.now() - startedAt) / 1000);
+          return head + 'waiting ' + remaining.toFixed(0) + 's before next step';
+        }
+        return head + 'waiting ' + totalDelay + 's before next step';
+      }
+      return head + step.container;
+    },
+
+    // Compact uptime label for the LAST RUN / UPTIME column on step rows.
+    // Returns "5h 12m", "23m", etc. when running; "—" otherwise.
+    seqStepUptime(c) {
+      if (!c || c.state !== 'running' || !c.startedAt) return '';
+      const startMs = new Date(c.startedAt).getTime();
+      if (!startMs) return '';
+      const sec = Math.floor((Date.now() - startMs) / 1000);
+      if (sec < 60) return sec + 's';
+      const m = Math.floor(sec / 60);
+      if (m < 60) return m + 'm';
+      const h = Math.floor(m / 60);
+      const mr = m % 60;
+      if (h < 24) return h + 'h ' + mr + 'm';
+      const d = Math.floor(h / 24);
+      const hr = h % 24;
+      return d + 'd ' + hr + 'h';
+    },
+
     seqContainerStatus(name) {
       const c = this.containers.find(ct => ct.name === name);
       if (!c) return 'not found';
@@ -6747,6 +7277,59 @@ function app() {
       return { running, stopped, total: seq.steps.length };
     },
 
+    // Aggregate stats for a sequence's containers — mirrors the per-group
+    // aggregation used by the Groups view in the Containers tab. Returns
+    // running/total/unhealthy counts, CPU/RAM totals + averages, combined
+    // network badges, network I/O rates, and a per-second sparkline series.
+    seqAggregates(seq) {
+      const empty = {
+        _running: 0, _total: 0, _unhealthy: 0,
+        _cpuTotal: '0.0%', _ramTotal: this.formatBytes(0),
+        _avgCpu: 0, _avgMem: 0, _maxMem: 0, _stats: [],
+        _netTx: this.formatRate(0), _netRx: this.formatRate(0),
+        _networks: [],
+        _hasUpdates: 0,
+      };
+      if (!seq || !seq.steps) return empty;
+      const containers = seq.steps
+        .map(s => this.containers.find(c => c.name === s.container))
+        .filter(Boolean);
+      if (containers.length === 0) return empty;
+      const running = containers.filter(c => c.state === 'running').length;
+      const unhealthy = containers.filter(c => c.health === 'unhealthy').length;
+      const runningCs = containers.filter(c => c.state === 'running' && c.recentStats?.length > 1);
+      const cpuTotal = containers.reduce((s, c) => s + (c.cpu || 0), 0);
+      const ramTotal = containers.reduce((s, c) => s + (c.memory || 0), 0);
+      const avgCpu = runningCs.reduce((s, c) => s + (c.avgCpu || 0), 0);
+      const avgMem = runningCs.reduce((s, c) => s + (c.avgMemory || 0), 0);
+      const maxMem = runningCs.reduce((s, c) => s + (c.memoryLimit || 0), 0);
+      const netTxRate = containers.reduce((s, c) => s + (c.netParent ? 0 : (c.netTxRate || 0)), 0);
+      const netRxRate = containers.reduce((s, c) => s + (c.netParent ? 0 : (c.netRxRate || 0)), 0);
+      let stats = [];
+      if (runningCs.length > 0) {
+        const byTime = {};
+        for (const c of runningCs) for (const pt of c.recentStats) {
+          if (!byTime[pt.t]) byTime[pt.t] = { t: pt.t, c: 0, m: 0 };
+          byTime[pt.t].c += pt.c; byTime[pt.t].m += pt.m;
+        }
+        stats = Object.values(byTime).sort((a, b) => a.t - b.t);
+      }
+      const networks = [...new Set(containers.flatMap(c => c.networks || []))].sort();
+      const hasUpdates = containers.filter(c => this.updateResults?.[c.name]?.hasUpdate).length;
+      return {
+        // Total = step count (not found-container count) so the "running"
+        // count reflects "how many of the configured steps are currently
+        // up" — matches user expectation when a step references a missing
+        // container.
+        _running: running, _total: seq.steps.length, _unhealthy: unhealthy,
+        _cpuTotal: cpuTotal.toFixed(1) + '%', _ramTotal: this.formatBytes(ramTotal),
+        _avgCpu: avgCpu, _avgMem: avgMem, _maxMem: maxMem, _stats: stats,
+        _netTx: this.formatRate(netTxRate), _netRx: this.formatRate(netRxRate),
+        _networks: networks,
+        _hasUpdates: hasUpdates,
+      };
+    },
+
     seqFormatTime(ts) {
       if (!ts) return '';
       try {
@@ -6755,17 +7338,215 @@ function app() {
       } catch { return ts; }
     },
 
+    // Compact time format for the LAST RUN cell — "2h ago", "5m ago", "just now"
+    seqFormatTimeShort(ts) {
+      if (!ts) return '';
+      try {
+        const d = new Date(ts);
+        const diffMs = Date.now() - d.getTime();
+        const diffS = Math.floor(diffMs / 1000);
+        if (diffS < 60) return 'just now';
+        const diffM = Math.floor(diffS / 60);
+        if (diffM < 60) return diffM + 'm ago';
+        const diffH = Math.floor(diffM / 60);
+        if (diffH < 24) return diffH + 'h ago';
+        const diffD = Math.floor(diffH / 24);
+        if (diffD < 7) return diffD + 'd ago';
+        return d.toLocaleDateString();
+      } catch { return ts; }
+    },
+
+    // Compact summary of which auto-triggers are configured for a sequence.
+    // Returns HTML so the per-trigger "down→stop" / "up→restart" parts can
+    // be styled distinctly.
+    seqTriggerSummary(seq) {
+      const parts = [];
+      if (seq.onRequiredFailure === 'stop') {
+        parts.push('<span style="color:#f85149">down&rarr;stop</span>');
+      }
+      if (seq.onRequiredRecovery === 'restart') {
+        parts.push('<span style="color:#3fb950">up&rarr;restart</span>');
+      }
+      if (parts.length === 0) return '<span style="color:#484f58">&mdash;</span>';
+      return parts.join(' &middot; ');
+    },
+
+    // Chart for sequences — reuses the existing groupChart* state by
+    // keying on `seq:<id>` in groupDetailName. This lets all the existing
+    // chart rendering helpers (groupChartScaleFor, groupChartSmoothPathFor,
+    // groupChartHandleHover, etc.) work unchanged for sequences.
+    seqChartKey(seq) {
+      return 'seq:' + seq.id;
+    },
+
+    seqChartIsActive(seq) {
+      return this.groupDetailName === this.seqChartKey(seq) && this.groupAnyChartActive();
+    },
+
+    seqChartIsActiveCpu(seq) {
+      return this.groupDetailName === this.seqChartKey(seq) && this.groupChartShowCpu;
+    },
+
+    seqChartIsActiveRam(seq) {
+      return this.groupDetailName === this.seqChartKey(seq) && this.groupChartShowRam;
+    },
+
+    toggleSeqChart(seq, kind) {
+      const key = this.seqChartKey(seq);
+      // Switching to a different sequence (or first time) — reset state
+      // and fetch fresh data.
+      if (this.groupDetailName !== key) {
+        this.groupDetailName = key;
+        this.groupChartShowCpu = kind === 'cpu';
+        this.groupChartShowRam = kind === 'ram';
+        this.groupChartData = null;
+        this.groupMemberCharts = {};
+        this.groupMemberEnabled = {};
+        this.groupChartHoverIdx = -1;
+        this.fetchSeqChartData(seq, this.groupChartRange);
+        return;
+      }
+      // Toggle within same sequence — flip the requested metric on/off
+      if (kind === 'cpu') this.groupChartShowCpu = !this.groupChartShowCpu;
+      if (kind === 'ram') this.groupChartShowRam = !this.groupChartShowRam;
+      // If both got turned off, deactivate the chart entirely
+      if (!this.groupChartShowCpu && !this.groupChartShowRam) {
+        this.groupDetailName = null;
+        this.groupChartData = null;
+      }
+    },
+
+    async fetchSeqChartData(seq, timeRange) {
+      this.groupChartLoading = true;
+      if (!seq || !seq.steps) { this.groupChartLoading = false; return; }
+      const ranges = { '1h': 3600, '6h': 21600, '24h': 86400, '3d': 259200, '7d': 604800 };
+      const since = Math.floor(Date.now() / 1000) - (ranges[timeRange] || 3600);
+      try {
+        const containers = seq.steps
+          .map(s => this.containers.find(c => c.name === s.container))
+          .filter(c => c && c.state === 'running');
+        const histories = await Promise.all(containers.map(async c => {
+          const resp = await fetch(`/api/containers/${c.id}/history?since=${since}`);
+          if (!resp.ok) return { id: c.id, name: c.name, data: [] };
+          const raw = await resp.json();
+          return { id: c.id, name: c.name, data: this._downsample(raw, 150) };
+        }));
+        const memberCharts = {};
+        for (const h of histories) memberCharts[h.name] = h.data;
+        this.groupMemberCharts = memberCharts;
+        // Auto-enable the first 8 members (matches Groups chart behavior)
+        const enabled = {};
+        Object.keys(memberCharts).slice(0, 8).forEach(n => { enabled[n] = true; });
+        this.groupMemberEnabled = enabled;
+        const byTime = {};
+        for (const h of histories) {
+          for (const pt of h.data) {
+            const t = pt.t;
+            if (!byTime[t]) byTime[t] = { t, c: 0, m: 0 };
+            byTime[t].c += pt.c || 0;
+            byTime[t].m += pt.m || 0;
+          }
+        }
+        this.groupChartData = Object.values(byTime).sort((a, b) => a.t - b.t);
+      } catch (e) {
+        console.error('Failed to fetch seq chart data:', e);
+        this.groupChartData = [];
+      } finally {
+        this.groupChartLoading = false;
+      }
+    },
+
     seqIsRunning() {
       return this.seqExecution && this.seqExecution.status === 'running';
+    },
+
+    // Returns true if any sequence is currently running (used to disable
+    // action buttons on idle cards while another sequence is running).
+    seqAnyRunning() {
+      return this.seqIsRunning();
+    },
+
+    // Is THIS sequence the one currently running?
+    seqIsRunningSeq(id) {
+      return !!(this.seqExecution && this.seqExecution.sequenceId === id && this.seqExecution.status === 'running');
+    },
+
+    // Is THIS sequence in the 60-second post-completion linger window?
+    // (status is complete/failed/aborted but seqExecution hasn't been cleared yet)
+    seqIsLingering(id) {
+      return !!(this.seqExecution && this.seqExecution.sequenceId === id && this.seqExecution.status !== 'running');
+    },
+
+    // Is the card "active" — running OR lingering. Used to switch the card
+    // header buttons + expanded view between live mode and idle mode.
+    seqCardActive(id) {
+      return this.seqIsRunningSeq(id) || this.seqIsLingering(id);
+    },
+
+    // Is the card expanded? Either user-toggled OR active (auto-expanded).
+    seqIsCardExpanded(id) {
+      return this.seqExpandedId === id || this.seqCardActive(id);
+    },
+
+    // Look up the saved-step metadata for a given step index in the live
+    // execution. Used to show Required / Wait healthy / Skip required /
+    // Delay pills inside the live view (the SeqStepState struct only
+    // carries Container + Required, not the full step config).
+    seqOriginalStep(seq, idx) {
+      if (!seq || !seq.steps || idx < 0 || idx >= seq.steps.length) return null;
+      return seq.steps[idx];
+    },
+
+    // Live step status text — shows the executor's own log line, plus a
+    // delay countdown when the step is in delaying state. The countdown
+    // is computed frontend-side from the executor's delaySeconds + when
+    // we first saw status === 'delaying' for this step.
+    //
+    // Reactivity note: we read seqExecution.elapsed inside this function
+    // (even though we don't use the value directly) so Alpine registers
+    // it as a dependency. The elapsed-timer mutates seqExecution.elapsed
+    // every 500ms while running, which causes this expression to re-
+    // evaluate and refresh the countdown text.
+    seqLiveStepLog(step, idx) {
+      // eslint-disable-next-line no-unused-vars
+      const _tick = this.seqExecution && this.seqExecution.elapsed;
+      if (step.status === 'delaying') {
+        const startedAt = this._seqDelayStarts && this._seqDelayStarts[idx];
+        const seq = this.seqExecSequence();
+        const cfg = seq && seq.steps[idx];
+        const total = cfg ? (cfg.delaySeconds || 0) : 0;
+        if (startedAt && total > 0) {
+          const elapsedMs = Date.now() - startedAt;
+          const remainingS = Math.max(0, total - elapsedMs / 1000);
+          return 'Delay ' + total + 's — ' + remainingS.toFixed(1) + 's remaining';
+        }
+      }
+      return step.log || '';
+    },
+
+    // How many seconds until the lingering execution auto-clears?
+    seqLingerSecondsRemaining() {
+      if (!this._seqLingerUntilMs) return 0;
+      return Math.max(0, Math.ceil((this._seqLingerUntilMs - Date.now()) / 1000));
     },
 
     // Editor methods
     seqNewSequence() {
       this.seqEditing = null;
-      this.seqForm = { name: '', description: '', icon: '', steps: [{ _id: ++this.seqStepIdCounter, container: '', required: false, waitHealthy: false, delaySeconds: 0 }] };
+      this.seqForm = { name: '', description: '', icon: '', onRequiredFailure: '', onRequiredRecovery: '', steps: [{ _id: ++this.seqStepIdCounter, container: '', required: false, waitHealthy: false, delaySeconds: 0, skipRequired: false }] };
       this.seqFormDirty = false;
       this.seqFormError = '';
       this.seqView = 'editor';
+    },
+
+    seqHasPriorRequired(idx) {
+      // True if any step before `idx` has Required=true. Skip required is
+      // only meaningful in that case — there is no Required-failure rule
+      // to bypass otherwise.
+      for (let j = 0; j < idx; j++) {
+        if (this.seqForm.steps[j] && this.seqForm.steps[j].required) return true;
+      }
+      return false;
     },
 
     seqEditSequence(seq) {
@@ -6774,7 +7555,9 @@ function app() {
         name: seq.name,
         description: seq.description || '',
         icon: seq.icon || '',
-        steps: seq.steps.map(s => ({ _id: ++this.seqStepIdCounter, container: s.container, required: s.required, waitHealthy: s.waitHealthy, delaySeconds: s.delaySeconds || 0 }))
+        onRequiredFailure: seq.onRequiredFailure || '',
+        onRequiredRecovery: seq.onRequiredRecovery || '',
+        steps: seq.steps.map(s => ({ _id: ++this.seqStepIdCounter, container: s.container, required: s.required, waitHealthy: s.waitHealthy, delaySeconds: s.delaySeconds || 0, skipRequired: !!s.skipRequired }))
       };
       this.seqFormDirty = false;
       this.seqFormError = '';
@@ -6787,7 +7570,7 @@ function app() {
     },
 
     seqAddStep() {
-      this.seqForm.steps.push({ _id: ++this.seqStepIdCounter, container: '', required: false, waitHealthy: false, delaySeconds: 0 });
+      this.seqForm.steps.push({ _id: ++this.seqStepIdCounter, container: '', required: false, waitHealthy: false, delaySeconds: 0, skipRequired: false });
       this.seqFormDirty = true;
     },
 
@@ -6828,7 +7611,9 @@ function app() {
         name: this.seqForm.name.trim(),
         description: this.seqForm.description.trim(),
         icon: this.seqForm.icon.trim(),
-        steps: this.seqForm.steps.filter(s => s.container).map(s => ({ container: s.container, required: s.required, waitHealthy: s.waitHealthy, delaySeconds: parseInt(s.delaySeconds) || 0 }))
+        onRequiredFailure: this.seqForm.onRequiredFailure || '',
+        onRequiredRecovery: this.seqForm.onRequiredRecovery || '',
+        steps: this.seqForm.steps.filter(s => s.container).map(s => ({ container: s.container, required: s.required, waitHealthy: s.waitHealthy, delaySeconds: parseInt(s.delaySeconds) || 0, skipRequired: !!s.skipRequired }))
       };
       if (!payload.name) { this.seqFormError = 'Name is required'; return; }
       if (payload.steps.length === 0) { this.seqFormError = 'At least one step with a container is required'; return; }
@@ -6943,9 +7728,30 @@ function app() {
 
     seqDismissExecution() {
       this.seqExecution = null;
-      this.seqView = 'list';
-      this.fetchSequences();
+      this._seqDelayStarts = {};
+      this._seqLingerUntilMs = 0;
+      if (this._seqLingerTimer) { clearTimeout(this._seqLingerTimer); this._seqLingerTimer = null; }
       if (this.seqElapsedTimer) { clearInterval(this.seqElapsedTimer); this.seqElapsedTimer = null; }
+      this.fetchSequences();
+    },
+
+    // Track delay-start timestamps so seqLiveStepLog can compute a
+    // live countdown for steps in the "delaying" state. Called every
+    // time we receive a SSE update — only writes when status transitions
+    // INTO 'delaying', and clears when the step transitions out.
+    _seqUpdateDelayTracking() {
+      if (!this.seqExecution || !this.seqExecution.steps) {
+        this._seqDelayStarts = {};
+        return;
+      }
+      if (!this._seqDelayStarts) this._seqDelayStarts = {};
+      this.seqExecution.steps.forEach((step, idx) => {
+        if (step.status === 'delaying') {
+          if (!this._seqDelayStarts[idx]) this._seqDelayStarts[idx] = Date.now();
+        } else if (this._seqDelayStarts[idx]) {
+          delete this._seqDelayStarts[idx];
+        }
+      });
     },
 
     // SSE
@@ -6956,9 +7762,7 @@ function app() {
         try {
           const event = JSON.parse(e.data);
           this.seqExecution = event.data;
-          if (this.activeTab === 'sequences' && this.seqView !== 'execution') {
-            this.seqView = 'execution';
-          }
+          this._seqUpdateDelayTracking();
           // Start or reset elapsed timer (reset on phase change during restart)
           if (event.data.status === 'running') {
             const newStartMs = new Date(event.data.startedAt).getTime();
@@ -6971,12 +7775,32 @@ function app() {
                 }
               }, 500);
             }
+            // Cancel any pending linger-clear from a previous run.
+            this._seqLingerUntilMs = 0;
+            if (this._seqLingerTimer) { clearTimeout(this._seqLingerTimer); this._seqLingerTimer = null; }
           }
-          // Completed events: stop timer, refresh sequences list
+          // Completed events: stop elapsed timer, schedule 60s auto-clear,
+          // refresh sequences list so last-run metadata is fresh.
           if (['seq-complete', 'seq-failed', 'seq-aborted'].includes(event.type)) {
             if (this.seqElapsedTimer) { clearInterval(this.seqElapsedTimer); this.seqElapsedTimer = null; }
             this.fetchSequences();
             this.fetchContainers();
+            // Schedule auto-clear after 60s, unless already scheduled
+            // (multiple completion events for the same run shouldn't reset).
+            const LINGER_MS = 60 * 1000;
+            if (!this._seqLingerTimer) {
+              this._seqLingerUntilMs = Date.now() + LINGER_MS;
+              this._seqLingerTimer = setTimeout(() => {
+                this._seqLingerTimer = null;
+                this._seqLingerUntilMs = 0;
+                // Only clear if still in non-running state (a new run
+                // would have reset _seqLingerUntilMs already).
+                if (this.seqExecution && this.seqExecution.status !== 'running') {
+                  this.seqExecution = null;
+                  this._seqDelayStarts = {};
+                }
+              }, LINGER_MS);
+            }
           }
         } catch (err) { console.error('SeqSSE parse error:', err); }
       };
@@ -7001,6 +7825,9 @@ function app() {
       }
       if (this.seqReconnectTimer) { clearTimeout(this.seqReconnectTimer); this.seqReconnectTimer = null; }
       if (this.seqElapsedTimer) { clearInterval(this.seqElapsedTimer); this.seqElapsedTimer = null; }
+      // Note: we deliberately keep _seqLingerTimer running across tab
+      // switches — the auto-clear should fire 60s after completion
+      // regardless of which tab the user is on.
     },
 
     // Execution view helpers

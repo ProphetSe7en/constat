@@ -2,7 +2,7 @@ module constat-ui
 
 go 1.25
 
-toolchain go1.25.9
+toolchain go1.25.10
 
 require (
 	github.com/docker/docker v28.0.1+incompatible

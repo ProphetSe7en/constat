@@ -337,10 +337,22 @@ func (s *Store) Setup(username, password string) error {
 // VerifyPassword checks username+password. Uses a real dummy bcrypt hash
 // on the unknown-user path so timing is indistinguishable from the
 // known-user-wrong-password path (anti-enumeration).
+//
+// Rejects inputs longer than 72 bytes BEFORE hitting bcrypt: bcrypt
+// silently truncates at 72, which means a brute-force attacker can
+// match the first 72 bytes of a longer stored password by submitting
+// just those 72. validatePassword refuses to STORE >72; this guard
+// refuses to VERIFY >72 to seal the side-channel.
 func (s *Store) VerifyPassword(username, password string) bool {
 	s.mu.RLock()
 	c := s.creds
 	s.mu.RUnlock()
+	if len(password) > 72 {
+		// Equalize timing with the bcrypt path so the >72 reject doesn't
+		// leak that the user (or their stored hash) wasn't even consulted.
+		_ = bcrypt.CompareHashAndPassword(dummyHash, dummyHash[:72])
+		return false
+	}
 	if c == nil || username != c.Username {
 		// Equalize timing with the bcrypt path.
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
@@ -638,10 +650,23 @@ func validateUsername(u string) error {
 	return nil
 }
 
-// validatePassword enforces: min 10 chars, at least 2 of {upper, lower, digit, symbol}.
+// validatePassword enforces: min 10 chars, at least 2 of {upper, lower,
+// digit, symbol}. Passphrases of 16+ chars skip the class rule entirely
+// (a long unique phrase has more entropy than a short one with two
+// classes). Rejects passwords longer than 72 bytes to remove the
+// length-oracle side-channel — bcrypt silently truncates at 72, so a
+// 100-byte password matching the first 72 bytes of the stored hash
+// would silently succeed; we refuse such passwords explicitly instead.
 func validatePassword(pw string) error {
 	if len(pw) < 10 {
 		return errors.New("password must be at least 10 characters")
+	}
+	if len(pw) > 72 {
+		return errors.New("password must not exceed 72 bytes (bcrypt limit)")
+	}
+	// Passphrase fast-path: 16+ characters skip the class rule.
+	if len([]rune(pw)) >= 16 {
+		return nil
 	}
 	var hasUpper, hasLower, hasDigit, hasSymbol bool
 	for _, r := range pw {
@@ -663,7 +688,7 @@ func validatePassword(pw string) error {
 		}
 	}
 	if count < 2 {
-		return errors.New("password must contain at least 2 of: uppercase, lowercase, digit, symbol")
+		return errors.New("password must contain at least 2 of: uppercase, lowercase, digit, symbol (or use 16+ characters)")
 	}
 	return nil
 }

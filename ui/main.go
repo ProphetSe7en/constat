@@ -71,6 +71,17 @@ func main() {
 	// Initialize sequence executor
 	seqExecutor := NewSequenceExecutor(cli)
 
+	// Auto-restart manager. Reads MaxRestarts/RestartCooldown from
+	// constat.conf at boot; live edits via SetConfig in handleUpdateConfig.
+	// Falls back to safe defaults (3 attempts, 300 s cooldown) if the
+	// config file is missing or fields are blank.
+	maxR, cooldown := loadRestartConfig()
+	restartMgr := NewRestartManager(cli, events, maxR, cooldown)
+
+	// Sequence executor reacts to auto-restart-recovered/exhausted events
+	// from the manager. Wire after both exist.
+	seqExecutor.WireRestartManager(restartMgr, events)
+
 	// Registry credential store for private image update checks.
 	// Must be created before the UpdateChecker so it can pass auth headers
 	// to the Docker daemon's /distribution endpoint.
@@ -84,6 +95,7 @@ func main() {
 		stats:           statsCollector,
 		sequences:       seqExecutor,
 		registryStore:   registryStore,
+		restartManager:  restartMgr,
 		restartDisabled: make(map[string]bool),
 	}
 	app.loadRestartDisabled()
@@ -217,15 +229,21 @@ func main() {
 	authStore, authHandlers := initAuth(ctx)
 	app.authStore = authStore
 
+	// Per-IP rate limiter for auth-hot endpoints. 5 attempts per minute
+	// per IP; 6th gets 429 + Retry-After. Wraps only the POST submit
+	// endpoints — GET pages don't run a bcrypt verify and aren't worth
+	// the limiter overhead. Logout is left unlimited so a legitimate
+	// user can always sign out.
+	authRateLimit := auth.AuthRateLimitMiddleware(authStore)
 	mux.HandleFunc("GET /setup", authHandlers.handleSetupPage)
-	mux.HandleFunc("POST /setup", authHandlers.handleSetupSubmit)
+	mux.Handle("POST /setup", authRateLimit(http.HandlerFunc(authHandlers.handleSetupSubmit)))
 	mux.HandleFunc("GET /login", authHandlers.handleLoginPage)
-	mux.HandleFunc("POST /login", authHandlers.handleLoginSubmit)
+	mux.Handle("POST /login", authRateLimit(http.HandlerFunc(authHandlers.handleLoginSubmit)))
 	mux.HandleFunc("POST /logout", authHandlers.handleLogout)
 	mux.HandleFunc("GET /api/auth/status", authHandlers.handleAuthStatus)
 	mux.HandleFunc("GET /api/auth/api-key", authHandlers.handleGetAPIKey)
 	mux.HandleFunc("POST /api/auth/regenerate-api-key", authHandlers.handleRegenAPIKey)
-	mux.HandleFunc("POST /api/auth/change-password", authHandlers.handleChangePassword)
+	mux.Handle("POST /api/auth/change-password", authRateLimit(http.HandlerFunc(authHandlers.handleChangePassword)))
 
 	// Public liveness endpoint. Returns 200 regardless of auth config so
 	// Docker HEALTHCHECK / Uptime Kuma / Kubernetes probes work even when
@@ -443,6 +461,7 @@ type App struct {
 	registryStore   *RegistryStore
 	categories      *categoryStore
 	authStore       *auth.Store // exposed so handleUpdateConfig can live-reload auth settings
+	restartManager  *RestartManager
 	restartDisabled map[string]bool
 	restartMu       sync.RWMutex
 	// configMu serialises PUT /api/config (handleUpdateConfig). H4 fleet-drift
@@ -491,4 +510,28 @@ func (app *App) isRestartDisabled(name string) bool {
 	app.restartMu.RLock()
 	defer app.restartMu.RUnlock()
 	return app.restartDisabled[name]
+}
+
+// loadRestartConfig reads MaxRestarts + RestartCooldown from constat.conf
+// for the auto-restart manager. Both fields are optional — defaults match
+// the UI placeholders in Settings (3 attempts, 300 s cooldown). Negative
+// or unparseable values are clamped to the defaults.
+func loadRestartConfig() (int, time.Duration) {
+	maxR := 3
+	cooldown := 300 * time.Second
+	cfg, err := ReadConfig(configPath)
+	if err != nil || cfg == nil {
+		return maxR, cooldown
+	}
+	if cfg.MaxRestarts != "" {
+		if n, perr := strconv.Atoi(cfg.MaxRestarts); perr == nil && n > 0 {
+			maxR = n
+		}
+	}
+	if cfg.RestartCooldown != "" {
+		if n, perr := strconv.Atoi(cfg.RestartCooldown); perr == nil && n > 0 {
+			cooldown = time.Duration(n) * time.Second
+		}
+	}
+	return maxR, cooldown
 }

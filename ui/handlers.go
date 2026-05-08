@@ -271,6 +271,12 @@ func (app *App) handleStartContainer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Manual start clears any sticky exhausted-flag in the auto-restart
+	// manager so future unhealthy events get a fresh attempt budget.
+	if name, ok := app.stats.NameForID(id); ok && app.restartManager != nil {
+		app.restartManager.Reset(name)
+	}
+
 	writeJSON(w, map[string]string{"status": "started"})
 }
 
@@ -311,6 +317,10 @@ func (app *App) handleRestartContainer(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error restarting container %s: %v", id, err)
 		writeError(w, 500, "Failed to restart container")
 		return
+	}
+
+	if name, ok := app.stats.NameForID(id); ok && app.restartManager != nil {
+		app.restartManager.Reset(name)
 	}
 
 	writeJSON(w, map[string]string{"status": "restarted"})
@@ -1373,6 +1383,13 @@ func (app *App) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error writing config: %v", err)
 		writeError(w, 500, "Failed to write config")
 		return
+	}
+
+	// Live-reload auto-restart manager so MaxRestarts/RestartCooldown
+	// edits take effect without a container restart.
+	if app.restartManager != nil {
+		maxR, cooldown := loadRestartConfig()
+		app.restartManager.SetConfig(maxR, cooldown)
 	}
 
 	writeJSON(w, map[string]string{"status": "saved"})
