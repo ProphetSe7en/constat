@@ -7183,6 +7183,32 @@ function app() {
       if (!this.seqExecution || !this.seqExecution.steps) return '';
       const total = this.seqExecution.totalSteps || 0;
       const steps = this.seqExecution.steps;
+      const phase = this.seqExecution.phase || '';
+
+      // Cascade-restart Phase 2 surfacing — these phases happen between
+      // stopping the dependents (Phase 1) and starting them again
+      // (Phase 3). No step in `steps` is "transitioning" during this
+      // window because the Required step itself isn't part of the
+      // cascade's sub-sequence. Without these handlers the live bar
+      // would freeze on the post-Phase-1 state.
+      if (phase === 'waiting-healthy') {
+        const seq = this.seqExecSequence();
+        const required = seq && seq.steps ? seq.steps.find(s => s.required) : null;
+        const name = (required && required.container) || 'required container';
+        return 'Waiting for ' + name + ' to be healthy...';
+      }
+      if (phase.startsWith('waiting-grace-')) {
+        const totalGrace = parseInt(phase.substring('waiting-grace-'.length), 10) || 0;
+        const phaseStart = this.seqExecution.phaseStartedAt
+          ? new Date(this.seqExecution.phaseStartedAt).getTime() : 0;
+        if (phaseStart > 0 && totalGrace > 0) {
+          const elapsedS = (Date.now() - phaseStart) / 1000;
+          const remainingS = Math.max(0, totalGrace - elapsedS);
+          return 'Waiting ' + remainingS.toFixed(0) + 's grace before starting dependents';
+        }
+        return 'Waiting ' + totalGrace + 's grace before starting dependents';
+      }
+
       // Find the lowest-index step that is currently doing something.
       // (Parallel groups can have multiple active simultaneously — we
       // surface the first one to keep the line readable.)

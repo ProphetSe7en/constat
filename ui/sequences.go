@@ -84,7 +84,7 @@ type SeqStep struct {
 type SeqExecution struct {
 	SequenceID  string         `json:"sequenceId"`
 	Mode        string         `json:"mode"` // start, stop, restart
-	Phase       string         `json:"phase,omitempty"` // stopping, starting (for restart mode)
+	Phase       string         `json:"phase,omitempty"` // stopping, starting, waiting-healthy, waiting-grace-Ns
 	Status      string         `json:"status"` // running, complete, failed, aborted
 	CurrentStep int            `json:"currentStep"`
 	TotalSteps  int            `json:"totalSteps"`
@@ -92,6 +92,10 @@ type SeqExecution struct {
 	Elapsed     float64        `json:"elapsed"`
 	Steps       []SeqStepState `json:"steps"`
 	Error       string         `json:"error,omitempty"`
+	// PhaseStartedAt records when the current Phase began. Used by the
+	// frontend to compute live countdowns (e.g., the cascade-restart
+	// grace-delay phase) without polling the backend each second.
+	PhaseStartedAt time.Time `json:"phaseStartedAt,omitempty"`
 	// RunID ties together every event emitted during this run. The same ID
 	// is reused across phase transitions (restart mode's stop→start phases,
 	// cascade mode's stop→restart cascade) so the UI groups all events
@@ -507,10 +511,12 @@ func (se *SequenceExecutor) CascadeFromRequired(seqID, containerName, mode strin
 
 	requiredIdx := -1
 	requiredWaitHealthy := false
+	requiredDelay := 0
 	for i, step := range seq.Steps {
 		if step.Required && step.Container == containerName {
 			requiredIdx = i
 			requiredWaitHealthy = step.WaitHealthy
+			requiredDelay = step.DelaySeconds
 			break
 		}
 	}
@@ -557,17 +563,38 @@ func (se *SequenceExecutor) CascadeFromRequired(seqID, containerName, mode strin
 	se.execution = se.initExecution(sub, mode, phase)
 	se.mu.Unlock()
 
-	// Suppress every container in the original sequence (including the
-	// Required one) so the cascade's own stop/start churn doesn't trigger
-	// the SequencerExecutor recursively.
-	se.suppressStepsForRun(seqCopy)
+	// Suppress only the dependents (sub.Steps), NOT the Required step.
+	//
+	// We need the Required step's natural lifecycle events (state/started
+	// after a sustained outage, manager-driven restart, manual user
+	// intervention, etc.) to flow through to the state path so the
+	// recovery cascade can fire. Suppressing the Required step would
+	// silently drop those events for the entire suppress window and break
+	// the "Required came back up → restart dependents" trigger entirely.
+	//
+	// The dependents DO need suppression: their own stop/start events
+	// from this cascade's work shouldn't loop back through the state path
+	// and trigger nested cascades. Defense in depth — most dependents are
+	// not Required steps anyway, but a sequence could chain multiple
+	// auto-trigger-enabled sequences via shared containers.
+	//
+	// Letting the Required stay un-suppressed is also useful during the
+	// cascade-restart's WaitHealthy gate: if the Required goes unhealthy
+	// again mid-wait, the auto-restart manager can keep trying to
+	// recover it (suppress would block OnUnhealthy from acting).
+	se.suppressStepsForRun(sub)
 
-	go se.runCascade(ctx, sub, containerName, requiredWaitHealthy, mode)
+	go se.runCascade(ctx, sub, containerName, requiredWaitHealthy, requiredDelay, mode)
 	return nil
 }
 
 // runCascade is the goroutine entry point for CascadeFromRequired.
-func (se *SequenceExecutor) runCascade(ctx context.Context, sub Sequence, requiredName string, waitForReady bool, mode string) {
+// requiredDelay is the Required step's DelaySeconds — applied between
+// the WaitHealthy gate and the dependent-start phase so externally-
+// triggered restarts (e.g., a backup script restarting a container
+// outside constat) get the same post-start grace window as a manual
+// sequence Run does.
+func (se *SequenceExecutor) runCascade(ctx context.Context, sub Sequence, requiredName string, waitForReady bool, requiredDelay int, mode string) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("SequenceExecutor: panic in cascade: %v", r)
@@ -593,11 +620,24 @@ func (se *SequenceExecutor) runCascade(ctx context.Context, sub Sequence, requir
 			return // already finalized as failed/aborted
 		}
 
-		// Phase 2: wait for the Required step to be ready, if the user
+		// Phase 2a: wait for the Required step to be ready, if the user
 		// set Wait healthy on it. Same contract as a normal sequence
 		// start — Required + Wait healthy means "nothing after this
 		// runs until it's healthy".
 		if waitForReady {
+			// Surface the wait phase to the UI — without this update,
+			// the live progress bar shows the post-Phase-1 state for
+			// up to 2 minutes while we silently poll Docker. Frontend
+			// renders "Waiting for <required> to be healthy..." when
+			// it sees this Phase value.
+			se.mu.Lock()
+			if se.execution != nil {
+				se.execution.Phase = "waiting-healthy"
+			}
+			se.mu.Unlock()
+			se.broadcastUpdate()
+			se.emitSeqEvent("sequence", "waiting-healthy", requiredName, "")
+
 			if requiredID, ok := idMap[requiredName]; ok {
 				if err := se.waitForHealthy(ctx, requiredID, 2*time.Minute); err != nil {
 					se.finishExecution("failed", "seq-failed", fmt.Sprintf("required %q never became healthy: %v", requiredName, err))
@@ -605,6 +645,35 @@ func (se *SequenceExecutor) runCascade(ctx context.Context, sub Sequence, requir
 				}
 			} else {
 				log.Printf("SequenceExecutor: cascade restart could not resolve required %q for healthy gate; proceeding without wait", requiredName)
+			}
+		}
+
+		// Phase 2b: apply the Required step's post-start Delay before
+		// starting dependents. Mirrors the normal sequence Run contract
+		// where Delay sits between the Required step's "done" state and
+		// the next group's start. Without this, externally-triggered
+		// restarts (e.g., a backup script that docker-restarts the
+		// Required outside constat) would skip the grace window the
+		// user configured for letting the container fully initialise.
+		if requiredDelay > 0 {
+			// Surface the grace-wait to the UI. The Phase value also
+			// carries the duration so the frontend can render a live
+			// countdown without a separate API call. PhaseStartedAt
+			// is what the countdown ticks against.
+			se.mu.Lock()
+			if se.execution != nil {
+				se.execution.Phase = fmt.Sprintf("waiting-grace-%d", requiredDelay)
+				se.execution.PhaseStartedAt = time.Now().UTC()
+			}
+			se.mu.Unlock()
+			se.broadcastUpdate()
+			se.emitSeqEvent("sequence", "delaying", requiredName, fmt.Sprintf("%ds (post-start grace before dependents)", requiredDelay))
+			log.Printf("SequenceExecutor: cascade restart waiting %ds Delay on required %q before starting dependents", requiredDelay, requiredName)
+			select {
+			case <-ctx.Done():
+				se.finishExecution("aborted", "seq-aborted", "")
+				return
+			case <-time.After(time.Duration(requiredDelay) * time.Second):
 			}
 		}
 
