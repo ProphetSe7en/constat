@@ -45,6 +45,14 @@ type Sequence struct {
 	// exhausted (MaxRestarts attempts in RestartCooldown, gave up).
 	// "" / "none" = do nothing. "stop" = run StopSequence on this sequence.
 	OnRequiredFailure string `json:"onRequiredFailure,omitempty"`
+	// OnRequiredFailureDelaySeconds is how many seconds we wait after a
+	// Required container goes down before firing the failure cascade.
+	// Lets quick restarts (Restart button, docker restart) complete
+	// without triggering the cascade. nil = use system default (30s);
+	// 0 = fire immediately (useful for tightly-coupled dependencies
+	// like databases where the dependents can't function for even a
+	// brief outage); 1-300 = wait that many seconds.
+	OnRequiredFailureDelaySeconds *int `json:"onRequiredFailureDelaySeconds,omitempty"`
 	// OnRequiredRecovery controls what happens when a Required step's
 	// container is reported recovered by the auto-restart manager (back
 	// to healthy within budget). "" / "none" = do nothing. "restart" =
@@ -363,12 +371,21 @@ func (se *SequenceExecutor) hasRequiredMatch(name string) bool {
 // armPendingFailure starts (or refreshes) the debounce timer for `name`.
 // If the timer fires without being cancelled, the failure is treated as
 // sustained: we mark it and dispatch the trigger.
+//
+// The debounce duration comes from the matching sequence's
+// OnRequiredFailureDelaySeconds. If multiple sequences have this
+// container as Required + cascade-stop configured with different
+// debounce values, the SHORTEST wins — the more-aggressive sequence
+// fires first, the others would fire later via their own pendingFailure
+// armed-at the next state event. (For the v1 single-timer model we
+// accept this minor edge case rather than per-(container, seq) timers.)
 func (se *SequenceExecutor) armPendingFailure(name string) {
+	delay := se.failureDebounceFor(name)
 	se.failureMu.Lock()
 	if existing, ok := se.pendingFailure[name]; ok {
 		existing.Stop()
 	}
-	timer := time.AfterFunc(stateDebounceWindow, func() {
+	timer := time.AfterFunc(delay, func() {
 		se.failureMu.Lock()
 		delete(se.pendingFailure, name)
 		se.failureSeenAt[name] = time.Now()
@@ -377,6 +394,39 @@ func (se *SequenceExecutor) armPendingFailure(name string) {
 	})
 	se.pendingFailure[name] = timer
 	se.failureMu.Unlock()
+}
+
+// failureDebounceFor returns the failure-cascade debounce window to use
+// for events on `container`. Walks all sequences with this container as
+// a Required step and OnRequiredFailure == "stop", returning the shortest
+// configured delay. nil OnRequiredFailureDelaySeconds defaults to
+// stateDebounceWindow (30s); 0 means fire immediately.
+func (se *SequenceExecutor) failureDebounceFor(container string) time.Duration {
+	se.mu.RLock()
+	defer se.mu.RUnlock()
+	shortest := stateDebounceWindow
+	found := false
+	for _, s := range se.sequences {
+		if s.OnRequiredFailure != "stop" {
+			continue
+		}
+		for _, step := range s.Steps {
+			if step.Container == container && step.Required {
+				var d time.Duration
+				if s.OnRequiredFailureDelaySeconds != nil {
+					d = time.Duration(*s.OnRequiredFailureDelaySeconds) * time.Second
+				} else {
+					d = stateDebounceWindow
+				}
+				if !found || d < shortest {
+					shortest = d
+					found = true
+				}
+				break
+			}
+		}
+	}
+	return shortest
 }
 
 // cancelPendingFailure stops a pending-failure timer if one is armed for
@@ -648,27 +698,27 @@ func (se *SequenceExecutor) runCascade(ctx context.Context, sub Sequence, requir
 			}
 		}
 
-		// Phase 2b: apply the Required step's post-start Delay before
+		// Phase 2b: apply the Required step's configured Delay before
 		// starting dependents. Mirrors the normal sequence Run contract
 		// where Delay sits between the Required step's "done" state and
-		// the next group's start. Without this, externally-triggered
+		// the next group's start — without this, externally-triggered
 		// restarts (e.g., a backup script that docker-restarts the
-		// Required outside constat) would skip the grace window the
-		// user configured for letting the container fully initialise.
+		// Required outside constat) would skip the wait the user
+		// configured on the Required step.
 		if requiredDelay > 0 {
-			// Surface the grace-wait to the UI. The Phase value also
-			// carries the duration so the frontend can render a live
-			// countdown without a separate API call. PhaseStartedAt
-			// is what the countdown ticks against.
+			// Surface the wait to the UI. The Phase value carries the
+			// total duration; PhaseStartedAt anchors the live countdown.
+			// Frontend uses both to render "Required step's Delay —
+			// Xs remaining (of Ns)" in the live progress text.
 			se.mu.Lock()
 			if se.execution != nil {
-				se.execution.Phase = fmt.Sprintf("waiting-grace-%d", requiredDelay)
+				se.execution.Phase = fmt.Sprintf("waiting-required-delay-%d", requiredDelay)
 				se.execution.PhaseStartedAt = time.Now().UTC()
 			}
 			se.mu.Unlock()
 			se.broadcastUpdate()
-			se.emitSeqEvent("sequence", "delaying", requiredName, fmt.Sprintf("%ds (post-start grace before dependents)", requiredDelay))
-			log.Printf("SequenceExecutor: cascade restart waiting %ds Delay on required %q before starting dependents", requiredDelay, requiredName)
+			se.emitSeqEvent("sequence", "delaying", requiredName, fmt.Sprintf("Required step's Delay (%ds)", requiredDelay))
+			log.Printf("SequenceExecutor: cascade restart applying %ds Required-step Delay on %q before starting dependents", requiredDelay, requiredName)
 			select {
 			case <-ctx.Done():
 				se.finishExecution("aborted", "seq-aborted", "")
@@ -828,10 +878,19 @@ func (se *SequenceExecutor) validateSequence(seq *Sequence) error {
 	switch seq.OnRequiredFailure {
 	case "", "none":
 		seq.OnRequiredFailure = ""
+		// Drop any leftover delay value if trigger is unset — the field
+		// has no meaning without the failure trigger configured.
+		seq.OnRequiredFailureDelaySeconds = nil
 	case "stop":
 		// ok
 	default:
 		return fmt.Errorf("onRequiredFailure must be 'none' or 'stop'")
+	}
+	if seq.OnRequiredFailureDelaySeconds != nil {
+		v := *seq.OnRequiredFailureDelaySeconds
+		if v < 0 || v > 300 {
+			return fmt.Errorf("onRequiredFailureDelaySeconds must be between 0 and 300")
+		}
 	}
 	switch seq.OnRequiredRecovery {
 	case "", "none":

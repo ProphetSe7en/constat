@@ -3347,8 +3347,13 @@
               <option value="">Do nothing</option>
               <option value="stop">Stop steps after it</option>
             </select>
+            <div x-show="seqForm.onRequiredFailure === 'stop'" style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <label style="font-size:12px;color:var(--text-muted);margin:0">Wait</label>
+              <input type="number" min="0" max="300" x-model.number="seqForm.onRequiredFailureDelaySeconds" @input="seqFormDirty = true" class="seq-delay-input" style="width:64px">
+              <label style="font-size:12px;color:var(--text-muted);margin:0">seconds before stopping (0 = immediately, default 30)</label>
+            </div>
             <div class="seq-trigger-hint">
-              Stop the steps after it. Useful when those steps can't do anything without it — for example, *arr apps after Plex.
+              Stop the steps after it. Useful when those steps can't do anything without it — for example, *arr apps after Plex. Set the wait to <strong>0</strong> for tightly-coupled dependencies like a database, where the dependents can't function for even a brief outage. Quick restarts (Restart button, <code>docker restart</code>) that complete inside the wait window don't fire the trigger.
             </div>
           </div>
           <div class="seq-help">
@@ -7197,16 +7202,16 @@ function app() {
         const name = (required && required.container) || 'required container';
         return 'Waiting for ' + name + ' to be healthy...';
       }
-      if (phase.startsWith('waiting-grace-')) {
-        const totalGrace = parseInt(phase.substring('waiting-grace-'.length), 10) || 0;
+      if (phase.startsWith('waiting-required-delay-')) {
+        const totalDelay = parseInt(phase.substring('waiting-required-delay-'.length), 10) || 0;
         const phaseStart = this.seqExecution.phaseStartedAt
           ? new Date(this.seqExecution.phaseStartedAt).getTime() : 0;
-        if (phaseStart > 0 && totalGrace > 0) {
+        if (phaseStart > 0 && totalDelay > 0) {
           const elapsedS = (Date.now() - phaseStart) / 1000;
-          const remainingS = Math.max(0, totalGrace - elapsedS);
-          return 'Waiting ' + remainingS.toFixed(0) + 's grace before starting dependents';
+          const remainingS = Math.max(0, totalDelay - elapsedS);
+          return "Required step's Delay — " + remainingS.toFixed(0) + 's remaining (of ' + totalDelay + 's)';
         }
-        return 'Waiting ' + totalGrace + 's grace before starting dependents';
+        return "Required step's Delay — " + totalDelay + 's';
       }
 
       // Find the lowest-index step that is currently doing something.
@@ -7559,7 +7564,7 @@ function app() {
     // Editor methods
     seqNewSequence() {
       this.seqEditing = null;
-      this.seqForm = { name: '', description: '', icon: '', onRequiredFailure: '', onRequiredRecovery: '', steps: [{ _id: ++this.seqStepIdCounter, container: '', required: false, waitHealthy: false, delaySeconds: 0, skipRequired: false }] };
+      this.seqForm = { name: '', description: '', icon: '', onRequiredFailure: '', onRequiredFailureDelaySeconds: 30, onRequiredRecovery: '', steps: [{ _id: ++this.seqStepIdCounter, container: '', required: false, waitHealthy: false, delaySeconds: 0, skipRequired: false }] };
       this.seqFormDirty = false;
       this.seqFormError = '';
       this.seqView = 'editor';
@@ -7577,11 +7582,16 @@ function app() {
 
     seqEditSequence(seq) {
       this.seqEditing = seq.id;
+      // Server omits onRequiredFailureDelaySeconds when nil (= use default
+      // 30s). Show 30 in the input so user sees current effective value.
+      const failureDelay = (seq.onRequiredFailureDelaySeconds === null || seq.onRequiredFailureDelaySeconds === undefined)
+        ? 30 : seq.onRequiredFailureDelaySeconds;
       this.seqForm = {
         name: seq.name,
         description: seq.description || '',
         icon: seq.icon || '',
         onRequiredFailure: seq.onRequiredFailure || '',
+        onRequiredFailureDelaySeconds: failureDelay,
         onRequiredRecovery: seq.onRequiredRecovery || '',
         steps: seq.steps.map(s => ({ _id: ++this.seqStepIdCounter, container: s.container, required: s.required, waitHealthy: s.waitHealthy, delaySeconds: s.delaySeconds || 0, skipRequired: !!s.skipRequired }))
       };
@@ -7641,6 +7651,15 @@ function app() {
         onRequiredRecovery: this.seqForm.onRequiredRecovery || '',
         steps: this.seqForm.steps.filter(s => s.container).map(s => ({ container: s.container, required: s.required, waitHealthy: s.waitHealthy, delaySeconds: parseInt(s.delaySeconds) || 0, skipRequired: !!s.skipRequired }))
       };
+      // Only send the failure-delay value when the failure trigger is set.
+      // Sending nil otherwise keeps the JSON clean and matches the
+      // server-side semantic (nil = use default 30s).
+      if (this.seqForm.onRequiredFailure === 'stop') {
+        const v = parseInt(this.seqForm.onRequiredFailureDelaySeconds);
+        if (!isNaN(v) && v >= 0 && v <= 300) {
+          payload.onRequiredFailureDelaySeconds = v;
+        }
+      }
       if (!payload.name) { this.seqFormError = 'Name is required'; return; }
       if (payload.steps.length === 0) { this.seqFormError = 'At least one step with a container is required'; return; }
 
