@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.9.20
+
+Sequence auto-restart and brute-force protection on login.
+
+### New: auto-trigger on Required containers
+
+Sequences can now react automatically when a Required container goes down or comes back up. Edit a sequence and pick what should happen:
+
+- **When down → Stop steps after it.** Useful when the steps after it can't do anything without it (for example *arr apps after Plex). The wait time before stopping is configurable per sequence (0 to 300 seconds, defaults to 30) — set it to 0 for tightly-coupled dependencies like a database, or higher for containers that briefly restart for benign reasons.
+- **When up → Restart steps after it.** Useful when the steps share a mount or folder with the Required container (rclone, mergerfs) and need a fresh start. Respects the Required step's Wait healthy and Delay settings whether the restart was triggered by constat's auto-restart, your nightly backup script, the Restart button, or a manual start.
+
+The Sequences tab now shows a live progress view inline with the sequence row while a cascade runs — including a countdown for the Required step's Delay so you can see exactly what's happening.
+
+### New: Skip required flag on steps
+
+Mark a step **Skip required** if it comes after a Required step in run order but doesn't actually depend on it. Example: `qBittorrent (Required) → Plex (Skip required) → Radarr`. If qBit fails, Plex still starts; Radarr is skipped because it depends on the broken Required chain. Skip required is only available when an earlier step is Required — there's nothing to skip otherwise.
+
+### New: Sequence events in the events feed
+
+Every sequence run now appears in the Events tab as one expandable group: started → step started → step done → step done → completed. Filter by "Sequence" in the type dropdown to see only sequence-related events.
+
+### Improved: Sequences view rebuilt as a table
+
+The Sequences tab now mirrors the Groups view: each sequence is a row with health, CPU, RAM, networks, and network I/O columns. Expand to see per-step details and an aggregated CPU/RAM chart for the sequence over time.
+
+### Security: brute-force protection on login
+
+The login, setup, and change-password endpoints now reject more than 5 attempts per minute from the same IP. Passwords longer than 72 bytes are rejected outright (the underlying bcrypt library silently truncates beyond 72, which was a subtle length-oracle side-channel). Passphrases of 16 or more characters skip the "must contain 2 of upper/lower/digit/symbol" rule — a long unique passphrase has more entropy than a short complex password.
+
+### Settings: configurable auto-restart for sequence triggers
+
+The Auto-restart settings (Max restarts, Restart cooldown) that previously only affected the per-container auto-restart label now also drive how aggressively the sequence auto-trigger fires. Tune them in Settings → Auto-restart.
+
+---
+
 ## v0.9.19
 
 Memory-leak fix. Constat kept a ring-buffer + aggregated-history + averages entry for every container name it ever saw, forever — including transient one-shots (`docker run` without `--name` → auto-generated names like `admiring_hofstadter`, `angry_dirac`). On prod systems that ran many one-shots over time, 60%+ of in-memory stats was phantoms. Observed: 232 MiB vs 123 MiB between a prod instance (151 tracked names, 93 phantoms) and a dev instance on the same Docker daemon.
