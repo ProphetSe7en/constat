@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.21
+
+Follow-up to v0.9.20.
+
+### Changed
+
+- **TRUSTED_PROXIES accepts CIDR ranges** (e.g. `192.168.0.0/24`) alongside literal IPs. Useful for reverse-proxy deployments where the proxy runs on a Docker bridge with dynamic container IPs — one CIDR covers every container instead of listing each one.
+- **Wait-healthy honors Docker container state, not wallclock.** Previously a slow-starting container could fall past the wait timeout while still progressing toward healthy; now the timer pauses when Docker reports the container is actively transitioning.
+
 ## v0.9.20
 
 Sequence auto-restart and brute-force protection on login.

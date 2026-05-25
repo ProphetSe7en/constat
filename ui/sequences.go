@@ -170,6 +170,19 @@ type SequenceExecutor struct {
 // restart, watchtower update) so they don't cascade-stop dependents.
 const stateDebounceWindow = 30 * time.Second
 
+// waitHealthy* control the "Wait healthy" gate. We never bound the
+// "starting" phase by wallclock — Docker already does that via the
+// healthcheck's start_period + retries × interval. We only act when
+// Docker itself flips state to "unhealthy", and then only after
+// unhealthyGrace, so constat's own auto-restart manager (or any other
+// external recovery) gets a chance to recycle the container without
+// the sequence aborting underneath it. maxWait is defence-in-depth
+// against a misconfigured healthcheck or a pathological restart loop.
+const (
+	waitHealthyUnhealthyGrace = 90 * time.Second
+	waitHealthyMaxWait        = 10 * time.Minute
+)
+
 // NewSequenceExecutor creates and initializes a sequence executor
 func NewSequenceExecutor(docker *client.Client) *SequenceExecutor {
 	se := &SequenceExecutor{
@@ -689,7 +702,7 @@ func (se *SequenceExecutor) runCascade(ctx context.Context, sub Sequence, requir
 			se.emitSeqEvent("sequence", "waiting-healthy", requiredName, "")
 
 			if requiredID, ok := idMap[requiredName]; ok {
-				if err := se.waitForHealthy(ctx, requiredID, 2*time.Minute); err != nil {
+				if err := se.waitForHealthy(ctx, requiredID, waitHealthyUnhealthyGrace, waitHealthyMaxWait); err != nil {
 					se.finishExecution("failed", "seq-failed", fmt.Sprintf("required %q never became healthy: %v", requiredName, err))
 					return
 				}
@@ -1639,7 +1652,7 @@ func (se *SequenceExecutor) startSingleContainer(ctx context.Context, step SeqSt
 		se.broadcastUpdate()
 		se.emitSeqEvent("sequence", "waiting-healthy", step.Container, "")
 
-		if err := se.waitForHealthy(ctx, containerID, 30*time.Second); err != nil {
+		if err := se.waitForHealthy(ctx, containerID, waitHealthyUnhealthyGrace, waitHealthyMaxWait); err != nil {
 			se.mu.Lock()
 			se.execution.Steps[idx].Status = "failed"
 			se.execution.Steps[idx].Elapsed = time.Since(start).Seconds()
@@ -1796,18 +1809,40 @@ func (se *SequenceExecutor) resolveAllContainerIDs(ctx context.Context) (map[str
 	return result, nil
 }
 
-// waitForHealthy polls container health until healthy or timeout
-func (se *SequenceExecutor) waitForHealthy(ctx context.Context, containerID string, timeout time.Duration) error {
-	deadline := time.After(timeout)
+// waitForHealthy polls container health and respects Docker's own state machine
+// rather than imposing a wallclock budget on the whole wait.
+//
+//   - "starting"  → keep waiting indefinitely. Docker bounds this itself via the
+//     healthcheck's start_period + retries × interval, after which it flips to
+//     unhealthy. A hard wallclock here would abort containers that are simply
+//     slow to warm up (e.g. SWAG takes ~30–50 s to issue certs and reload nginx).
+//   - "healthy"   → done.
+//   - "unhealthy" → start a grace window. If state flips back to starting/healthy
+//     within unhealthyGrace, reset and keep waiting. This is what lets constat's
+//     own auto-restart-on-unhealthy manager (or any external recovery) recycle a
+//     transiently-bad container without the sequence aborting underneath it. If
+//     the container is still unhealthy when the grace expires, fail the step.
+//   - No healthcheck defined → running counts as healthy.
+//
+// maxWait is a defence-in-depth absolute cap to keep a misconfigured healthcheck
+// (or a pathological restart loop) from hanging the sequence forever. Pass 0 to
+// disable. Callers still get ctx-based abort and container-stopped detection.
+func (se *SequenceExecutor) waitForHealthy(ctx context.Context, containerID string, unhealthyGrace, maxWait time.Duration) error {
+	var deadlineCh <-chan time.Time
+	if maxWait > 0 {
+		deadlineCh = time.After(maxWait)
+	}
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
+
+	var unhealthySince time.Time
 
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("aborted")
-		case <-deadline:
-			return fmt.Errorf("timeout after %s waiting for healthy", timeout)
+		case <-deadlineCh:
+			return fmt.Errorf("timeout after %s waiting for healthy", maxWait)
 		case <-ticker.C:
 			inspectCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			inspect, err := se.docker.ContainerInspect(inspectCtx, containerID)
@@ -1819,21 +1854,41 @@ func (se *SequenceExecutor) waitForHealthy(ctx context.Context, containerID stri
 				return fmt.Errorf("container stopped unexpectedly")
 			}
 			if inspect.State.Health == nil {
-				// No healthcheck defined — running is good enough
 				return nil
 			}
 			switch inspect.State.Health.Status {
 			case "healthy":
 				return nil
 			case "unhealthy":
-				msg := "unhealthy"
-				if len(inspect.State.Health.Log) > 0 {
-					last := inspect.State.Health.Log[len(inspect.State.Health.Log)-1]
-					msg = fmt.Sprintf("unhealthy: %s", strings.TrimSpace(last.Output))
+				if unhealthyGrace == 0 {
+					return errors.New(formatUnhealthyMsg(inspect.State.Health.Log))
 				}
-				return errors.New(msg)
+				if unhealthySince.IsZero() {
+					unhealthySince = time.Now()
+					continue
+				}
+				if time.Since(unhealthySince) >= unhealthyGrace {
+					return errors.New(formatUnhealthyMsg(inspect.State.Health.Log))
+				}
+			default:
+				// "starting" (or anything else Docker may introduce) — keep
+				// waiting and reset any unhealthy grace timer so a successful
+				// recovery clears the slate.
+				unhealthySince = time.Time{}
 			}
-			// "starting" — keep waiting
 		}
 	}
+}
+
+// formatUnhealthyMsg builds a user-facing "unhealthy" error string, appending
+// the last healthcheck log line when one is available.
+func formatUnhealthyMsg(hlog []*container.HealthcheckResult) string {
+	if len(hlog) == 0 {
+		return "unhealthy"
+	}
+	last := hlog[len(hlog)-1]
+	if last == nil {
+		return "unhealthy"
+	}
+	return fmt.Sprintf("unhealthy: %s", strings.TrimSpace(last.Output))
 }

@@ -286,7 +286,7 @@ func TestRateLimit_DegenerateConfig(t *testing.T) {
 func TestClientIPForRateLimit_TrustedProxy(t *testing.T) {
 	// Configure a single trusted proxy at 10.0.0.1
 	store := &Store{cfg: Config{
-		TrustedProxies: []net.IP{net.ParseIP("10.0.0.1")},
+		TrustedProxies: []*net.IPNet{{IP: net.ParseIP("10.0.0.1"), Mask: net.CIDRMask(32, 32)}},
 	}}
 
 	req := httptest.NewRequest("POST", "/login", nil)
@@ -304,7 +304,7 @@ func TestClientIPForRateLimit_TrustedProxy(t *testing.T) {
 // stripping or non-proxy direct connections.
 func TestClientIPForRateLimit_NoXFF(t *testing.T) {
 	store := &Store{cfg: Config{
-		TrustedProxies: []net.IP{net.ParseIP("10.0.0.1")},
+		TrustedProxies: []*net.IPNet{{IP: net.ParseIP("10.0.0.1"), Mask: net.CIDRMask(32, 32)}},
 	}}
 
 	req := httptest.NewRequest("POST", "/login", nil)
