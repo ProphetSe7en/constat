@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.22
+
+Security maintenance.
+
+### Changed
+
+- **Built on current, supported versions.** Constat now builds with Go 1.27 instead of Go 1.25, which no longer receives security fixes, and runs on Alpine 3.24 instead of Alpine 3.21, which reached end of life on 2026-11-01. This picks up fixes for known issues in Go's TLS certificate checks and HTTP handling. The Docker client library is updated to v28.5.2 and `golang.org/x/crypto` to v0.58.0.
+
 ## v0.9.21
 
 Follow-up to v0.9.20.

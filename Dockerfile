@@ -1,7 +1,7 @@
 # Stage 1: Build Go binary
-FROM golang:1.25-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
-ARG VERSION=0.9.21
+ARG VERSION=0.9.22
 
 WORKDIR /build
 COPY ui/ .
@@ -9,9 +9,9 @@ RUN go mod download
 RUN CGO_ENABLED=0 go build -o constat-ui -ldflags="-s -w -X main.Version=${VERSION}" .
 
 # Stage 2: Runtime
-FROM alpine:3.21
+FROM alpine:3.24
 
-ARG VERSION=0.9.21
+ARG VERSION=0.9.22
 ENV CONSTAT_VERSION=${VERSION}
 LABEL org.opencontainers.image.version=${VERSION}
 LABEL maintainer="ProphetSe7en" \
